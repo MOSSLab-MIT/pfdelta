@@ -1,0 +1,39 @@
+config_type: simple_batch
+job_parameters:
+  time: "03:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate power\n__launch__"
+batch_name: my_supercomputer_test
+model:
+  name: mlp
+  hidden_size: _manual_list(32, 64, 128 | small, medium, large)
+dataset:
+  datasets:
+  - name: fashion # First is for training
+    train: True
+  - name: fashion # Rest are for validation
+    train: False
+  - name: fashion
+    train: False
+optim:
+  optimizer:
+    name: "Adam"
+    lr: _manual_list(0.01, 0.001, 0.0001, 0.00001 | 1e2, 1e3, 1e4, 1e5)
+    weight_decay: 0
+  train_params:
+    epochs: 10
+    batch_size: 256
+    train_loss:
+    - CrossEntropyLoss # First is for training
+    - ClassificationAccuracy # Rest are for tracking
+  val_params:
+    report_every: 3 # How often to calculate val error
+    batch_size: 256
+    high_is_good: True
+    val_loss:
+    - ClassificationAccuracy # First used for best model
+    - CrossEntropyLoss # Rest are for tracking
+functional:
+  run_name: mytest_%lr_%hidden_size
+  run_location: tutorial_runs/supercomputer_experiments
