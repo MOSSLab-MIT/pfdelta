@@ -1,5 +1,5 @@
 import torch
-from torch.nn import ReLU
+from torch.nn.functional import relu
 
 
 def setup_single_branch_features(ac_line_attr, trafo_attr):
@@ -8,20 +8,20 @@ def setup_single_branch_features(ac_line_attr, trafo_attr):
     mask[2] = False
     mask[3] = False
     ac_line_attr_masked = ac_line_attr[:, mask]
-    tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)), torch.zeros((ac_line_attr_masked.shape[0], 1)) ], dim=-1)
+    tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)),
+                           torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1)
     ac_line_susceptances = ac_line_attr[:, 2:4]
     ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
-
     edge_attr = torch.cat([ac_line_attr, trafo_attr], dim=0)
-
     return edge_attr
 
 
 def constraint_violations_loss(data, bus_pred, gen_pred, edge_pred, C):
-
     # Power balance mismatch
-    edge_indices = torch.cat((data["bus", "ac_line", "bus"].edge_index, data["bus", "transformer", "bus"].edge_index), dim=-1)
-    edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].edge_attr, data["bus", "transformer", "bus"].edge_attr)
+    edge_indices = torch.cat((data["bus", "ac_line", "bus"].edge_index,
+                              data["bus", "transformer", "bus"].edge_index), dim=-1)
+    edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].edge_attr, 
+                                                 data["bus", "transformer", "bus"].edge_attr)
 
     va, vm = bus_pred.T
     complex_voltage = vm * torch.exp(1j* va)

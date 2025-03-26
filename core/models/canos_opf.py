@@ -2,41 +2,41 @@ import torch
 import torch.nn as nn
 from torch import scatter_add
 import functools
-import operator
-import collections
+
+from canos_utils import Encoder, InteractionNetwork, Decoder, EdgeUpdate, NodeUpdate
+from core.utils.registry import registry
 
 # CANOS Architecture
+@registry.register_model("canos_opf")
 class CANOS_OPF(nn.Module):
-    def __init__(self, data, encoder, interaction_network, edge_feat_dim, node_feat_dim, hidden_dim,
-                 decoder, include_sent_messages, k_steps):
+    def __init__(self, dataset, edge_feat_dim, node_feat_dim, hidden_dim, include_sent_messages, k_steps):
         super().__init__()
 
         # Define the encoder to get projected nodes and edges
-        self.encoder = encoder(data=data, hidden_size=hidden_dim)
+        self.encoder = Encoder(data=dataset, hidden_size=hidden_dim)
 
         # Interaction network layers for message passing
         node_type_dict = {
             node_type: True
-            for node_type in data[0].num_node_features.keys()
+            for node_type in dataset[0].num_node_features.keys()
         }
 
         edge_type_dict = {
-            str(edge_type): True if "edge_attr" in data[0][edge_type] else False
-            for edge_type in data[0].edge_types
+            str(edge_type): True if "edge_attr" in dataset[0][edge_type] else False
+            for edge_type in dataset[0].edge_types
             if "bus" in edge_type[0]  # Only include edges where "bus" is the source
         }
 
         self.message_passing_layers = nn.ModuleList(
-            interaction_network(edge_type_dict=edge_type_dict,
-                                  node_type_dict=node_type_dict,
-                                  edge_dim=edge_feat_dim,
-                                  node_dim=node_feat_dim,
-                                  hidden_dim=hidden_dim,
-                                  include_sent_messages=include_sent_messages)
-         for _ in range(k_steps))
+            InteractionNetwork(edge_type_dict=edge_type_dict,
+                               node_type_dict=node_type_dict,
+                               edge_dim=edge_feat_dim,
+                               node_dim=node_feat_dim,
+                               hidden_dim=hidden_dim,
+                               include_sent_messages=include_sent_messages) for _ in range(k_steps))
 
         # Define the decoder to get the model outputs
-        self.decoder = decoder(hidden_size=hidden_dim)
+        self.decoder = Decoder(hidden_size=hidden_dim)
         self.k_steps = k_steps
 
     def forward(self, data):
@@ -72,14 +72,16 @@ class CANOS_OPF(nn.Module):
         v_complex = vm * torch.exp(1j* va)
 
         # Edge index matrix
-        edge_indices = torch.cat([data["bus", "ac_line", "bus"].edge_index, data["bus", "transformer", "bus"].edge_index], dim=-1)
+        edge_indices = torch.cat([data["bus", "ac_line", "bus"].edge_index,
+                                  data["bus", "transformer", "bus"].edge_index], dim=-1)
 
         # Edge attributes matrix
         mask = torch.ones(9, dtype=torch.bool)
         mask[2] = False
         mask[3] = False
         ac_line_attr_masked = data["bus", "ac_line", "bus"].edge_attr[:, mask]
-        tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)), torch.zeros((ac_line_attr_masked.shape[0], 1)) ], dim=-1)
+        tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)), 
+                               torch.zeros((ac_line_attr_masked.shape[0], 1)) ], dim=-1)
         ac_line_susceptances = data["bus", "ac_line", "bus"].edge_attr[:, 2:4]
         ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
 
@@ -112,8 +114,5 @@ class CANOS_OPF(nn.Module):
         # Extract real and reactive power flows
         p_fr, q_fr = S_fr.real, S_fr.imag
         p_to, q_to = S_to.real, S_to.imag
-
-        # ARE THE BRANCH FLOWS SUPPOSED TO BE CALCULATED AND UPDATED IN THE EDGE FEATURES THEMSELVES?
-        # DOES THIS OUTPUT FORMAT MAKE SENSE?
 
         return p_fr, q_fr, p_to, q_to

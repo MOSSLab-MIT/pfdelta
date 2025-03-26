@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from torch import scatter_add
-import copy
+
 
 # Encoder
 class Encoder(nn.Module):
@@ -102,6 +101,7 @@ class InteractionNetwork(nn.Module):
 
         return updated_nodes_dict, updated_edges_dict
 
+
 # Relational and Object models (phi_r and phi_o)
 class EdgeUpdate(nn.Module):
     def __init__(self, edge_dim, node_dim, hidden_dim, edge_type_dict):
@@ -145,6 +145,7 @@ class EdgeUpdate(nn.Module):
 
         x = torch.cat([sender_features, receiver_features], dim=-1)
         return self.mlps[edge_type](x)
+
 
 class NodeUpdate(nn.Module):
     def __init__(self, node_dim, hidden_dim, node_type_dict, include_sent_messages=False):
@@ -219,4 +220,4 @@ class Decoder(nn.Module):
             "generator": torch.stack([output_pg, output_qg], dim=1)
         }
 
-        return output_dict # dict with outputs for voltages and generators.
+        return output_dict
