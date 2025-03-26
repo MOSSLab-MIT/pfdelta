@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import scatter_add
 import functools
 
-from canos_utils import Encoder, InteractionNetwork, Decoder, EdgeUpdate, NodeUpdate
+from core.models.canos_utils import Encoder, InteractionNetwork, Decoder, EdgeUpdate, NodeUpdate
 from core.utils.registry import registry
 
 # CANOS Architecture

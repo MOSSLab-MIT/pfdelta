@@ -10,9 +10,7 @@ model:
 dataset:
   datasets:
   - name: opfdata
-    split: train
   - name: opfdata
-    split: val
 optim:
   optimizer:
     name: "Adam"
