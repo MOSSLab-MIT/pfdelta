@@ -176,10 +176,19 @@ class BaseTrainer:
         # Gather model class
         model_name = model["name"]
         model_class = registry.get_model_class(model_name)
-        # Initialize and save model
+        # Gather inputs and modify them if necessary
         model_inputs = copy.deepcopy(model)
         del model_inputs["name"]
+        self.customize_model_inputs(model_inputs)
+        # Initialize model
         self.model = model_class(**model_inputs).to(self.device)
+
+
+    def customize_model_inputs(self, model_inputs):
+        r"""This method allows the user to modify the inputs before initialization.
+        In particular, it can be used to pass other trainer parameters to the model
+        such as a data sample."""
+        pass
 
 
     def load_optimizer(self,):
