@@ -2,11 +2,11 @@ config_type: experiment
 model:
   name: canos_opf
   dataset: _include_ 
-  edge_feat_dim: 
-  node_feat_dim: 
-  hidden_dim: 
-  include_sent_messages: 
-  k_steps: 
+  edge_feat_dim: 128
+  node_feat_dim: 128
+  hidden_dim: 128
+  include_sent_messages: True
+  k_steps: 48
 dataset:
   datasets:
   - name: fashion # First is for training
@@ -34,5 +34,6 @@ optim:
     - ClassificationAccuracy # First used for best model
     - CrossEntropyLoss # Rest are for tracking
 functional:
+  trainer_name: gnn_trainer
   run_name: mytest
   run_location: tutorial_runs/one_experiment
