@@ -81,9 +81,9 @@ class BaseTrainer:
         if not self.is_debug:
             multiprinter = MultiPrinter(out_location)
             sys.stdout = multiprinter
-            print("Console output is now being recorded!")
+            print("\U0001F4D1 Console output is now being recorded!")
         else:
-            print("is_debug flag passed, NO RESULTS WILL BE RECORDED!")
+            print("\U0001F4D1 is_debug flag passed, NO RESULTS WILL BE RECORDED!")
 
         # Report device being used
         cpu = self.config["functional"]["cpu"]
@@ -91,13 +91,13 @@ class BaseTrainer:
             self.device = torch.device("cpu")
         else:
             self.device = torch.device("cuda")
-        print("Device being used:", self.device)
+        print("\U0001F4D1 Device being used:", self.device)
 
         self.setup_training()
 
         # Report number of trainable parameters
         num_parameters = self.num_model_parameters()
-        print(f"\nNumber of trainable parameters: {num_parameters}")
+        print(f"\n\U0001F4D1 Number of trainable parameters: {num_parameters}")
 
     def create_run_location(self,):
         run_location = self.config["functional"]["run_location"]
@@ -207,9 +207,6 @@ class BaseTrainer:
         self.optimizer = optim_class(self.model.parameters(), **optim_inputs)
         # Save name for book keeping
         optim_inputs["name"] = optim_name
-
-        import ipdb
-        ipdb.set_trace()
 
         # If necessary, load learning rate scheduler
         use_scheduler = "lr_scheduler" in self.config["optim"]
@@ -347,13 +344,16 @@ class BaseTrainer:
 
         # Gather epoch or train step info
         assert "epochs" in train_params or "train_steps" in train_params, \
-            "Simulataneous epoch and train steps limit not supported!"
+            "A max epoch or a max train_step need to be specified!"
+        print()
         if "epochs" in train_params:
+            assert "train_steps" not in train_params, \
+                "Simulataneous epoch and train steps limit not supported!"
             self.max_epoch = train_params["epochs"]
-            print("EPOCHS ACTIVATED. Max epoch: {self.max_epoch}")
+            # print(f"\U0001F4D1 EPOCHS MODE ON. Max epoch: {self.max_epoch}")
         if "train_steps" in train_params:
-            max_train_step = train_params["train_steps"]
-            print("TRAIN STEPS ACTIVATED. Max train step: {self.max_train_step}")
+            self.max_train_step = train_params["train_steps"]
+            print(f"\U0001F4D1 TRAIN STEP MODE ON. Max train step: {self.max_train_step}")
 
         # Start training
         train_dataloader = self.dataloaders[0]
@@ -379,15 +379,16 @@ class BaseTrainer:
 
             # Do any post setup before each epoch
             self.setup_post_epoch()
-            self.epoch += 1
 
             # End training condition
             if self.max_epoch is None:
-                if self.train_step >= self.max_train_step:
+                if self.train_step >= self.max_train_step - 1:
                     break
             else:
-                if self.epoch >= self.max_epoch:
+                if self.epoch >= self.max_epoch - 1:
                     break
+
+            self.epoch += 1
 
         print("\nTRAINING FINISHED!!\U0001F9E0")
         print("Calculating final validation error...")
@@ -409,7 +410,7 @@ class BaseTrainer:
         # Create validation error conditions
         report_every = self.config["optim"]["val_params"]["report_every"]
         is_report_time = (current_point + 1) % report_every == 0
-        training_about_to_end = current_point == max_point - 1
+        training_about_to_end = current_point == (max_point - 1)
 
         # Check if it is time to calculate val errors
         if is_report_time and not training_about_to_end:
@@ -429,7 +430,7 @@ class BaseTrainer:
             message = f"Epoch {current_point+1}/{self.max_epoch} done!"
             message += f"\U0001F9BE Train step: {self.train_step}"
             print(message)
-            print("-"*30)
+            print("-"*40)
         else:
             message = f"Train step {current_point+1}/{self.max_train_step} done!"
             message += f"\U0001F9BE Epoch: {self.epoch+1}"
@@ -460,7 +461,7 @@ class BaseTrainer:
 
 
     def train_one_epoch(self, train_dataloader):
-        message = f"Epoch {epoch + 1} \U0001F3CB"
+        message = f"Epoch {self.epoch + 1} \U0001F3CB"
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)
         for data, labels in tqdm(train_dataloader, desc=message):
@@ -599,7 +600,8 @@ class BaseTrainer:
         new_perf, old_perf = self.interpret_val_performance(old_best, last_value)
 
         # Determine if new best has been achieved
-        high_is_good = self.config["optim"]["val_params"].get("high_is_good", False)
+        val_params = self.config["optim"]["val_params"]
+        high_is_good = val_params.get("high_is_good", False)
         if high_is_good:
             return (new_perf >= old_perf), new_perf
         else:
@@ -633,8 +635,22 @@ class BaseTrainer:
 
 
     def save_summary(self, last_time=False):
-        train_errors = self.train_errors[self.best_point]
         val_errors = self.val_errors[self.best_point]
+        # When train_step is on, we use the last training error, if any
+        if self.max_epoch is None:
+            train_entries = list(self.train_errors.keys())
+            # If none, then we skip recording data.
+            if len(train_entries) == 0:
+                train_errors = None
+            # Otherwise, gather the trian step immediatly before
+            else:
+                for i in range(len(train_entries)):
+                    testing_point = train_entries[-(i+1)]
+                    if int(testing_point) <= int(self.best_point):
+                        train_errors = self.train_errors[testing_point]
+                        break
+        else:
+            train_errors = self.train_errors[self.best_point]
 
         # Save results
         run_location = self.config["functional"]["run_location"]

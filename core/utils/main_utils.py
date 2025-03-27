@@ -219,27 +219,29 @@ def single_config(config, args, override_args, i=None):
         if "train_params" in optim and "train_steps" in optim["train_params"]:
             del default_optim["train_params"]["epochs"]
         config["optim"] = merge_dicts(default_optim, config["optim"])
-    optim = config["optim"]
+
+    train_params = config["optim"]["train_params"]
+    val_params = config["optim"]["val_params"]
     # Verify it has important data
-    assert "epochs" in optim["train_params"],\
-        "Number of epochs missing!"
-    assert "batch_size" in optim["train_params"],\
+    assert "epochs" in train_params or "train_steps" in train_params,\
+        "Number of epochs or number of train steps missing!"
+    assert "batch_size" in train_params,\
         "Batch size of training dataset missing!"
-    assert "batch_size" in optim["val_params"],\
+    assert "batch_size" in val_params,\
         "Batch size of validation dataset(s) missing!"
-    assert "train_loss" in optim["train_params"],\
+    assert "train_loss" in train_params,\
         "Trainning dataset does not have a loss!"
-    assert "val_loss" in optim["val_params"],\
+    assert "val_loss" in val_params,\
         "Validation dataset(s) does not have a loss!"
 
 
     # Verify the number of batch sizes is correct
     num_datasets = len(config["dataset"]["datasets"])
     if isinstance(optim["val_params"]["batch_size"], list):
-        n_batch_size = 1 + len(optim["val_params"]["batch_size"])
+        n_batch_size = 1 + len(val_params["batch_size"])
     else:
         # This case means that all val datasets get the same batch size
-        assert isinstance(optim["val_params"]["batch_size"], int),\
+        assert isinstance(val_params["batch_size"], int),\
             f"Invalid type of batch size input!"
         n_batch_size = num_datasets
     assert n_batch_size == num_datasets,\
