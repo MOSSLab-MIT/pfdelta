@@ -32,7 +32,7 @@ class BaseTrainer:
         self.device = None
         self.train_errors = {}
         self.val_errors = {}
-        self.best_epoch = None
+        self.best_point = None # best_point is the best epoch or best train step
         self.best_model = None
         self.train_step = -1 # This helps maintain consistency with epochs
         self.max_train_step = None
@@ -480,6 +480,7 @@ class BaseTrainer:
             self.optimizer.step()
 
             # For per train step mode, we need two operations
+            self.train_step += 1
             if self.max_epoch is None:
                 # LR scheduler step if any
                 if self.lr_scheduler is not None:
@@ -566,7 +567,7 @@ class BaseTrainer:
 
 
     def save_model(self,):
-        first_time = self.best_epoch is None
+        first_time = self.best_point is None
         is_new_best, new_perf = self.is_new_best()            
 
         run_location = self.config["functional"]["run_location"]
@@ -578,21 +579,21 @@ class BaseTrainer:
             if not first_time:
                 print(f"\nNEW BEST VAL ERROR {new_perf:.3} FOUND!!\U0001F973 ")
                 print("Model has best validation performance yet.")
-            current_epoch = list(self.val_errors.keys())[-1]
-            self.best_epoch = current_epoch
+            current_point = list(self.val_errors.keys())[-1]
+            self.best_point = current_point
             self.best_model = copy.deepcopy(self.model)
 
 
     def is_new_best(self,):
-        if self.best_epoch is None:
-            only_epoch = list(self.val_errors.keys())[0]
-            self.best_epoch = only_epoch
+        if self.best_point is None:
+            only_point = list(self.val_errors.keys())[0]
+            self.best_point = only_point
 
             return True, None
 
-        last_epoch = list(self.val_errors.keys())[-1]
-        old_best = self.val_errors[self.best_epoch]
-        last_value = self.val_errors[last_epoch]
+        last_point = list(self.val_errors.keys())[-1]
+        old_best = self.val_errors[self.best_point]
+        last_value = self.val_errors[last_point]
 
         # Gather leading errors
         new_perf, old_perf = self.interpret_val_performance(old_best, last_value)
@@ -632,8 +633,8 @@ class BaseTrainer:
 
 
     def save_summary(self, last_time=False):
-        train_errors = self.train_errors[self.best_epoch]
-        val_errors = self.val_errors[self.best_epoch]
+        train_errors = self.train_errors[self.best_point]
+        val_errors = self.val_errors[self.best_point]
 
         # Save results
         run_location = self.config["functional"]["run_location"]
@@ -642,7 +643,7 @@ class BaseTrainer:
         summary = {
             "train": train_errors,
             "val": val_errors,
-            "best_epoch": self.best_epoch,
+            "best_point": self.best_point,
             "finished": last_time
         }
 
@@ -656,8 +657,8 @@ class BaseTrainer:
         print("-"*28 + " Results Summary \U0001F60E " + "-"*28)
         print()
 
-        train_errors = self.train_errors[self.best_epoch]
-        val_errors = self.val_errors[self.best_epoch]
+        train_errors = self.train_errors[self.best_point]
+        val_errors = self.val_errors[self.best_point]
 
         # Print train errors
         print("Training error\n" + "-"*18)
@@ -681,4 +682,8 @@ class BaseTrainer:
                 val_string += f"{one_val_errors[loss_name]:.5}" + "\t\t"
             print(val_string)
 
-        print(f"\nBest epoch: {int(self.best_epoch) + 1}")
+        if self.max_epoch is None:
+            point = "train step"
+        else:
+            point = "epoch"
+        print(f"\nBest {point}: {int(self.best_point) + 1}")
