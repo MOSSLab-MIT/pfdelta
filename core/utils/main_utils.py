@@ -192,7 +192,6 @@ def single_config(config, args, override_args, i=None):
         "optimizer": {
             "name": "Adam",
             "lr": 0.001,
-            "weight_decay": 0.
         },
         "train_params": {
             "epochs": 10,
@@ -211,9 +210,14 @@ def single_config(config, args, override_args, i=None):
             ],
         }
     }
-    if config.get("optim", None) is None:
+    if "optim" not in config:
         config["optim"] = default_optim
     else:
+        # If there is an optim already, then we merge the default into it
+        # Epoch num is not added if train_steps is used.
+        optim = config["optim"]
+        if "train_params" in optim and "train_steps" in optim["train_params"]:
+            del default_optim["train_params"]["epochs"]
         config["optim"] = merge_dicts(default_optim, config["optim"])
     optim = config["optim"]
     # Verify it has important data
