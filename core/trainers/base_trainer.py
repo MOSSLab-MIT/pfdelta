@@ -34,7 +34,10 @@ class BaseTrainer:
         self.val_errors = {}
         self.best_epoch = None
         self.best_model = None
-        
+        self.train_step = -1 # This helps maintain consistency with epochs
+        self.max_train_step = None
+        self.epoch = 0
+        self.max_epoch = None
 
         self.is_debug = self.config["functional"]["is_debug"]
 
@@ -341,67 +344,122 @@ class BaseTrainer:
     def train(self,):
         start = time.time()
         train_params = self.config["optim"]["train_params"]
-        val_params = self.config["optim"]["val_params"]
-        n_epochs = train_params["epochs"]
-        report_every = val_params["report_every"]
 
-        self.model.train()
+        # Gather epoch or train step info
+        assert "epochs" in train_params or "train_steps" in train_params, \
+            "Simulataneous epoch and train steps limit not supported!"
+        if "epochs" in train_params:
+            self.max_epoch = train_params["epochs"]
+            print("EPOCHS ACTIVATED. Max epoch: {self.max_epoch}")
+        if "train_steps" in train_params:
+            max_train_step = train_params["train_steps"]
+            print("TRAIN STEPS ACTIVATED. Max train step: {self.max_train_step}")
+
+        # Start training
         train_dataloader = self.dataloaders[0]
-        val_dataloaders = self.dataloaders[1:]
-        for epoch in range(n_epochs):
+        while True:
             print()
             # Do any preliminary setup before each epoch
-            self.setup_pre_epoch(epoch)
-            # Start training epoch
-            running_losses = self.train_one_epoch(epoch, train_dataloader)
+            self.setup_pre_epoch()
+            self.model.train()
+
+            # Train one epoch and gather losses
+            running_losses = self.train_one_epoch(train_dataloader)
             losses = [loss / len(train_dataloader) for loss in running_losses]
-            # Update lr scheduler if necessary
-            if self.lr_scheduler is not None:
+
+            # Report and save results
+            self.report_results(losses)
+
+            # Do a LR scheduler step if epoch mode on
+            if self.lr_scheduler is not None and self.max_epoch is not None:
                 self.lr_scheduler.step()
 
-
-            print()
-            print(f"Epoch {epoch+1}/{n_epochs} done!\U0001F9BE\n"+"-"*20)
-
-            # Save errors
-            self.train_errors[str(epoch)] = {}
-            for loss_name, loss in zip(self.train_loss_names, losses):
-                print(f"{loss_name}: {loss}")
-                self.train_errors[str(epoch)][loss_name] = loss
-            self.print_memory_reserved()
-
-            # Save errors
-            run_location = self.config["functional"]["run_location"]
-            train_location = os.path.join(run_location, "train.json")
-            if not self.is_debug:
-                with open(train_location, 'w') as f:
-                    json.dump(self.train_errors, f, indent=4)
-
-            if (epoch + 1) % report_every == 0 and (epoch != n_epochs - 1):
-                val_errors = self.calc_val_errors(epoch, val_dataloaders)
-                print("\nCONTINUE TRAINING!\U0001F9BF")
+            # Calc val error and save new best model if necessary
+            self.is_val_error_time()
 
             # Do any post setup before each epoch
-            self.setup_post_epoch(epoch)
+            self.setup_post_epoch()
+            self.epoch += 1
+
+            # End training condition
+            if self.max_epoch is None:
+                if self.train_step >= self.max_train_step:
+                    break
+            else:
+                if self.epoch >= self.max_epoch:
+                    break
 
         print("\nTRAINING FINISHED!!\U0001F9E0")
         print("Calculating final validation error...")
-        val_errors = self.calc_val_errors(
-            n_epochs-1, val_dataloaders, last_time=True)
+        self.calc_val_errors(last_time=True)
         end = time.time()
         print(f"Training finished in {(end-start):.2f} seconds.")
         print()
 
 
-    def setup_pre_epoch(self, epoch_number):
+    def is_val_error_time(self, ):
+        # Get status for either epoch or train step limit
+        if self.max_epoch is None:
+            current_point = self.train_step
+            max_point = self.max_train_step
+        else:
+            current_point = self.epoch
+            max_point = self.max_epoch
+
+        # Create validation error conditions
+        report_every = self.config["optim"]["val_params"]["report_every"]
+        is_report_time = (current_point + 1) % report_every == 0
+        training_about_to_end = current_point == max_point - 1
+
+        # Check if it is time to calculate val errors
+        if is_report_time and not training_about_to_end:
+            self.calc_val_errors()
+            print("\nCONTINUE TRAINING!\U0001F9BF")
+
+
+    def report_results(self, losses):
+        # Print progress message
+        if self.max_epoch is not None:
+            current_point = self.epoch
+        else:
+            current_point = self.train_step
+
+        print()
+        if self.max_epoch is not None:
+            message = f"Epoch {current_point+1}/{self.max_epoch} done!"
+            message += f"\U0001F9BE Train step: {self.train_step}"
+            print(message)
+            print("-"*30)
+        else:
+            message = f"Train step {current_point+1}/{self.max_train_step} done!"
+            message += f"\U0001F9BE Epoch: {self.epoch+1}"
+            print(message)
+            print("-"*40)
+
+        # Record errors in train_errors
+        self.train_errors[str(current_point)] = {}
+        for loss_name, loss in zip(self.train_loss_names, losses):
+            print(f"{loss_name}: {loss}")
+            self.train_errors[str(current_point)][loss_name] = loss
+        self.print_memory_reserved()
+
+        # Save json file with errors
+        run_location = self.config["functional"]["run_location"]
+        train_location = os.path.join(run_location, "train.json")
+        if not self.is_debug:
+            with open(train_location, 'w') as f:
+                json.dump(self.train_errors, f, indent=4)
+
+
+    def setup_pre_epoch(self,):
         pass
 
 
-    def setup_post_epoch(self, epoch_number):
+    def setup_post_epoch(self,):
         pass
 
 
-    def train_one_epoch(self, epoch, train_dataloader):
+    def train_one_epoch(self, train_dataloader):
         message = f"Epoch {epoch + 1} \U0001F3CB"
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)
@@ -420,6 +478,14 @@ class BaseTrainer:
             losses[0].backward()
             self.grad_manip(losses)
             self.optimizer.step()
+
+            # For per train step mode, we need two operations
+            if self.max_epoch is None:
+                # LR scheduler step if any
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
+                # Check if it is time to calc val error
+                self.is_val_error_time()
 
         return running_loss
 
@@ -443,11 +509,16 @@ class BaseTrainer:
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
 
-    def calc_val_errors(self, epoch, val_dataloaders, last_time=False):
+    def calc_val_errors(self, last_time=False):
+        val_dataloaders = self.dataloaders[1:]
+
+        # Current point is either an epoch or a training step
+        current_point = self.train_step if self.max_epoch is None else self.epoch
+
         print("\nTime to check validation error...\U0001F50D\n")
         val_params = self.config["optim"]["val_params"]
         loss_per_dataset = []
-        self.val_errors[str(epoch)] = []
+        self.val_errors[str(current_point)] = []
         for i, dataloader in enumerate(val_dataloaders):
             running_losses = self.calc_one_val_error(dataloader, i)
             losses = [loss / len(dataloader) for loss in running_losses]
@@ -462,7 +533,7 @@ class BaseTrainer:
                 one_val_error[loss_name] = loss
                 if not last_time:
                     print(f"{loss_name}: {loss}")
-            self.val_errors[str(epoch)].append(one_val_error)
+            self.val_errors[str(current_point)].append(one_val_error)
 
         run_location = self.config["functional"]["run_location"]
         val_location = os.path.join(run_location, "val.json")
@@ -475,7 +546,6 @@ class BaseTrainer:
         if last_time:
             self.print_summary()
 
-        return loss_per_dataset
 
     @torch.no_grad()
     def calc_one_val_error(self, val_dataloader, val_num):
@@ -506,8 +576,8 @@ class BaseTrainer:
             if not self.is_debug:
                 torch.save(self.model.state_dict(), model_location)
             if not first_time:
-                print(f"\nNEW BEST OF {new_perf:.3} FOUND!!\U0001F973 ")
-                print("Last epoch has best validation performance yet.")
+                print(f"\nNEW BEST VAL ERROR {new_perf:.3} FOUND!!\U0001F973 ")
+                print("Model has best validation performance yet.")
             current_epoch = list(self.val_errors.keys())[-1]
             self.best_epoch = current_epoch
             self.best_model = copy.deepcopy(self.model)

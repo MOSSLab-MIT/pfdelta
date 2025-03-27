@@ -26,7 +26,8 @@ optim:
     - name: ExponentialLR
       gamma: 0.64
   train_params:
-    epochs: 5
+    # epochs: 5
+    train_steps: 100000
     batch_size: 256
     train_loss:
     - CrossEntropyLoss # First is for training
