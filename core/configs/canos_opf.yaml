@@ -16,6 +16,15 @@ optim:
     name: "Adam"
     lr: 0.001
     weight_decay: 0.
+  lr_scheduler:
+    name: ChainedScheduler
+    schedulers:
+    - name: LinearLR
+      start_factor: 0.0000000001
+      end_factor: 1
+      total_iters: 
+    - name: ExponentialLR
+      gamma: 0.64
   train_params:
     epochs: 5
     batch_size: 256

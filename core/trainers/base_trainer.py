@@ -19,7 +19,7 @@ from core.utils.trainer_utils import MultiPrinter
 class BaseTrainer:
     def __init__(self, config):
         self.config = config
-        self.is_debug=False
+        self.is_debug = False
         self.datasets = []
         self.dataloaders = []
         self.train_loss = []
@@ -28,11 +28,13 @@ class BaseTrainer:
         self.val_loss_names = []
         self.model = None
         self.optimizer = None
+        self.lr_scheduler = None
         self.device = None
         self.train_errors = {}
         self.val_errors = {}
         self.best_epoch = None
         self.best_model = None
+        
 
         self.is_debug = self.config["functional"]["is_debug"]
 
@@ -185,9 +187,9 @@ class BaseTrainer:
 
 
     def customize_model_inputs(self, model_inputs):
-        r"""This method allows the user to modify the inputs before initialization.
-        In particular, it can be used to pass other trainer parameters to the model
-        such as a data sample."""
+        r"""This method allows the user to modify the inputs before initiali-
+        zation. In particular, it can be used to pass other trainer parameters
+        to the model such as a data sample."""
         pass
 
 
@@ -200,6 +202,56 @@ class BaseTrainer:
         optim_inputs = copy.deepcopy(optimizer)
         del optim_inputs["name"]
         self.optimizer = optim_class(self.model.parameters(), **optim_inputs)
+        # Save name for book keeping
+        optim_inputs["name"] = optim_name
+
+        import ipdb
+        ipdb.set_trace()
+
+        # If necessary, load learning rate scheduler
+        use_scheduler = "lr_scheduler" in self.config["optim"]
+        if use_scheduler:
+            scheduler_inputs = self.config["optim"]["lr_scheduler"]
+            assert "name" in scheduler_inputs, \
+                "No name found for lr scheduler!"
+            scheduler_name = scheduler_inputs["name"]
+
+            # Chained Schedulers need to be treated differently
+            scheduler = None # Placeholder
+            if scheduler_name != "ChainedScheduler":
+                # Single schedulers are just initialized
+                scheduler = self.initialize_scheduler(scheduler_inputs)
+            else:
+                assert "schedulers" in scheduler_inputs, \
+                    "Chained scheduler needs scheduler lists!"
+                schedulers_inputs = scheduler_inputs["schedulers"]
+                # Chained schedulers need to be initialized one by one
+                schedulers = []
+                for sch_inputs in schedulers_inputs:
+                    assert "name" in sch_inputs, \
+                        "Scheduler in chain missing name!"
+                    sch = self.initialize_scheduler(sch_inputs)
+                    schedulers.append(sch)
+                # Once all individual schedulers are initialized, we do chain
+                sch_class = torch.optim.lr_scheduler.ChainedScheduler
+                scheduler = sch_class(schedulers)
+
+            # Save scheduler
+            self.lr_scheduler = scheduler
+
+
+    def initialize_scheduler(self, scheduler_inputs):
+        # Gather class of lr scheduler
+        sch_name = scheduler_inputs["name"]
+        sch_class = getattr(torch.optim.lr_scheduler, sch_name, None)
+        assert sch_class is not None, f"Scheduler {sch_name} not found!"
+        # Initialize class
+        del scheduler_inputs["name"]
+        scheduler = sch_class(optimizer=self.optimizer, **scheduler_inputs)
+        # Save name back for book keeping
+        scheduler_inputs["name"] = sch_name
+
+        return scheduler
 
 
     def load_loss_funcs(self,):
@@ -303,6 +355,10 @@ class BaseTrainer:
             # Start training epoch
             running_losses = self.train_one_epoch(epoch, train_dataloader)
             losses = [loss / len(train_dataloader) for loss in running_losses]
+            # Update lr scheduler if necessary
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
+
 
             print()
             print(f"Epoch {epoch+1}/{n_epochs} done!\U0001F9BE\n"+"-"*20)
@@ -328,8 +384,10 @@ class BaseTrainer:
             # Do any post setup before each epoch
             self.setup_post_epoch(epoch)
 
-        print("\nTRAINING FINISHED!!\U0001F9E0\nCalculating final validation error...")
-        val_errors = self.calc_val_errors(n_epochs-1, val_dataloaders, last_time=True)
+        print("\nTRAINING FINISHED!!\U0001F9E0")
+        print("Calculating final validation error...")
+        val_errors = self.calc_val_errors(
+            n_epochs-1, val_dataloaders, last_time=True)
         end = time.time()
         print(f"Training finished in {(end-start):.2f} seconds.")
         print()
