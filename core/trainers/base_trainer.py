@@ -230,8 +230,6 @@ class BaseTrainer:
                     sch = self.initialize_scheduler(sch_inputs)
                     schedulers.append(sch)
                 # Once all individual schedulers are initialized, we go by parts
-                import ipdb
-                ipdb.set_trace()
                 if scheduler_name == "ChainedScheduler":
                     sch_class = torch.optim.lr_scheduler.ChainedScheduler
                     scheduler = sch_class(schedulers)

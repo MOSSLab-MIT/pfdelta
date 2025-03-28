@@ -15,10 +15,10 @@ class GNNTrainer(BaseTrainer):
         return DataLoader
 
 
-    def train_one_epoch(self, epoch, train_dataloader):
+    def train_one_epoch(self, train_dataloader):
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)
-        message = f"Epoch {epoch + 1} \U0001F3CB"
+        message = f"Epoch {self.epoch + 1} \U0001F3CB"
         for data in tqdm(train_dataloader, desc=message):
             # Move data to device
             data = data.to(self.device)
