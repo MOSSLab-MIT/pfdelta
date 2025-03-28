@@ -66,6 +66,8 @@ class CANOS_OPF(nn.Module):
         return {key: d1[key] + d2[key] for key in d1}
 
     def derive_branch_flows(self, output_dict, data):
+        
+        device = data["x"].device
 
         # Create complex voltage
         va = output_dict["bus"][:, 0]
@@ -77,12 +79,12 @@ class CANOS_OPF(nn.Module):
                                   data["bus", "transformer", "bus"].edge_index], dim=-1)
 
         # Edge attributes matrix
-        mask = torch.ones(9, dtype=torch.bool)
+        mask = torch.ones(9, dtype=torch.bool, device=device)
         mask[2] = False
         mask[3] = False
         ac_line_attr_masked = data["bus", "ac_line", "bus"].edge_attr[:, mask]
         tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)), 
-                               torch.zeros((ac_line_attr_masked.shape[0], 1)) ], dim=-1)
+                               torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1).to(device)
         ac_line_susceptances = data["bus", "ac_line", "bus"].edge_attr[:, 2:4]
         ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
 

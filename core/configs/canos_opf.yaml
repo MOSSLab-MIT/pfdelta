@@ -10,6 +10,7 @@ model:
 dataset:
   datasets:
   - name: opfdata
+    split: val
   - name: opfdata
 optim:
   optimizer:
@@ -37,7 +38,7 @@ optim:
       loss2: opf_constraint_violation
       lamb: 0.1
   val_params:
-    report_every: 8438
+    report_every: 422 # 8438
     batch_size: 64
     val_loss:
     - name: combined_loss

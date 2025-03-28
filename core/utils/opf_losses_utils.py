@@ -5,13 +5,14 @@ from core.utils.registry import registry
 
 
 def setup_single_branch_features(ac_line_attr, trafo_attr):
-# Edge attributes matrix
+    device = ac_line_attr.device
+    # Edge attributes matrix
     mask = torch.ones(9, dtype=torch.bool)
     mask[2] = False
     mask[3] = False
     ac_line_attr_masked = ac_line_attr[:, mask]
     tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)),
-                           torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1)
+                           torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1).to(device)
     ac_line_susceptances = ac_line_attr[:, 2:4]
     ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
     edge_attr = torch.cat([ac_line_attr, trafo_attr], dim=0)
@@ -20,6 +21,7 @@ def setup_single_branch_features(ac_line_attr, trafo_attr):
 
 @registry.register_loss("opf_constraint_violation")
 def constraint_violations_loss(output_dict, data):
+    device = data["x"].device
     # Get the predictions
     bus_pred = output_dict["bus"]
     gen_pred = output_dict["generator"]
@@ -35,7 +37,7 @@ def constraint_violations_loss(output_dict, data):
     complex_voltage = vm * torch.exp(1j* va)
 
     n = data["bus"].x.shape[0]
-    sum_branch_flows = torch.zeros(n, dtype=torch.cfloat)
+    sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
     flows_rev = edge_pred[:,0] + 1j*edge_pred[:,1]
     flows_fwd = edge_pred[:,2] + 1j*edge_pred[:,3]
     sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
@@ -44,9 +46,9 @@ def constraint_violations_loss(output_dict, data):
     pg = gen_pred[:, 0]
     qg = gen_pred[:, 1]
 
-    gen_flows = torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j*qg)
-    demand_flows = torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"].x[:, 0] + 1j*data["load"].x[:, 1])
-    shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"].x[:, 1] + 1j*data["shunt"].x[:, 0]).conj()
+    gen_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j*qg)
+    demand_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"].x[:, 0] + 1j*data["load"].x[:, 1])
+    shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"].x[:, 1] + 1j*data["shunt"].x[:, 0]).conj()
 
     power_balance = gen_flows - demand_flows - shunt_flows - sum_branch_flows
     real_power_mismatch = torch.abs(torch.real(power_balance))
