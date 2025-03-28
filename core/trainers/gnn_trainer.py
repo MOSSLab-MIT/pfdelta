@@ -35,6 +35,9 @@ class GNNTrainer(BaseTrainer):
             self.grad_manip(losses)
             self.optimizer.step()
 
+            # Update train step
+            self.update_train_step()
+
         return running_loss
 
 
