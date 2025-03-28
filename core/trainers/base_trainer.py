@@ -163,7 +163,7 @@ class BaseTrainer:
             batch_sizes = val_params["batch_size"]
         for i, dataset in enumerate(self.datasets[1:]):
             batch_size = batch_sizes[i]
-            dataloader = DataLoader(
+            dataloader = dataloader_class(
                 dataset,
                 batch_size = batch_size,
                 shuffle = False
