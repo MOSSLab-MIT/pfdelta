@@ -14,31 +14,31 @@ dataset:
 optim:
   optimizer:
     name: "Adam"
-    lr: 0.001
+    lr: 0.0002
     weight_decay: 0.
   lr_scheduler:
-    name: ChainedScheduler
+    name: SequentialLR
+    milestones:
+    - 10000
     schedulers:
     - name: LinearLR
-      start_factor: 0.0000000001
+      start_factor: 0.0001
       end_factor: 1
-      total_iters: 
-    - name: ExponentialLR
-      gamma: 0.64
+    - name: StepLR
+      gamma: 0.9
+      step_size: 4000
   train_params:
     # epochs: 5
-    train_steps: 100000
-    batch_size: 256
+    train_steps: 600000
+    batch_size: 32
     train_loss:
-    - CrossEntropyLoss # First is for training
-    - ClassificationAccuracy # Rest are for tracking
+    - MSELoss
   val_params:
-    report_every: 3 # How often to calculate val error
-    batch_size: 256
+    report_every: 422
+    batch_size: 64
     high_is_good: True
     val_loss:
-    - ClassificationAccuracy # First used for best model
-    - CrossEntropyLoss # Rest are for tracking
+    - MSELoss
 functional:
   trainer_name: gnn_trainer
   run_name: mytest

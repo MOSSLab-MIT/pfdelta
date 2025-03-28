@@ -216,12 +216,9 @@ class BaseTrainer:
                 "No name found for lr scheduler!"
             scheduler_name = scheduler_inputs["name"]
 
-            # Chained Schedulers need to be treated differently
+            # Chained and Sequential need to be treated differently
             scheduler = None # Placeholder
-            if scheduler_name != "ChainedScheduler":
-                # Single schedulers are just initialized
-                scheduler = self.initialize_scheduler(scheduler_inputs)
-            else:
+            if scheduler_name in ["ChainedScheduler", "SequentialLR"]:
                 assert "schedulers" in scheduler_inputs, \
                     "Chained scheduler needs scheduler lists!"
                 schedulers_inputs = scheduler_inputs["schedulers"]
@@ -232,9 +229,19 @@ class BaseTrainer:
                         "Scheduler in chain missing name!"
                     sch = self.initialize_scheduler(sch_inputs)
                     schedulers.append(sch)
-                # Once all individual schedulers are initialized, we do chain
-                sch_class = torch.optim.lr_scheduler.ChainedScheduler
-                scheduler = sch_class(schedulers)
+                # Once all individual schedulers are initialized, we go by parts
+                import ipdb
+                ipdb.set_trace()
+                if scheduler_name == "ChainedScheduler":
+                    sch_class = torch.optim.lr_scheduler.ChainedScheduler
+                    scheduler = sch_class(schedulers)
+                else:
+                    processed_inputs = copy.deepcopy(scheduler_inputs)
+                    processed_inputs["schedulers"] = schedulers
+                    scheduler = self.initialize_scheduler(processed_inputs)
+            else:
+                # Single schedulers are just initialized
+                scheduler = self.initialize_scheduler(scheduler_inputs)
 
             # Save scheduler
             self.lr_scheduler = scheduler
