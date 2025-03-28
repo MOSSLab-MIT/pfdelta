@@ -1,89 +1,183 @@
+import types
+
 import torch
-from torch.nn.functional import relu
+from torch import nn
+
+from core.utils.registry import registry
+from core.utils.pf_losses_utils import PowerBalanceLoss
 
 
-def setup_single_branch_features(ac_line_attr, trafo_attr):
-# Edge attributes matrix
-    mask = torch.ones(9, dtype=torch.bool)
-    mask[2] = False
-    mask[3] = False
-    ac_line_attr_masked = ac_line_attr[:, mask]
-    tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)),
-                           torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1)
-    ac_line_susceptances = ac_line_attr[:, 2:4]
-    ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
-    edge_attr = torch.cat([ac_line_attr, trafo_attr], dim=0)
-    return edge_attr
+def loss_loader(class_name, class_inputs, class_type):
+    loss_class = registry.get_loss_class(class_name)
+    assert loss_class is not None, \
+        f"{class_type} {class_name} is not registered in the registry!"
+    if isinstance(loss_class, types.FunctionType):
+        loss = loss_class
+    else:
+        loss = loss_class(**class_inputs)
+
+    return loss
 
 
-def constraint_violations_loss(data, bus_pred, gen_pred, edge_pred, C):
-    # Power balance mismatch
-    edge_indices = torch.cat((data["bus", "ac_line", "bus"].edge_index,
-                              data["bus", "transformer", "bus"].edge_index), dim=-1)
-    edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].edge_attr, 
-                                                 data["bus", "transformer", "bus"].edge_attr)
+@registry.register_loss("GNNTorchLoss")
+class GNNTorchLoss:
+    def __init__(self, torch_nn_name, output_name, loss_inputs={}):
+        loss_class = getattr(torch.nn, torch_nn_name, None)
+        assert loss_class is not None, f"Loss {torch_nn_name} not found in torch.nn!"
+        assert isinstance(loss_inputs, dict), f"Loss inputs need to be a dictionary!"
+        self.loss = loss_class(**loss_inputs)
+        self.output_name = output_name
+        self.loss_name = torch_nn_name
 
-    va, vm = bus_pred.T
-    complex_voltage = vm * torch.exp(1j* va)
 
-    n = data["bus"].x.shape[0]
-    sum_branch_flows = torch.zeros(n, dtype=torch.cfloat)
-    flows_rev = edge_pred[:,0] + 1j*edge_pred[:,1]
-    flows_fwd = edge_pred[:,2] + 1j*edge_pred[:,3]
-    sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
-    sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
+    def __call__(self, outputs, data):
+        if "__" in self.output_name:
+            key, output_name = self.output_name.split("__")
+            truth = data[key].get(output_name, None)
+        else:
+            truth = data.get(self.output_name, None)
+        assert truth is not None, f"Data does not contain {output_name}!"
+        return self.loss(outputs, truth)
 
-    pg = gen_pred[:, 0]
-    qg = gen_pred[:, 1]
 
-    gen_flows = torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j*qg)
-    demand_flows = torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"].x[:, 0] + 1j*data["load"].x[:, 1])
-    shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"].x[:, 1] + 1j*data["shunt"].x[:, 0]).conj()
+@registry.register_loss("PBL_mean")
+def PBL_mean(predictions, data):
+    """
+    Custom loss function for the PowerFlowTypedGNN to enforce power
+    balance at each node. The loss minimizes the mismatch in active power
+    (ΔP) and reactive power (ΔQ) at each node.
 
-    power_balance = gen_flows - demand_flows - shunt_flows - sum_branch_flows
-    real_power_mismatch = torch.abs(torch.real(power_balance))
-    reactive_power_mismatch = torch.abs(torch.imag(power_balance))
-    violation_degree_real_mismatch = real_power_mismatch.mean()
-    violation_degree_imag_mismatch = reactive_power_mismatch.mean()
+    The power balance equations are:
+        ΔP(t) = Pg - Pd - Pbus(V(t), θ(t))
+        ΔQ(t) = Qg - Qd - Qbus(V(t), θ(t))
 
-    # Voltage bounds mismatch
-    vmin, vmax = data["bus"].x[:, -2:].T
+    The goal is to minimize the sum of squared ΔP and ΔQ across all nodes.
+    """
+    per_node_loss = PowerBalanceLoss(predictions, data)[0]
+    return per_node_loss.mean()
 
-    voltage_left = relu(vmin - vm)
-    voltage_right = relu(vm - vmax)
-    violation_degree_voltages = (voltage_left + voltage_right).mean()
 
-    # angle difference bounds
-    angmin, angmax = edge_features[:, :2].T
-    i = edge_indices[0]
-    j = edge_indices[1]
-    angle_left = relu((va[i] - va[j]) - angmax)
-    angle_right = relu((va[j] - va[i]) + angmin)
-    violation_degree_angles = (angle_left + angle_right).mean()
+@registry.register_loss("PBL_l2norm")
+def PBL_l2norm(predictions, data):
+    """
+    Same as PBL_mean, but this time we calculate the L2 norm
+    """
+    batch = data["bus"].batch
+    batch_size = batch.max().item() + 1
+    per_node_loss = PowerBalanceLoss(predictions, data)[0]
+    l2_normed = torch.zeros(batch_size, device=predictions.device)
+    l2_normed = l2_normed.scatter_add_(dim=0, index=batch, src=per_node_loss**2)
+    l2_normed = torch.sqrt(l2_normed)
+    return l2_normed.mean()
 
-    # generation bounds
-    pmin, pmax = data["generator"].x[:, 2:4].T
-    real_power_right = relu(pmin - pg)
-    real_power_left = relu(pg - pmax)
-    violation_degree_pg = (real_power_right + real_power_left).mean()
 
-    qmin, qmax = data["generator"].x[:, 5:7].T
+@registry.register_loss("PBL_max")
+def PBL_max(predictions, data):
+    """
+    Returns the maximum power balance loss
+    """
+    per_node_loss = PowerBalanceLoss(predictions, data)[0]
+    max_loss = per_node_loss.max()
+    return max_loss
 
-    reactive_power_right = relu(qmin - qg)
-    reactive_power_left = relu(qg - qmax)
-    violation_degree_qg = (reactive_power_right + reactive_power_left).mean()
 
-    # branch flow bounds
-    sf = torch.abs(flows_fwd)
-    st = torch.abs(flows_rev)
-    smax = edge_features[:, 4]
-    flow_mismatch_fwd = relu(torch.abs(sf)**2 - smax**2)
-    flow_mismatch_rev = relu(torch.abs(st)**2 - smax**2)
-    violation_degree_flows = torch.cat([flow_mismatch_fwd, flow_mismatch_rev]).mean()
+@registry.register_loss("combined_loss")
+class CombinedLoss:
+    def __init__(self, loss1, loss2, lamb=1, inp1={}, inp2={}):
+        self.loss1_name = loss1
+        self.loss2_name = loss2
+        self.lamb = lamb
 
-    # loss
-    loss_c = C * (violation_degree_real_mismatch +  violation_degree_imag_mismatch +
-                  violation_degree_voltages + violation_degree_angles +
-                    violation_degree_pg + violation_degree_qg + violation_degree_flows)
+        self.loss1 = self.initialize_loss(loss1, inp1)
+        self.loss2 = self.initialize_loss(loss2, inp2)
 
-    return loss_c
+        loss1_printname = getattr(self.loss1, "loss_name", loss1)
+        loss2_printname = getattr(self.loss2, "loss_name", loss2)
+        self.loss_name = loss1_printname + "+" + loss2_printname
+
+    def initialize_loss(self, loss_name, loss_inputs):
+        # This is for pytorch losses
+        if getattr(nn, loss_name, None) is not None:
+            loss_class = getattr(nn, loss_name)
+            return loss_class(**inputs)
+
+        # This is for custom loss
+        loss_class = registry.get_loss_class(loss_name)
+        assert loss_class is not None, f"Loss {loss_name} not found!"
+
+        if isinstance(loss_class, types.FunctionType):
+            assert len(loss_inputs) == 0, \
+                f"Custom loss {loss_name} is a function, but loss inputs were received!"
+            return loss_class
+        else:
+            return loss_class(**loss_inputs)
+
+
+    def __call__(self, predictions, labels):
+        loss1 = self.loss1(predictions, labels)
+        loss2 = self.loss2(predictions, labels)
+        weighted_loss = loss1 + self.lamb*loss2
+        return weighted_loss
+
+
+@registry.register_loss("Objective_n_Penalty")
+class Objective_n_Penalty:
+    def __init__(
+        self, obj_name=None, ineq_name=None, eq_name=None,
+        obj_inputs={}, ineq_inputs={}, eq_inputs={}
+    ):
+        self.obj_name = obj_name
+        self.ineq_name = ineq_name
+        self.eq_name = eq_name
+        self.obj_fn = None
+        self.ineq_fn = None
+        self.eq_fn = None
+
+        obj_active = obj_name is not None
+        ineq_active = ineq_name is not None
+        eq_active = eq_name is not None
+        assert obj_active or ineq_active or eq_active, \
+            "No objective, equality or inequality declared!!"
+
+        # Load objective function
+        if self.obj_name is not None:
+            self.obj_fn = loss_loader(obj_name, obj_inputs, "Objective function")
+
+        # Load inequality functions
+        if self.ineq_name is not None:
+            self.ineq_fn = loss_loader(ineq_name, ineq_inputs, "Inequality functions")
+
+        # Load equality functions
+        if self.eq_name is not None:
+            self.eq_fn = loss_loader(eq_name, eq_inputs, "Equality functions")
+
+        self.create_name()
+
+    def create_name(self,):
+        name = ""
+        if self.obj_name is not None:
+            obj_name = getattr(self.obj_fn, "loss_name", "Obj")
+            name += obj_name
+        if self.ineq_name is not None:
+            ineq_name = getattr(self.ineq_fn, "loss_name", "Ineq")
+            if len(name) == 0:
+                name += ineq_name
+            else:
+                name += "+" + ineq_name
+        if self.eq_name is not None:
+            eq_name = getattr(self.eq_fn, "loss_name", "Eq")
+            if len(name) == 0:
+                name += eq_name
+            else:
+                name += "+" + eq_name
+        self.loss_name = name
+
+    def __call__(self, predictions, data):
+        loss = 0
+        if self.obj_fn is not None:
+            loss += self.obj_fn(predictions, data)
+        if self.ineq_fn is not None:
+            loss += self.ineq_fn(predictions, data)
+        if self.eq_fn is not None:
+            loss += self.eq_fn(predictions, data)
+        return loss.mean()

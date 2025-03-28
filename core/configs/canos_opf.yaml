@@ -2,11 +2,11 @@ config_type: experiment
 model:
   name: canos_opf
   dataset: _include_ 
-  edge_feat_dim: 128
-  node_feat_dim: 128
-  hidden_dim: 128
+  edge_feat_dim: 384
+  node_feat_dim: 384
+  hidden_dim: 384
   include_sent_messages: True
-  k_steps: 48
+  k_steps: 36
 dataset:
   datasets:
   - name: opfdata
@@ -32,13 +32,18 @@ optim:
     train_steps: 600000
     batch_size: 32
     train_loss:
-    - MSELoss
+    - name: combined_loss
+      loss1: canos_mse
+      loss2: opf_constraint_violation
+      lamb: 0.1
   val_params:
-    report_every: 422
+    report_every: 8438
     batch_size: 64
-    high_is_good: True
     val_loss:
-    - MSELoss
+    - name: combined_loss
+      loss1: canos_mse
+      loss2: opf_constraint_violation
+      lamb: 0.1
 functional:
   trainer_name: gnn_trainer
   run_name: mytest

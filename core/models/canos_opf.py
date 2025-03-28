@@ -57,8 +57,9 @@ class CANOS_OPF(nn.Module):
 
         # Deriving branch flows
         p_fr, q_fr, p_to, q_to = self.derive_branch_flows(output_dict, data)
+        output_dict["edge_preds"] = torch.stack([p_to, q_to, p_fr, q_fr], dim=-1) 
 
-        return output_dict, p_fr, q_fr, p_to, q_to
+        return output_dict
 
     @staticmethod
     def merge_dicts(d1, d2):
