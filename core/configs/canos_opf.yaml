@@ -10,8 +10,9 @@ model:
 dataset:
   datasets:
   - name: opfdata
-    split: val
   - name: opfdata
+    split: val
+  topological_perturbations: True
 optim:
   optimizer:
     name: "Adam"
@@ -47,5 +48,4 @@ optim:
       lamb: 0.1
 functional:
   trainer_name: gnn_trainer
-  run_name: mytest
-  run_location: tutorial_runs/one_experiment
+  run_name: first_test
