@@ -34,7 +34,7 @@ class BaseTrainer:
         self.val_errors = {}
         self.best_point = None # best_point is the best epoch or best train step
         self.best_model = None
-        self.train_step = -1 # This helps maintain consistency with epochs
+        self.train_step = 0
         self.max_train_step = None
         self.epoch = 0
         self.max_epoch = None
@@ -405,7 +405,7 @@ class BaseTrainer:
     def is_val_error_time(self, ):
         # Get status for either epoch or train step limit
         if self.max_epoch is None:
-            current_point = self.train_step
+            current_point = self.train_step - 1
             max_point = self.max_train_step
         else:
             current_point = self.epoch
@@ -418,6 +418,8 @@ class BaseTrainer:
 
         # Check if it is time to calculate val errors
         if is_report_time and not training_about_to_end:
+            import ipdb
+            ipdb.set_trace()
             self.calc_val_errors()
             print("\nCONTINUE TRAINING!\U0001F9BF")
 
@@ -436,7 +438,7 @@ class BaseTrainer:
             print(message)
             print("-"*40)
         else:
-            message = f"Train step {current_point+1}/{self.max_train_step} done!"
+            message = f"Train step {current_point}/{self.max_train_step} done!"
             message += f"\U0001F9BE Epoch: {self.epoch+1}"
             print(message)
             print("-"*40)
@@ -499,7 +501,6 @@ class BaseTrainer:
                 self.lr_scheduler.step()
             # Check if it is time to calc val error
             self.is_val_error_time()
-
 
 
     def grad_manip(self, losses):
