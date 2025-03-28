@@ -171,7 +171,6 @@ class BaseTrainer:
             self.dataloaders.append(dataloader)
 
 
-
     def get_dataloader_class(self,):
         return DataLoader
 
@@ -485,16 +484,22 @@ class BaseTrainer:
             self.grad_manip(losses)
             self.optimizer.step()
 
-            # For per train step mode, we need two operations
-            self.train_step += 1
-            if self.max_epoch is None:
-                # LR scheduler step if any
-                if self.lr_scheduler is not None:
-                    self.lr_scheduler.step()
-                # Check if it is time to calc val error
-                self.is_val_error_time()
+            # Update train step
+            self.update_train_step()
 
         return running_loss
+
+
+    def update_train_step(self,):
+        # For per train step mode, we need two operations
+        self.train_step += 1
+        if self.max_epoch is None:
+            # LR scheduler step if any
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
+            # Check if it is time to calc val error
+            self.is_val_error_time()
+
 
 
     def grad_manip(self, losses):
