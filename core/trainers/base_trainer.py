@@ -418,8 +418,6 @@ class BaseTrainer:
 
         # Check if it is time to calculate val errors
         if is_report_time and not training_about_to_end:
-            import ipdb
-            ipdb.set_trace()
             self.calc_val_errors()
             print("\nCONTINUE TRAINING!\U0001F9BF")
 
