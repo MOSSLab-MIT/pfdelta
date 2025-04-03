@@ -60,7 +60,7 @@ class GNNTrainer(BaseTrainer):
         return running_losses
 
 
-    def customize_model_inputs(self, model_inputs):
+    def customize_model_init_inputs(self, model_inputs):
         """We will use this method to pass data information to the model."""
         # First, verify that the model inputs are a dictionary
         assert type(model_inputs) == dict

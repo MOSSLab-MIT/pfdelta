@@ -183,12 +183,12 @@ class BaseTrainer:
         # Gather inputs and modify them if necessary
         model_inputs = copy.deepcopy(model)
         del model_inputs["name"]
-        self.customize_model_inputs(model_inputs)
+        self.customize_model_init_inputs(model_inputs)
         # Initialize model
         self.model = model_class(**model_inputs).to(self.device)
 
 
-    def customize_model_inputs(self, model_inputs):
+    def customize_model_init_inputs(self, model_inputs):
         r"""This method allows the user to modify the inputs before initiali-
         zation. In particular, it can be used to pass other trainer parameters
         to the model such as a data sample."""
