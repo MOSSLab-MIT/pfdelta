@@ -1,0 +1,12 @@
+config_type: batch
+job_parameters:
+  time: "1-00:00:00"
+  p: "cpu-gpu-rtx8000"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate power\n__launch__"
+default_values:
+  config: canos_opf
+
+jobs:
+- functional:
+    run_name: canos_opf_depth16
