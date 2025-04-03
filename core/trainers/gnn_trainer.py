@@ -60,6 +60,30 @@ class GNNTrainer(BaseTrainer):
         return running_losses
 
 
+    def modify_loss(self,):
+        recycle_class = registry.get_loss_class("recycle_loss")
+        # Add source to check if recycled is used in train
+        for i, loss in enumerate(self.train_loss):
+            if not isinstance(loss, recycle_class):
+                continue
+            if loss.keyword == "canos_mse":
+                source = self.train_loss[0].loss1
+            else:
+                raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
+            loss.source = source
+
+        # Add source to check if recycled is used in val
+        source = self.val_loss[0]
+        for i, loss in enumerate(self.val_loss):
+            if not isinstance(loss, recycle_class):
+                continue
+            if loss.keyword == "canos_mse":
+                source = self.val_loss[0].loss1
+            else:
+                raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
+            loss.source = source
+
+
     def customize_model_init_inputs(self, model_inputs):
         """We will use this method to pass data information to the model."""
         # First, verify that the model inputs are a dictionary

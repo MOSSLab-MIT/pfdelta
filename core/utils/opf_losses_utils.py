@@ -99,23 +99,97 @@ def constraint_violations_loss(output_dict, data):
     return loss_c
 
 
+@registry.register_loss("recycle_loss")
+class RecycleLoss:
+    def __init__(self, recycled_parameter, loss_name, keyword):
+        self.recycled_parameter = recycled_parameter
+        self.loss_name = loss_name
+        self.source = None
+        self.keyword = keyword
+
+    def __call__(self, output_dict, data):
+        recycled_value = getattr(self.source, self.recycled_parameter)
+        return recycled_value
+
+
 @registry.register_loss("canos_mse")
-def CANOSMSE(output_dict, data):
-    # Gather predictions
-    bus_pred, gen_pred = output_dict["bus"], output_dict["generator"]
-    edge_preds = output_dict["edge_preds"]
+class CANOSMSE:
+    def __init__(self,):
+        self.va = None
+        self.vm = None
+        self.pg = None
+        self.qg = None
+        self.pt_ac = None
+        self.qt_ac = None
+        self.pf_ac = None
+        self.qf_ac = None
+        self.pt_transformer = None
+        self.qf_transformer = None
+        self.pf_transformer = None
+        self.qt_transformer = None
+        self.total_loss = None
 
-    # Gather targets
-    bus_target, gen_target = data["bus"].y, data["generator"].y
-    ac_line_target = data["bus", "ac_line", "bus"].edge_label
-    transformer_line_target = data["bus", "transformer", "bus"].edge_label    
-    edge_target = torch.cat([ac_line_target, transformer_line_target], dim=0)
-    
-    # Calculate L2 loss
-    bus_loss = mse_loss(bus_pred, bus_target)
-    gen_loss = mse_loss(gen_pred, gen_target)
-    edge_loss = mse_loss(edge_preds, edge_target)
+    def bus_error(self, pred, target):
+        first = mse_loss(pred[:, 0], target[:, 0])
+        second = mse_loss(pred[:, 1], target[:, 1])
+        total_error = torch.stack([first, second]).mean()
+        return first, second, total_error
 
-    total_loss = bus_loss + gen_loss + edge_loss
+    def voltage_error(self, bus_pred, bus_target):
+        va, vm, v_error = self.bus_error(bus_pred, bus_target)
+        self.va, self.vm = va, vm
+        return v_error
 
-    return total_loss
+    def gen_error(self, gen_pred, gen_target):
+        pg, qg, g_error = self.bus_error(gen_pred, gen_target)
+        self.pg, self.qg = pg, qg
+        return g_error
+
+    def line_errors(self, pred, target):
+        pt = mse_loss(pred[:, 0], target[:, 0])
+        qt = mse_loss(pred[:, 1], target[:, 1])
+        pf = mse_loss(pred[:, 2], target[:, 2])
+        qf = mse_loss(pred[:, 3], target[:, 3])
+        line_error = torch.stack([pt, qt, pf, qf]).mean()
+        return pt, qt, pf, qf, line_error
+
+    def ac_line_error(self, pred, target):
+        pt, qt, pf, qf, line_error = self.line_errors(pred, target)
+        self.pt_ac, self.qt_ac, self.pf_ac, self.qf_ac = pt, qt, pf, qf
+        return line_error
+
+    def transformer_line_error(self, pred, target):
+        pt, qt, pf, qf, line_error = self.line_errors(pred, target)
+        self.pt_transformer, self.qt_transformer = pt, qt
+        self.pf_transformer, self.qf_transformer = pf, qf
+        return line_error
+
+    def __call__(self, output_dict, data):
+        # Gather targets
+        bus_target, gen_target = data["bus"].y, data["generator"].y
+        ac_line_target = data["bus", "ac_line", "bus"].edge_label
+        transformer_line_target = data["bus", "transformer", "bus"].edge_label
+        num_ac_lines = ac_line_target.size(0)
+
+        # Gather predictions
+        bus_pred, gen_pred = output_dict["bus"], output_dict["generator"]
+        edge_preds = output_dict["edge_preds"]
+        ac_line_pred = edge_preds[:num_ac_lines]
+        transformer_line_pred = edge_preds[num_ac_lines:]
+
+        # Calculate L2 losses
+        bus_loss = self.voltage_error(bus_pred, bus_target)
+        gen_loss = self.gen_error(gen_pred, gen_target)
+        ac_loss = self.ac_line_error(ac_line_pred, ac_line_target)
+        transformer_loss = self.transformer_line_error(
+            transformer_line_pred, transformer_line_target)
+
+        # Normalize to average
+        n_bus, n_gen = bus_pred.size(0), gen_pred.size(0)
+        n_ac, n_transformer = ac_line_pred.size(0), transformer_line_pred.size(0)
+        total_loss = (bus_loss + gen_loss + ac_loss + transformer_loss)
+
+        self.total_loss = total_loss
+
+        return total_loss
+
