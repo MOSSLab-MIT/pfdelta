@@ -1,7 +1,13 @@
-config_type: experiment
+config_type: simple_batch
+job_parameters:
+  time: "1-00:00:00"
+  p: "cpu-gpu-rtx8000"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate power\n__launch__"
+batch_name: canos_twentieth
 model:
   name: canos_opf
-  dataset: _include_ 
+  dataset: _include_
   edge_feat_dim: 384
   node_feat_dim: 384
   hidden_dim: 384
@@ -10,9 +16,12 @@ model:
 dataset:
   datasets:
   - name: opfdata
+    num_groups: 1 # SCALE THIS
   - name: opfdata
     split: val
+    num_groups: 20
   topological_perturbations: True
+  case_name: pglib_opf_case500_goc
 optim:
   optimizer:
     name: "Adam"
@@ -21,17 +30,17 @@ optim:
   lr_scheduler:
     name: SequentialLR
     milestones:
-    - 10000
+    - 1000 # SCALE THIS
     schedulers:
     - name: LinearLR
       start_factor: 0.0001
       end_factor: 1
     - name: StepLR
       gamma: 0.9
-      step_size: 4000
+      step_size: 400 # SCALE THIS
   train_params:
     # epochs: 5
-    train_steps: 600000
+    train_steps: 120000
     batch_size: 32
     train_loss:
     - name: combined_loss
@@ -39,7 +48,7 @@ optim:
       loss2: opf_constraint_violation
       lamb: 0.1
   val_params:
-    report_every: 422 # 8438
+    report_every: 422 # 8438 # SCALE THIS
     batch_size: 64
     val_loss:
     - name: combined_loss
@@ -48,4 +57,4 @@ optim:
       lamb: 0.1
 functional:
   trainer_name: gnn_trainer
-  run_name: first_test
+  run_name: twentieth_of_data
