@@ -143,6 +143,12 @@ class BaseTrainer:
             # Save dataset
             self.datasets.append(dataset)
 
+        self.modify_datasets()
+
+
+    def modify_datasets(self,):
+        pass
+
 
     def load_dataloaders(self,):
         # First initialize train dataloader
@@ -169,6 +175,12 @@ class BaseTrainer:
                 shuffle = False
             )
             self.dataloaders.append(dataloader)
+
+        self.modify_dataloaders()
+
+
+    def modify_dataloaders(self,):
+        pass
 
 
     def get_dataloader_class(self,):
@@ -243,6 +255,12 @@ class BaseTrainer:
             # Save scheduler
             self.lr_scheduler = scheduler
 
+        self.modify_optimizer()
+
+
+    def modify_optimizer(self,):
+        pass
+
 
     def initialize_scheduler(self, scheduler_inputs):
         # Gather class of lr scheduler
@@ -288,6 +306,12 @@ class BaseTrainer:
             self.val_loss.append(loss)
             name = getattr(loss, "loss_name", name)
             self.val_loss_names.append(name)
+
+        self.modify_loss()
+
+
+    def modify_loss(self,):
+        pass
 
 
     def initialize_loss(self, loss):
