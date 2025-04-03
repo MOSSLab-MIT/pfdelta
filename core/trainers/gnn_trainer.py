@@ -68,6 +68,8 @@ class GNNTrainer(BaseTrainer):
                 continue
             if loss.keyword == "canos_mse":
                 source = self.train_loss[0].loss1
+            elif loss.keyword == "constraint_violation":
+                source = self.train_loss[0].loss2
             else:
                 raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
             loss.source = source
@@ -79,6 +81,8 @@ class GNNTrainer(BaseTrainer):
                 continue
             if loss.keyword == "canos_mse":
                 source = self.val_loss[0].loss1
+            elif loss.keyword == "constraint_violation":
+                source = self.val_loss[0].loss2
             else:
                 raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
             loss.source = source
