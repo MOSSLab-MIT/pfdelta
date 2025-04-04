@@ -5,9 +5,11 @@ import json
 import sys
 import types
 import time
+import random
 from datetime import datetime
 from tqdm import tqdm
 
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
@@ -128,6 +130,7 @@ class BaseTrainer:
         print("Optimizer loaded! \U00002705")
         self.load_loss_funcs()
         print("Loss function loaded! \U00002705")
+        self.load_seeds()
 
 
     def load_dataset(self,):
@@ -352,6 +355,13 @@ class BaseTrainer:
             return loss_class
         else:
             return loss_class(**loss_inputs)
+
+
+    def load_seeds(self,):
+        seed = self.config["functional"]["seed"]
+        random.seed(seed)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
 
 
     def num_model_parameters(self):
