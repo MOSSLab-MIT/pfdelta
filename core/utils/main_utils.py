@@ -212,6 +212,7 @@ def single_config(config, args, override_args, i=None):
     }
     if "optim" not in config:
         config["optim"] = default_optim
+        optim = config["optim"]
     else:
         # If there is an optim already, then we merge the default into it
         # Epoch num is not added if train_steps is used.
