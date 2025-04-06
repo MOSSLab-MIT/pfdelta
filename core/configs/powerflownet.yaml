@@ -20,7 +20,7 @@ dataset:
   name: powerflowdata
   root: data/powerflowdata
   # case: 118v2
-  case: _manual_list(14v2, 118v2 | 14, 118)
+  case: _manual_list(14v2, 118v2 | case14, case118)
   normalize: True
   split:
   - 0.5
