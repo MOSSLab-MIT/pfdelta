@@ -404,6 +404,10 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
     # Create dictionaries
     new_dicts = []
     for instance, name in zip(instances, names):
+        # Check if it is intended to be a string
+        if parse_value(instance) == instance:
+            instance = '"' + instance + '"'
+        # Construct new dictionary
         new_dict = start_of_dict + instance + end_of_dict
         # We modify run name if necessary
         run_name_idx = new_dict.find("run_name")
