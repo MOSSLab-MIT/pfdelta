@@ -1,0 +1,54 @@
+config_type: simple_batch
+job_parameters:
+  time: "04:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate power\n__launch__"
+model:
+  name: powerflownet
+  nfeature_dim: 6
+  efeature_dim: 5
+  output_dim: 6
+  hidden_dim: 129
+  n_gnn_layers: 4
+  K: 3
+  dropout_rate: 0.2
+dataset:
+  datasets:
+  - task: train
+  - task: val
+  name: powerflowdata
+  root: data/powerflowdata
+  # case: 118v2
+  case: _manual_list(14v2, 118v2 | 14, 118)
+  normalize: True
+  split:
+  - 0.5
+  - 0.2
+  - 0.3
+optim:
+  optimizer:
+    lr: 0.001
+  train_params:
+    epochs: 1000
+    train_loss:
+    - pfn_masked_mse
+    - name: pfn_masked_mse
+      regularize: False
+    - name: GNNTorchLoss
+      torch_nn_name: MSELoss
+      output_name: "y"
+  val_params:
+    report_every: 5
+    val_loss:
+    - name: pfn_masked_mse
+      regularize: False
+    - pfn_masked_mse
+    - name: GNNTorchLoss
+      torch_nn_name: MSELoss
+      output_name: "y"
+functional:
+  trainer_name: gnn_trainer
+  seed: 1234
+  run_location: powerflow_reimplementation
+  run_name: pfn_%case

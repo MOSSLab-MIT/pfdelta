@@ -181,3 +181,49 @@ class Objective_n_Penalty:
         if self.eq_fn is not None:
             loss += self.eq_fn(predictions, data)
         return loss.mean()
+
+
+@registry.register_loss("pfn_masked_mse")
+class Masked_L2_loss:
+    """
+    Custom loss function for the masked L2 loss.
+
+    Args:
+        output (torch.Tensor): The output of the neural network model.
+        target (torch.Tensor): The target values.
+        mask (torch.Tensor): The mask for the target values.
+
+    Returns:
+        torch.Tensor: The masked L2 loss.
+    """
+
+    def __init__(self, regularize=True, regcoeff=1):
+        super(Masked_L2_loss, self).__init__()
+        self.criterion = nn.MSELoss(reduction='mean')
+        self.regularize = regularize
+        self.regcoeff = regcoeff
+        self.loss_name = "Masked MSE"
+        if self.regularize:
+            self.loss_name += ", reg."
+
+
+    def __call__(self, output, data):
+        target = data.y
+        mask = data.x[:, 10:]
+
+        masked = mask.type(torch.bool)
+
+        # output = output * mask
+        # target = target * mask
+        outputl = torch.masked_select(output, masked)
+        targetl = torch.masked_select(target, masked)
+
+        loss = self.criterion(outputl, targetl)
+
+        if self.regularize:
+            masked = (1 - mask).type(torch.bool)
+            output_reg = torch.masked_select(output, masked)
+            target_reg = torch.masked_select(target, masked)
+            loss = loss + self.regcoeff * self.criterion(output_reg, target_reg)
+
+        return loss
