@@ -90,14 +90,11 @@ def merge_dicts(base, overwrite):
     return return_dict
 
 
-def load_config(parser):
+def load_config(args, override_args=[]):
     r"""Loads the config file. The config file contains the information for one
     or multiple jobs. If it is for one, then it contains all the information it
     needs to carry out training. If it is for multiple, then it submits them to
     slurm after loading the setup for each one individually."""
-
-    args, override_args = parser.parse_known_args()
-
     # Preprocess config file name
     config_location = args.config
     assert config_location != "none", "No config file specified!"

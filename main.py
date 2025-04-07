@@ -21,9 +21,10 @@ def main():
 
     # Load arguments
     parser = flags.parser
+    args, override_args = parser.parse_known_args()
 
     # Load the config file
-    config = load_config(parser)
+    config = load_config(args, override_args)
 
     # Main proceeds according to the config type
     config_type = config["config_type"]
