@@ -63,26 +63,31 @@ class GNNTrainer(BaseTrainer):
     def modify_loss(self,):
         recycle_class = registry.get_loss_class("recycle_loss")
         # Add source to check if recycled is used in train
+        losses = self.config["optim"]["train_params"]["train_loss"]
+        names = [name if isinstance(name, str) else name["name"] for name in losses]
+        combined_loss_id = names.index("combined_loss")
         for i, loss in enumerate(self.train_loss):
             if not isinstance(loss, recycle_class):
                 continue
             if loss.keyword == "canos_mse":
-                source = self.train_loss[0].loss1
+                source = self.train_loss[combined_loss_id].loss1
             elif loss.keyword == "constraint_violation":
-                source = self.train_loss[0].loss2
+                source = self.train_loss[combined_loss_id].loss2
             else:
                 raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
             loss.source = source
 
         # Add source to check if recycled is used in val
-        source = self.val_loss[0]
+        losses = self.config["optim"]["val_params"]["val_loss"]
+        names = [name if isinstance(name, str) else name["name"] for name in losses]
+        combined_loss_id = names.index("combined_loss")
         for i, loss in enumerate(self.val_loss):
             if not isinstance(loss, recycle_class):
                 continue
             if loss.keyword == "canos_mse":
-                source = self.val_loss[0].loss1
+                source = self.val_loss[combined_loss_id].loss1
             elif loss.keyword == "constraint_violation":
-                source = self.val_loss[0].loss2
+                source = self.val_loss[combined_loss_id].loss2
             else:
                 raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
             loss.source = source
