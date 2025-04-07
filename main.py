@@ -42,7 +42,8 @@ def main():
         n_jobs = len(config['jobs'])
         print("\nLocal batch of experiments detected! Good luck in your runs!" \
             + "\U0001F601\n")
-        print(f"There are {n_jobs} jobs ready to train. They will be trained sequentially!\n")
+        print(f"There are {n_jobs} jobs ready to train. " + \
+            "They will be trained sequentially!\n")
         sbatch_scripts = config["sbatch_scripts"]
         for i, cfg in enumerate(config["jobs"]):
             print("\n" + "#" * 59)  # Top border
@@ -59,11 +60,13 @@ def main():
         # This last line is to not have to change the last part
         trainer = trainers
     else:
-        print("\nBatch of experiments detected! Good luck in your runs!\U0001F601\n")
+        print("\nBatch of experiments detected! " + \
+            "Good luck in your runs!\U0001F601\n")
         sbatch_locations = config["sbatch_locations"]
         sbatch_scripts = config["sbatch_scripts"]
         n_jobs = len(config['jobs'])
-        print(f"There are {n_jobs} jobs ready to launch. What do you want to do?\n")
+        print(f"There are {n_jobs} jobs ready to launch. " + \
+            "What do you want to do?\n")
         result = console(sbatch_locations, sbatch_scripts, config["jobs"])
         if result != 0:
             print("\nFailed to launch jobs! Deleting job submission files...")
