@@ -415,7 +415,8 @@ class BaseTrainer:
                 self.lr_scheduler.step()
 
             # Calc val error and save new best model if necessary
-            self.is_val_error_time()
+            if self.max_train_step is None:
+                self.is_val_error_time()
 
             # Do any post setup before each epoch
             self.setup_post_epoch()
@@ -464,7 +465,7 @@ class BaseTrainer:
         # Check if it is time to calculate val errors
         if is_report_time and not training_about_to_end:
             self.calc_val_errors()
-            print("\nCONTINUE TRAINING!\U0001F9BF")
+            print("\nCONTINUE TRAINING!\U0001F9BF\n")
 
 
     def report_results(self, losses):
@@ -571,7 +572,7 @@ class BaseTrainer:
         # Current point is either an epoch or a training step
         current_point = self.train_step if self.max_epoch is None else self.epoch
 
-        print("\nTime to check validation error...\U0001F50D\n")
+        print("\n\nTime to check validation error...\U0001F50D\n")
         val_params = self.config["optim"]["val_params"]
         loss_per_dataset = []
         self.val_errors[str(current_point)] = []
