@@ -1,6 +1,12 @@
 import os
+import sys
 import json
 import argparse
+
+# Change working directory to one above
+sys.path.append(os.getcwd())
+
+from scripts.utils import find_best_run
 
 
 def parse_arguments():
