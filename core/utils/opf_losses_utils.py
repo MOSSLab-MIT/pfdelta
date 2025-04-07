@@ -23,6 +23,13 @@ def setup_single_branch_features(ac_line_attr, trafo_attr):
 class constraint_violations_loss:
     def __init__(self, ):
         self.constraint_loss = None
+        self.bus_real_mismatch = None
+        self.bus_reactive_mismatch = None
+        self.angle_difference_violations = None
+        self.branch_flow_violations = None
+        self.voltage_violations = None
+        self.generator_pg_violations = None
+        self.generator_qg_violations = None
 
     def __call__(self, output_dict, data):
         device = data["x"].device
@@ -89,11 +96,12 @@ class constraint_violations_loss:
 
         # branch flow bounds
         sf = torch.abs(flows_fwd)
-        st = torch.abs(flows_rev)
+        # st = torch.abs(flows_rev)
         smax = edge_features[:, 4]
-        flow_mismatch_fwd = relu(torch.abs(sf)**2 - smax**2)
-        flow_mismatch_rev = relu(torch.abs(st)**2 - smax**2)
-        violation_degree_flows = torch.cat([flow_mismatch_fwd, flow_mismatch_rev]).mean()
+        flow_mismatch_fwd = relu(torch.abs(sf)**2 - smax)
+        # flow_mismatch_rev = relu(torch.abs(st)**2 - smax**2)
+        # violation_degree_flows = torch.cat([flow_mismatch_fwd, flow_mismatch_rev]).mean()
+        violation_degree_flows = flow_mismatch_fwd.mean()
 
         # loss
         loss_c = (violation_degree_real_mismatch +  violation_degree_imag_mismatch +
@@ -101,6 +109,13 @@ class constraint_violations_loss:
                         violation_degree_pg + violation_degree_qg + violation_degree_flows)
 
         self.constraint_loss = loss_c
+        self.bus_real_mismatch = violation_degree_real_mismatch
+        self.bus_reactive_mismatch = violation_degree_imag_mismatch
+        self.angle_difference_violations = violation_degree_angles
+        self.branch_flow_violations = violation_degree_flows
+        self.voltage_violations = violation_degree_voltages
+        self.generator_pg_violations = violation_degree_pg
+        self.generator_qg_violations = violation_degree_qg
 
         return loss_c
 
