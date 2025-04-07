@@ -9,7 +9,7 @@ class PFDeltaDataset(InMemoryDataset):
     def __init__(self, root_dir='data', case_name='', split='train', transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.force_reload = force_reload
-        root = os.path.join("..", root_dir, case_name)
+        root = os.path.join(root_dir, case_name)
         super().__init__(root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.processed_paths[self._split_to_idx()]) 
 
