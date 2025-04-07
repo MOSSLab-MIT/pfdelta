@@ -40,8 +40,10 @@ class BaseTrainer:
         self.max_train_step = None
         self.epoch = 0
         self.max_epoch = None
+        self.postprocess = None
 
         self.is_debug = self.config["functional"]["is_debug"]
+        self.postprocess = self.config["functional"].get("postprocess", None)
 
         # Add unique identifier to run
         now = datetime.now()
@@ -433,7 +435,16 @@ class BaseTrainer:
         self.calc_val_errors(last_time=True)
         end = time.time()
         print(f"Training finished in {(end-start):.2f} seconds.")
+        if self.postprocess is not None:
+            self.postprocess_method()
         print()
+
+
+    def postprocess_method(self,):
+        """
+        This method is ran after training is done. Useful for quick inferences.
+        """
+        pass
 
 
     def is_val_error_time(self, ):
