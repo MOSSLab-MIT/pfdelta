@@ -102,10 +102,19 @@ class constraint_violations_loss:
         # flow_mismatch_rev = relu(torch.abs(st)**2 - smax**2)
         # violation_degree_flows = torch.cat([flow_mismatch_fwd, flow_mismatch_rev]).mean()
         violation_degree_flows = flow_mismatch_fwd.mean()
-
+        
+        # branch flows: ground truth mismatch
+        p_flows_true = data["bus", "ac_line", "bus"].edge_label[:,-2] # this is from bus flow
+        q_flows_true = data["bus", "ac_line", "bus"].edge_label[:,-1] # this is from bus flow
+        p_flows_mismatch = torch.real(flows_fwd) - p_flows_true
+        q_flows_mismatch = torch.imag(flows_fwd) - q_flows_true
+        violation_degree_real_flow_mismatch = torch.abs(p_flows_mismatch).mean()
+        violation_degree_imag_flow_mismatch = torch.abs(q_flows_mismatch).mean()
+        
         # loss
         loss_c = (violation_degree_real_mismatch +  violation_degree_imag_mismatch +
                       violation_degree_voltages + violation_degree_angles +
+                        violation_degree_real_flow_mismatch + violation_degree_imag_flow_mismatch +
                         violation_degree_pg + violation_degree_qg + violation_degree_flows)
 
         self.constraint_loss = loss_c
@@ -113,6 +122,8 @@ class constraint_violations_loss:
         self.bus_reactive_mismatch = violation_degree_imag_mismatch
         self.angle_difference_violations = violation_degree_angles
         self.branch_flow_violations = violation_degree_flows
+        self.real_flow_mismatch_violation = violation_degree_real_flow_mismatch
+        self.imag_flow_mismatch_violation = violation_degree_imag_flow_mismatch
         self.voltage_violations = violation_degree_voltages
         self.generator_pg_violations = violation_degree_pg
         self.generator_qg_violations = violation_degree_qg
