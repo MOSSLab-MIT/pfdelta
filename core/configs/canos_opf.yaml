@@ -70,14 +70,6 @@ optim:
       keyword: constraint_violation
       loss_name: Reactive Flow Mismatch
     - name: recycle_loss
-      recycled_parameter: real_flow_mismatch_violation
-      keyword: constraint_violation
-      loss_name: Real Flow Mismatch
-    - name: recycle_loss
-      recycled_parameter: imag_flow_mismatch_violation
-      keyword: constraint_violation
-      loss_name: Reactive Flow Mismatch
-    - name: recycle_loss
       recycled_parameter: generator_pg_violations
       keyword: constraint_violation
       loss_name: Pg Violation
@@ -173,6 +165,14 @@ optim:
       recycled_parameter: voltage_violations
       keyword: constraint_violation
       loss_name: Voltage Violation
+    - name: recycle_loss
+      recycled_parameter: real_flow_mismatch_violation
+      keyword: constraint_violation
+      loss_name: Real Flow Mismatch
+    - name: recycle_loss
+      recycled_parameter: imag_flow_mismatch_violation
+      keyword: constraint_violation
+      loss_name: Reactive Flow Mismatch
     - name: recycle_loss
       recycled_parameter: generator_pg_violations
       keyword: constraint_violation
