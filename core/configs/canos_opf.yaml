@@ -58,10 +58,6 @@ optim:
       keyword: constraint_violation
       loss_name: Angle Diff. Violation
     - name: recycle_loss
-      recycled_parameter: branch_flow_violations
-      keyword: constraint_violation
-      loss_name: Branch Flow Violation
-    - name: recycle_loss
       recycled_parameter: voltage_violations
       keyword: constraint_violation
       loss_name: Voltage Violation
@@ -73,6 +69,14 @@ optim:
       recycled_parameter: generator_qg_violations
       keyword: constraint_violation
       loss_name: Qg Violation
+    - name: recycle_loss
+      recycled_parameter: branch_flow_violation_f
+      keyword: constraint_violation
+      loss_name: Branch Flow Fwd Violation
+    - name: recycle_loss
+      recycled_parameter: branch_flow_violation_r
+      keyword: constraint_violation
+      loss_name: Branch Flow Rev Violation
     - name: recycle_loss
       recycled_parameter: total_loss
       keyword: canos_mse
@@ -150,10 +154,6 @@ optim:
       keyword: constraint_violation
       loss_name: Angle Diff. Violation
     - name: recycle_loss
-      recycled_parameter: branch_flow_violations
-      keyword: constraint_violation
-      loss_name: Branch Flow Violation
-    - name: recycle_loss
       recycled_parameter: voltage_violations
       keyword: constraint_violation
       loss_name: Voltage Violation
@@ -165,6 +165,14 @@ optim:
       recycled_parameter: generator_qg_violations
       keyword: constraint_violation
       loss_name: Qg Violation
+    - name: recycle_loss
+      recycled_parameter: branch_flow_violation_f
+      keyword: constraint_violation
+      loss_name: Branch Flow Fwd Violation
+    - name: recycle_loss
+      recycled_parameter: branch_flow_violation_r
+      keyword: constraint_violation
+      loss_name: Branch Flow Rev Violation
     - name: recycle_loss
       recycled_parameter: total_loss
       keyword: canos_mse
