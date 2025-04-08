@@ -104,12 +104,18 @@ class constraint_violations_loss:
         violation_degree_flow_f = flow_mismatch_fwd.mean()
         violation_degree_flow_r = flow_mismatch_rev.mean()
 
-        # branch flows: ground truth mismatch
-        p_flows_true = data["bus", "ac_line", "bus"].edge_label[:,-2] # this is from bus flow
-        q_flows_true = data["bus", "ac_line", "bus"].edge_label[:,-1] # this is from bus flow
+        # branch flows: ground truth mismatch, real
+        p_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[:,-2] # this is from bus flow
+        p_flows_true_tr = data["bus", "transformer", "bus"].edge_label[:,-2] # this is from bus flow
+        p_flows_true = torch.cat([p_flows_true_ac, p_flows_true_tr])
         p_flows_mismatch = torch.real(flows_fwd) - p_flows_true
-        q_flows_mismatch = torch.imag(flows_fwd) - q_flows_true
         violation_degree_real_flow_mismatch = torch.abs(p_flows_mismatch).mean()
+
+        # branch flows: ground truth mismatch, reactive
+        q_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[:,-1] # this is from bus flow
+        q_flows_true_tr = data["bus", "transformer", "bus"].edge_label[:, -1]
+        q_flows_true = torch.cat([q_flows_true_ac, q_flows_true_tr])
+        q_flows_mismatch = torch.imag(flows_fwd) - q_flows_true
         violation_degree_imag_flow_mismatch = torch.abs(q_flows_mismatch).mean()
 
         # loss
