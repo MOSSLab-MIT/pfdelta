@@ -10,11 +10,13 @@ model:
 dataset:
   datasets:
   - name: opfdata
-    num_groups: 20 # SCALE THIS
+    num_groups: 1 # SCALE THIS
   - name: opfdata
     split: val
-    num_groups: 20
+    num_groups: 1
   topological_perturbations: True
+  pre_transform: mean_zero_variance_one
+  force_reload: True
   case_name: pglib_opf_case500_goc
 optim:
   optimizer:

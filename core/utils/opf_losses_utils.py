@@ -41,8 +41,8 @@ class constraint_violations_loss:
         # Power balance mismatch
         edge_indices = torch.cat((data["bus", "ac_line", "bus"].edge_index,
                                   data["bus", "transformer", "bus"].edge_index), dim=-1)
-        edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].edge_attr, 
-                                                     data["bus", "transformer", "bus"].edge_attr)
+        edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].branch_vals,
+                                                     data["bus", "transformer", "bus"].branch_vals)
 
         va, vm = bus_pred.T
         complex_voltage = vm * torch.exp(1j* va)
@@ -58,8 +58,8 @@ class constraint_violations_loss:
         qg = gen_pred[:, 1]
 
         gen_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j*qg)
-        demand_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"].x[:, 0] + 1j*data["load"].x[:, 1])
-        shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"].x[:, 1] + 1j*data["shunt"].x[:, 0]).conj()
+        demand_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"]["unnormalized"][:, 0] + 1j*data["load"]["unnormalized"][:, 1])
+        shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"]["unnormalized"][:, 1] + 1j*data["shunt"]["unnormalized"][:, 0]).conj()
 
         power_balance = gen_flows - demand_flows - shunt_flows - sum_branch_flows
         real_power_mismatch = torch.abs(torch.real(power_balance))
@@ -68,7 +68,8 @@ class constraint_violations_loss:
         violation_degree_imag_mismatch = reactive_power_mismatch.mean()
 
         # Voltage bounds mismatch
-        vmin, vmax = data["bus"].x[:, -2:].T
+        vmin, vmax = data["bus"]["v_lims"].T
+        # vmin, vmax = data["bus"].x[:, -2:].T
 
         voltage_left = relu(vmin - vm)
         voltage_right = relu(vm - vmax)
@@ -83,12 +84,13 @@ class constraint_violations_loss:
         violation_degree_angles = (angle_left + angle_right).mean()
 
         # generation bounds
-        pmin, pmax = data["generator"].x[:, 2:4].T
+        pmin, pmax = data["generator"]["p_lims"].T
+        # pmin, pmax = data["generator"].x[:, 2:4].T
         real_power_right = relu(pmin - pg)
         real_power_left = relu(pg - pmax)
         violation_degree_pg = (real_power_right + real_power_left).mean()
 
-        qmin, qmax = data["generator"].x[:, 5:7].T
+        qmin, qmax = data["generator"]["q_lims"].T
 
         reactive_power_right = relu(qmin - qg)
         reactive_power_left = relu(qg - qmax)

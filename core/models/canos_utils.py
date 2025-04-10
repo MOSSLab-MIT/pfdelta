@@ -201,9 +201,12 @@ class Decoder(nn.Module):
         })
 
     def forward(self, node_dict, data):
-        pmin, pmax = data["generator"].x[:, 2:4].T
-        qmin, qmax = data["generator"].x[:, 5:7].T
-        vmin, vmax = data["bus"].x[:, 2:].T
+        # pmin, pmax = data["generator"].x[:, 2:4].T
+        # qmin, qmax = data["generator"].x[:, 5:7].T
+        # vmin, vmax = data["bus"].x[:, 2:].T
+        pmin, pmax = data["generator"]["p_lims"].T
+        qmin, qmax = data["generator"]["q_lims"].T
+        vmin, vmax = data["bus"]["v_lims"].T
 
         output_nodes = {
             node_type: self.node_decodings[node_type](node_dict[node_type])
