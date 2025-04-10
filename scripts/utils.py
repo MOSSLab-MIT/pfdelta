@@ -68,4 +68,4 @@ def load_trainer(config):
     trainer.model.load_state_dict(model_params)
     trainer.model.eval()
 
-    return trainer, config
+    return trainer
