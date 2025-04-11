@@ -142,7 +142,7 @@ class EdgeUpdate(nn.Module):
         """
         if edge_type == "('bus', 'ac_line', 'bus')" or edge_type == "('bus', 'transformer', 'bus')":
             x = torch.cat([edges, sender_features, receiver_features], dim=-1)
-            return self.mlps[edge_type](x)
+            return edges + self.mlps[edge_type](x)
 
         x = torch.cat([sender_features, receiver_features], dim=-1)
         return self.mlps[edge_type](x)
@@ -180,7 +180,7 @@ class NodeUpdate(nn.Module):
             Tensor: Updated node features of shape [num_nodes, output_dim].
         """
         x = torch.cat([node_features, updated_messages], dim=-1)
-        return self.mlps[node_type](x)
+        return node_features + self.mlps[node_type](x)
 
 #  Decoder
 class Decoder(nn.Module):
