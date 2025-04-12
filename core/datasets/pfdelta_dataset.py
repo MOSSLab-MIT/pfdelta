@@ -96,7 +96,10 @@ class PFDeltaDataset(InMemoryDataset):
         # Edges
         edge_index, edge_attr, edge_label = [], [], []
         for branch_id_str, branch in sorted(network_data['branch'].items(), key=lambda x: int(x[0])):
-            from_bus = int(branch['f_bus']) - 1
+            if branch['br_status'] == 0:
+                continue  # Skip inactive branches
+
+            from_bus = int(branch['f_bus']) - 1 
             to_bus = int(branch['t_bus']) - 1
             edge_index.append(torch.tensor([from_bus, to_bus]))
             edge_attr.append(torch.tensor([
@@ -107,13 +110,13 @@ class PFDeltaDataset(InMemoryDataset):
             ]))
 
             branch_sol = solution_data['branch'].get(branch_id_str)
+            assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
+
             if branch_sol:
                 edge_label.append(torch.tensor([
                     branch_sol['pf'], branch_sol['qf'],
                     branch_sol['pt'], branch_sol['qt']
                 ]))
-            else:
-                assert branch['br_status'] == 0, f"Expected branch {branch_id_str} to be outaged."
 
         # Create graph nodes and edges
         data['PQ'].x = torch.stack(PQ_bus_x) 
