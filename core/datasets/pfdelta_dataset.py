@@ -39,6 +39,8 @@ class PFDeltaDataset(InMemoryDataset):
 
         PV_to_bus, PQ_to_bus, slack_to_bus = [], [], []
         pq_idx, pv_idx, slack_idx = 0, 0, 0
+        gen_limits = []
+        gen_setpoints = []
 
         for bus_id_str, bus in sorted(network_data['bus'].items(), key=lambda x: int(x[0])):
             bus_id = int(bus_id_str)
@@ -62,14 +64,19 @@ class PFDeltaDataset(InMemoryDataset):
 
             # Gen
             pg, qg = 0.0, 0.0
-            for gen_id, gen in network_data['gen'].items():
-                if int(gen['gen_bus']) == bus_id:
-                    gen_sol = solution_data['gen'].get(gen_id)
-                    if gen_sol:
-                        pg += gen_sol['pg']
-                        qg += gen_sol['qg']
-                    else:
-                        assert gen['gen_status'] == 0, f"Expected gen {gen_id} to be off."
+            for gen_id, gen in sorted(network_data['gen'].items(), key=lambda x: int(x[0])):
+                if gen['gen_status'] == 1:
+                    gen_sol = solution_data['gen'][gen_id]
+                    pmin, pmax, qmin, qmax = gen['pmin'], gen['pmax'], gen['qmin'], gen['qmax']
+                    pgen, qgen = gen_sol['pg'], gen_sol['qg']
+                    gen_limits.append(torch.tensor([pmin, pmax, qmin, qmax]))
+                    gen_setpoints.append(torch.tensor([pgen, qgen]))
+
+                    gen_sol = solution_data['gen'][gen_id]
+                    pg += gen_sol['pg']
+                    qg += gen_sol['qg']
+                else:
+                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             # Node features
             va, vm = bus_sol['va'], bus_sol['vm']
@@ -132,7 +139,11 @@ class PFDeltaDataset(InMemoryDataset):
         data['slack'].generation = torch.stack(slack_generation) 
         data['slack'].demand = torch.stack(slack_demand) 
 
-        data['bus'].x = torch.stack(bus_x) 
+        data['bus'].x = torch.stack(bus_x)
+        
+
+        data['gen'].limits = torch.stack(gen_limits)
+        data['gen'].setpoints = torch.stack(gen_setpoints)
 
         data['bus', 'branch', 'bus'].edge_index = torch.stack(edge_index, dim=1) 
         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attr) 
