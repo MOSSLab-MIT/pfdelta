@@ -2,7 +2,7 @@ config_type: experiment
 model:
   name: canos_opf
   dataset: _include_
-  hidden_dim: 128
+  hidden_dim: 256
   include_sent_messages: True
   k_steps: 16
 dataset:
@@ -24,14 +24,14 @@ optim:
   lr_scheduler:
     name: SequentialLR
     milestones:
-    - 250 # SCALE THIS
+    - 5000 # SCALE THIS
     schedulers:
     - name: LinearLR
       start_factor: 0.01
       end_factor: 1
     - name: StepLR
-      gamma: 0.8
-      step_size: 1000 # SCALE THIS
+      gamma: 0.9
+      step_size: 2000 # SCALE THIS
   train_params:
     # epochs: 5
     train_steps: 21100 # SCALE THIS
