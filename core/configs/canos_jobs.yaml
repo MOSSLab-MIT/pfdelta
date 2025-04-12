@@ -1,12 +1,66 @@
 config_type: batch
+batch_name: only_one_group
 job_parameters:
-  time: "1-00:00:00"
-  p: "cpu-gpu-rtx8000"
+  time: "05:00:00"
+  p: "cpu-gpu-v100"
   gpus: 1
   body: "source ~/.bashrc\nconda activate power\n__launch__"
 default_values:
   config: canos_opf
+  functional:
+    run_location: canos_one_group/extension1
+    run_name: hd256_lr%lr
 
 jobs:
-- functional:
-    run_name: canos_opf_depth16
+- optim:
+    optimizer:
+      lr: _manual_list(0.001, 0.0005, 0.0001 | 1e-3, 5e-4, 1e-4)
+
+# jobs:
+# - optim:
+#     lr_scheduler:
+#       schedulers:
+#       - name: LinearLR
+#         start_factor: 0.01
+#         end_factor: 1
+#       - name: StepLR
+#         gamma: 0.7
+#         step_size: 1500
+#   functional:
+#     run_name: lr%lr_schSparse
+# 
+# - optim:
+#     lr_scheduler:
+#       schedulers:
+#       - name: LinearLR
+#         start_factor: 0.01
+#         end_factor: 1
+#       - name: StepLR
+#         gamma: 0.8
+#         step_size: 1000
+#   functional:
+#     run_name: lr%lr_schMid
+# 
+# - optim:
+#     lr_scheduler:
+#       schedulers:
+#       - name: LinearLR
+#         start_factor: 0.01
+#         end_factor: 1
+#       - name: StepLR
+#         gamma: 0.9
+#         step_size: 500
+#   functional:
+#     run_name: lr%lr_schFull
+# 
+# - optim:
+#     lr_scheduler:
+#       schedulers:
+#       - name: LinearLR
+#         start_factor: 0.01
+#         end_factor: 1
+#       - name: StepLR
+#         gamma: 0.95
+#         step_size: 250
+#   functional:
+#     run_name: lr%lr_schVFull
