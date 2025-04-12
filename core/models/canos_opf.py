@@ -9,8 +9,9 @@ from core.utils.registry import registry
 # CANOS Architecture
 @registry.register_model("canos_opf")
 class CANOS_OPF(nn.Module):
-    def __init__(self, dataset, edge_feat_dim, node_feat_dim, hidden_dim, include_sent_messages, k_steps):
+    def __init__(self, dataset, hidden_dim, include_sent_messages, k_steps):
         super().__init__()
+        edge_feat_dim = node_feat_dim = hidden_dim
 
         # Define the encoder to get projected nodes and edges
         self.encoder = Encoder(data=dataset, hidden_size=hidden_dim)
@@ -46,11 +47,7 @@ class CANOS_OPF(nn.Module):
         # Message passing layers with residual connections
         nodes, edges = projected_nodes, projected_edges
         for l in range(self.k_steps):
-            new_nodes, new_edges = self.message_passing_layers[l](nodes, edges, data)
-
-            # Apply map-reduce for residual connection additions
-            nodes = functools.reduce(self.merge_dicts, [nodes, new_nodes])
-            edges = functools.reduce(self.merge_dicts, [edges, new_edges])
+            nodes, edges = self.message_passing_layers[l](nodes, edges, data)
 
         # Decoding
         output_dict = self.decoder(nodes, data)
@@ -60,10 +57,6 @@ class CANOS_OPF(nn.Module):
         output_dict["edge_preds"] = torch.stack([p_to, q_to, p_fr, q_fr], dim=-1) 
 
         return output_dict
-
-    @staticmethod
-    def merge_dicts(d1, d2):
-        return {key: d1[key] + d2[key] for key in d1}
 
     def derive_branch_flows(self, output_dict, data):
         
