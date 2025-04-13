@@ -22,7 +22,7 @@ def find_run_folder(run_name):
     unique."""
     # Assuming the root folder is "runs"
     run_pattern = os.path.join("runs", "**", run_name)
-    matching_folders = glob.glob(run_pattern)
+    matching_folders = glob.glob(run_pattern, recursive=True)
 
     if len(matching_folders) == 0:
         print(f"Error: No folder named '{run_name}' found in 'runs'.")
@@ -38,7 +38,7 @@ def plot_errors(run_folder, error_key):
     """Loads the train.json file and plots the errors for the given run and
     error key."""
     max_ticks = 15
-    
+
     # Build the path to the train.json file
     train_path = os.path.join(run_folder, 'train.json')
     with open(train_path, 'r') as f:
@@ -101,6 +101,7 @@ if __name__ == "__main__":
 
     # Find path to run
     run_path = find_run_folder(run_name)
+    assert run_path is not None, "Run not found!"
     print(f"Run name found in path: {run_path}")
 
     # Plot the errors for the given run and error key
