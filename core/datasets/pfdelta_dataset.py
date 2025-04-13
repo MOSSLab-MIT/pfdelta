@@ -39,8 +39,7 @@ class PFDeltaDataset(InMemoryDataset):
 
         PV_to_bus, PQ_to_bus, slack_to_bus = [], [], []
         pq_idx, pv_idx, slack_idx = 0, 0, 0
-        gen_limits = []
-        gen_setpoints = []
+        gen_limits, gen_setpoints, more_gen_data  = [], [], []
 
         for bus_id_str, bus in sorted(network_data['bus'].items(), key=lambda x: int(x[0])):
             bus_id = int(bus_id_str)
@@ -65,18 +64,13 @@ class PFDeltaDataset(InMemoryDataset):
             # Gen
             pg, qg = 0.0, 0.0
             for gen_id, gen in sorted(network_data['gen'].items(), key=lambda x: int(x[0])):
-                if gen['gen_status'] == 1:
-                    gen_sol = solution_data['gen'][gen_id]
-                    pmin, pmax, qmin, qmax = gen['pmin'], gen['pmax'], gen['qmin'], gen['qmax']
-                    pgen, qgen = gen_sol['pg'], gen_sol['qg']
-                    gen_limits.append(torch.tensor([pmin, pmax, qmin, qmax]))
-                    gen_setpoints.append(torch.tensor([pgen, qgen]))
-
-                    gen_sol = solution_data['gen'][gen_id]
-                    pg += gen_sol['pg']
-                    qg += gen_sol['qg']
-                else:
-                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                if int(gen['gen_bus']) == bus_id: 
+                    if gen['gen_status'] == 1:
+                        gen_sol = solution_data['gen'][gen_id]
+                        pg += gen_sol['pg']
+                        qg += gen_sol['qg']
+                    else:
+                        assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             # Node features
             va, vm = bus_sol['va'], bus_sol['vm']
@@ -99,6 +93,23 @@ class PFDeltaDataset(InMemoryDataset):
                 slack_generation.append(torch.tensor([pg, qg]))
                 slack_to_bus.append(torch.tensor([slack_idx, bus_idx]))
                 slack_idx += 1
+        
+        # Generator
+        for gen_id, gen in sorted(network_data['gen'].items(), key=lambda x: int(x[0])):
+            if gen['gen_status'] == 1:
+                gen_sol = solution_data['gen'][gen_id]
+                pmin, pmax, qmin, qmax = gen['pmin'], gen['pmax'], gen['qmin'], gen['qmax']
+                pgen, qgen = gen_sol['pg'], gen_sol['qg']
+                gen_limits.append(torch.tensor([pmin, pmax, qmin, qmax]))
+                gen_setpoints.append(torch.tensor([pgen, qgen]))
+                is_slack = torch.tensor(
+                        1 if network_data['bus'][str(gen['gen_bus'])]['bus_type'] == 3 else 0,
+                        dtype=torch.bool
+                                )
+                gen_bus = torch.tensor(gen['gen_bus']) - 1  # zero-indexed
+                more_gen_data.append(torch.stack([gen_bus, is_slack]))
+            else:
+                assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
         # Edges
         edge_index, edge_attr, edge_label = [], [], []
@@ -140,10 +151,10 @@ class PFDeltaDataset(InMemoryDataset):
         data['slack'].demand = torch.stack(slack_demand) 
 
         data['bus'].x = torch.stack(bus_x)
-        
 
         data['gen'].limits = torch.stack(gen_limits)
         data['gen'].setpoints = torch.stack(gen_setpoints)
+        data['gen'].more_gen_data = torch.stack(more_gen_data)
 
         data['bus', 'branch', 'bus'].edge_index = torch.stack(edge_index, dim=1) 
         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attr) 
