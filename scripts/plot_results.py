@@ -66,7 +66,11 @@ def plot_errors(run_folder, error_key):
     # Extract errors for each epoch
     epochs = sorted(train_data.keys(), key=int)  # Sort epochs numerically
     highest_epoch = int(epochs[-1]) + 1
-    right_gaps = len(epochs) // max_ticks
+    highest_epoch = int(epochs[-1]) + 1
+    if len(epochs) > max_ticks:
+        right_gaps = len(epochs) // max_ticks
+    else:
+        right_gaps = 1
     epochs = epochs[::right_gaps] + [epochs[-1]]
     # Plot train errors
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
@@ -75,7 +79,11 @@ def plot_errors(run_folder, error_key):
     ## Val values
     epochs = sorted(val_data.keys(), key=int)  # Sort epochs numerically
     highest_epoch = int(epochs[-1]) + 1
-    right_gaps = len(epochs) // max_ticks
+    highest_epoch = int(epochs[-1]) + 1
+    if len(epochs) > max_ticks:
+        right_gaps = len(epochs) // max_ticks
+    else:
+        right_gaps = 1
     epochs = epochs[::right_gaps] + [epochs[-1]]
     # Plot val errors
     num_vals = len(val_data[epochs[0]])
