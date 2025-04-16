@@ -22,7 +22,7 @@ def find_run_folder(run_name):
     unique."""
     # Assuming the root folder is "runs"
     run_pattern = os.path.join("runs", "**", run_name)
-    matching_folders = glob.glob(run_pattern)
+    matching_folders = glob.glob(run_pattern, recursive=True)
 
     if len(matching_folders) == 0:
         print(f"Error: No folder named '{run_name}' found in 'runs'.")
@@ -38,7 +38,7 @@ def plot_errors(run_folder, error_key):
     """Loads the train.json file and plots the errors for the given run and
     error key."""
     max_ticks = 15
-    
+
     # Build the path to the train.json file
     train_path = os.path.join(run_folder, 'train.json')
     with open(train_path, 'r') as f:
@@ -66,22 +66,31 @@ def plot_errors(run_folder, error_key):
     # Extract errors for each epoch
     epochs = sorted(train_data.keys(), key=int)  # Sort epochs numerically
     highest_epoch = int(epochs[-1]) + 1
-    right_gaps = len(epochs) // max_ticks
+    if len(epochs) > max_ticks:
+        right_gaps = len(epochs) // max_ticks
+    else:
+        right_gaps = 1
     epochs = epochs[::right_gaps] + [epochs[-1]]
     # Plot train errors
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
-    plt.plot(epochs, errors, marker='o', linestyle='-', color='b', label="Train")
+    print(epochs)
+    print_epochs = list(map(int, epochs))
+    plt.plot(print_epochs, errors, marker='o', linestyle='-', color='b', label="Train")
 
     ## Val values
     epochs = sorted(val_data.keys(), key=int)  # Sort epochs numerically
     highest_epoch = int(epochs[-1]) + 1
-    right_gaps = len(epochs) // max_ticks
+    if len(epochs) > max_ticks:
+        right_gaps = len(epochs) // max_ticks
+    else:
+        right_gaps = 1
     epochs = epochs[::right_gaps] + [epochs[-1]]
     # Plot val errors
     num_vals = len(val_data[epochs[0]])
     for i in range(num_vals):
         errors = [val_data[epoch][i].get(error_key, None) for epoch in epochs]
-        plt.plot(epochs, errors, marker='o', linestyle='-', label=f"Val {i}")
+        print_epochs = list(map(int, epochs))
+        plt.plot(print_epochs, errors, marker='o', linestyle='-', label=f"Val {i}")
 
     # Change to logscale if needed
     if args.log:
@@ -101,6 +110,7 @@ if __name__ == "__main__":
 
     # Find path to run
     run_path = find_run_folder(run_name)
+    assert run_path is not None, "Run not found!"
     print(f"Run name found in path: {run_path}")
 
     # Plot the errors for the given run and error key
