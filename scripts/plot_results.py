@@ -66,7 +66,6 @@ def plot_errors(run_folder, error_key):
     # Extract errors for each epoch
     epochs = sorted(train_data.keys(), key=int)  # Sort epochs numerically
     highest_epoch = int(epochs[-1]) + 1
-    highest_epoch = int(epochs[-1]) + 1
     if len(epochs) > max_ticks:
         right_gaps = len(epochs) // max_ticks
     else:
@@ -74,11 +73,12 @@ def plot_errors(run_folder, error_key):
     epochs = epochs[::right_gaps] + [epochs[-1]]
     # Plot train errors
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
-    plt.plot(epochs, errors, marker='o', linestyle='-', color='b', label="Train")
+    print(epochs)
+    print_epochs = list(map(int, epochs))
+    plt.plot(print_epochs, errors, marker='o', linestyle='-', color='b', label="Train")
 
     ## Val values
     epochs = sorted(val_data.keys(), key=int)  # Sort epochs numerically
-    highest_epoch = int(epochs[-1]) + 1
     highest_epoch = int(epochs[-1]) + 1
     if len(epochs) > max_ticks:
         right_gaps = len(epochs) // max_ticks
@@ -89,7 +89,8 @@ def plot_errors(run_folder, error_key):
     num_vals = len(val_data[epochs[0]])
     for i in range(num_vals):
         errors = [val_data[epoch][i].get(error_key, None) for epoch in epochs]
-        plt.plot(epochs, errors, marker='o', linestyle='-', label=f"Val {i}")
+        print_epochs = list(map(int, epochs))
+        plt.plot(print_epochs, errors, marker='o', linestyle='-', label=f"Val {i}")
 
     # Change to logscale if needed
     if args.log:
