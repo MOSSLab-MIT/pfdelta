@@ -68,9 +68,9 @@ def merge_dicts(base, overwrite):
         Merged dictionaries.
     """
     if not isinstance(base, dict):
-        raise ValueError(f"Expecting dict1 to be dict, found {type(dict1)} {dict1}.")
+        raise ValueError(f"Expecting dict1 to be dict, found {type(base)} {base}.")
     if not isinstance(overwrite, dict):
-        raise ValueError(f"Expecting dict2 to be dict, found {type(dict2)} {dict2}.")
+        raise ValueError(f"Expecting dict2 to be dict, found {type(overwrite)} {overwrite}.")
 
     return_dict = copy.deepcopy(base)
 
@@ -321,7 +321,6 @@ def batch_config(config, args, override_args):
     sbatch_locations = []
     sbatch_scripts = []
     job_constants = {
-        "default_values": default_values,
         "args": args,
         "override_args": override_args,
         "job_parameters": job_parameters,
@@ -330,9 +329,14 @@ def batch_config(config, args, override_args):
     # Let's process the configs
     i = 0
     for raw_job in jobs:
-        expanded_jobs = expand_raw_job(raw_job) # This returns a list for the cases with grid search
+        # Override with default values here to allow them to expand
+        raw_w_default = merge_dicts(default_values, raw_job)
+        # Expand jobs according to expanding operations
+        expanded_jobs = expand_raw_job(raw_w_default)
         for job in expanded_jobs:
-            process_one_job(i, job, processed_configs, sbatch_locations, sbatch_scripts, job_constants)
+            process_one_job(
+                i, job, processed_configs,sbatch_locations,
+                sbatch_scripts, job_constants)
             i += 1
 
     config["jobs"] = processed_configs
@@ -423,7 +427,6 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
 # This method assumes that all forms of grid search have been used already
 def process_one_job(i, job, processed_configs, sbatch_locations, sbatch_scripts, job_constants):
     # Gather job constants
-    default_values = job_constants["default_values"]
     args = job_constants["args"]
     override_args = job_constants["override_args"]
     job_parameters = job_constants["job_parameters"]
@@ -432,8 +435,6 @@ def process_one_job(i, job, processed_configs, sbatch_locations, sbatch_scripts,
     this_job_other_config = job.get("config", None)
     if this_job_other_config is not None:
         job = load_other_configs(job, this_job_other_config)
-    # Overwrite default values with job values
-    job = merge_dicts(default_values, job)
     # Create config as if it was a single (to verify integrity)
     job = single_config(job, args, override_args, i)
     # Create job parameters
