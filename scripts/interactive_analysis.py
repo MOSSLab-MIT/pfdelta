@@ -2,6 +2,7 @@ import os
 import sys
 import yaml
 import argparse
+import IPython
 
 import torch
 
@@ -27,3 +28,5 @@ if __name__ == "__main__":
 
     # Load trainer
     trainer, config = load_config_and_trainer(run_location)
+
+    IPython.embed()

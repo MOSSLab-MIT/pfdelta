@@ -1,10 +1,12 @@
 import torch
 import torch.nn as nn
 
+
 # Encoder
 class Encoder(nn.Module):
     def __init__(self, data, hidden_size: int):
         super(Encoder, self).__init__()
+        self.hidden_size = hidden_size
         # Linear projection for all node features
         self.node_projections = nn.ModuleDict({
             node_type: nn.Linear(data.num_node_features[node_type], hidden_size)
@@ -16,10 +18,9 @@ class Encoder(nn.Module):
             for edge_type in data.num_edge_features.keys() if data.num_edge_features[edge_type] != 0
                    # so we’re not including subnode links which have no attributes.
         })
-        self.hidden_size = hidden_size
 
     def forward(self, data):
-        device = data['x'].device
+        device = data["x"].device
         projected_nodes = {
             node_type: self.node_projections[node_type](data[node_type].x)
             for node_type in data.num_node_features.keys()
@@ -195,9 +196,12 @@ class Decoder(nn.Module):
         })
 
     def forward(self, node_dict, data):
-        pmin, pmax = data["generator"].x[:, 2:4].T
-        qmin, qmax = data["generator"].x[:, 5:7].T
-        vmin, vmax = data["bus"].x[:, 2:].T
+        # pmin, pmax = data["generator"].x[:, 2:4].T
+        # qmin, qmax = data["generator"].x[:, 5:7].T
+        # vmin, vmax = data["bus"].x[:, 2:].T
+        pmin, pmax = data["generator"]["p_lims"].T
+        qmin, qmax = data["generator"]["q_lims"].T
+        vmin, vmax = data["bus"]["v_lims"].T
 
         output_nodes = {
             node_type: self.node_decodings[node_type](node_dict[node_type])

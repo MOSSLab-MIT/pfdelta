@@ -1,66 +1,57 @@
 config_type: batch
-batch_name: only_one_group
+batch_name: twenty_groups
 job_parameters:
-  time: "05:00:00"
+  time: "2-00:00:00"
   p: "cpu-gpu-v100"
   gpus: 1
   body: "source ~/.bashrc\nconda activate power\n__launch__"
 default_values:
   config: canos_opf
   functional:
-    run_location: canos_one_group/extension1
+    run_location: canos_twenty/uniform_norm
     run_name: hd256_lr%lr
 
 jobs:
-- optim:
+# New learning rate scheduler
+- model:
+    hidden_dim: 256
+    k_steps: 16
+  optim:
     optimizer:
-      lr: _manual_list(0.001, 0.0005, 0.0001 | 1e-3, 5e-4, 1e-4)
+      lr: 0.001
+    train_params:
+      batch_size: 64
+      train_steps: 150000
+    lr_scheduler:
+      schedulers:
+      - name: LinearLR
+        start_factor: 0.01
+        end_factor: 1
+      - name: StepLR
+        gamma: 0.9
+        step_size: _manual_list(2000, 3000, 4000 | 2k, 3k, 4k)
+  functional:
+    run_location: canos_twenty/new_lr_scheduler
+    run_name: 256_d16_stepsize%step_size
 
-# jobs:
-# - optim:
-#     lr_scheduler:
-#       schedulers:
-#       - name: LinearLR
-#         start_factor: 0.01
-#         end_factor: 1
-#       - name: StepLR
-#         gamma: 0.7
-#         step_size: 1500
-#   functional:
-#     run_name: lr%lr_schSparse
-# 
-# - optim:
-#     lr_scheduler:
-#       schedulers:
-#       - name: LinearLR
-#         start_factor: 0.01
-#         end_factor: 1
-#       - name: StepLR
-#         gamma: 0.8
-#         step_size: 1000
-#   functional:
-#     run_name: lr%lr_schMid
-# 
-# - optim:
-#     lr_scheduler:
-#       schedulers:
-#       - name: LinearLR
-#         start_factor: 0.01
-#         end_factor: 1
-#       - name: StepLR
-#         gamma: 0.9
-#         step_size: 500
-#   functional:
-#     run_name: lr%lr_schFull
-# 
-# - optim:
-#     lr_scheduler:
-#       schedulers:
-#       - name: LinearLR
-#         start_factor: 0.01
-#         end_factor: 1
-#       - name: StepLR
-#         gamma: 0.95
-#         step_size: 250
-#   functional:
-#     run_name: lr%lr_schVFull
+# Bigger model
+- model:
+    hidden_dim: 256
+    k_steps: 24
+  optim:
+    optimizer:
+      lr: _manual_list(0.0008, 0.001, 0.003 | 8e-4, 1e-3, 3e-3)
+    train_params:
+      batch_size: 32
+      train_steps: 200000
+    lr_scheduler:
+      schedulers:
+      - name: LinearLR
+        start_factor: 0.01
+        end_factor: 1
+      - name: StepLR
+        gamma: 0.9
+        step_size: 4000
+  functional:
+    run_location: canos_twenty/new_depth
+    run_name: 256_d24_lr%lr

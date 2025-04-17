@@ -9,8 +9,9 @@ from core.utils.registry import registry
 # CANOS Architecture
 @registry.register_model("canos_opf")
 class CANOS_OPF(nn.Module):
-    def __init__(self, dataset, edge_feat_dim, node_feat_dim, hidden_dim, include_sent_messages, k_steps):
+    def __init__(self, dataset, hidden_dim, include_sent_messages, k_steps):
         super().__init__()
+        edge_feat_dim = node_feat_dim = hidden_dim
 
         # Define the encoder to get projected nodes and edges
         self.encoder = Encoder(data=dataset, hidden_size=hidden_dim)
@@ -74,13 +75,16 @@ class CANOS_OPF(nn.Module):
         mask = torch.ones(9, dtype=torch.bool, device=device)
         mask[2] = False
         mask[3] = False
-        ac_line_attr_masked = data["bus", "ac_line", "bus"].edge_attr[:, mask]
+        ac_line_attr_masked = data["bus", "ac_line", "bus"].branch_vals[:, mask]
+        # ac_line_attr_masked = data["bus", "ac_line", "bus"].edge_attr[:, mask]
         tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)), 
                                torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1).to(device)
-        ac_line_susceptances = data["bus", "ac_line", "bus"].edge_attr[:, 2:4]
+        ac_line_susceptances = data["bus", "ac_line", "bus"].branch_vals[:, 2:4]
+        # ac_line_susceptances = data["bus", "ac_line", "bus"].edge_attr[:, 2:4]
         ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
 
-        edge_attr = torch.cat([ac_line_attr, data["bus", "transformer", "bus"].edge_attr], dim=0)
+        edge_attr = torch.cat([ac_line_attr, data["bus", "transformer", "bus"].branch_vals], dim=0)
+        # edge_attr = torch.cat([ac_line_attr, data["bus", "transformer", "bus"].edge_attr], dim=0)
 
         # Extract parameters
         br_r, br_x = edge_attr[:, 2], edge_attr[:, 3]

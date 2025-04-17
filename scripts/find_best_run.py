@@ -6,15 +6,13 @@ import argparse
 # Change working directory to one above
 sys.path.append(os.getcwd())
 
-from scripts.utils import find_best_run
-
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description="Find the run with the lowest average error.")
     parser.add_argument('--root', type=str, default="",
         help="Folder from which the best run is found.")
-    parser.add_argument('--error', type=str, required=True,
+    parser.add_argument('--error', type=str, default="_first_one",
         help="Error to gather from runs.")
     args = parser.parse_args()
 
@@ -32,6 +30,7 @@ def find_best_run(root_folder, error_key):
     run with the lowest average error."""
     lowest_avg = float('inf')
     best_run_path = None
+    best_summary = None
 
     # Traverse the root directory
     for root, dirs, files in os.walk(root_folder):
@@ -42,6 +41,11 @@ def find_best_run(root_folder, error_key):
                 with open(summary_path, 'r') as f:
                     summary_data = json.load(f)
 
+                if error_key == "_first_one":
+                    sample_val = summary_data["val"][0]
+                    val_errors = list(sample_val.keys())
+                    error_key = val_errors[0]
+
                 val_list = summary_data['val']
                 avg_error = calculate_average(error_key, val_list)
 
@@ -49,10 +53,11 @@ def find_best_run(root_folder, error_key):
                 if avg_error < lowest_avg:
                     lowest_avg = avg_error
                     best_run_path = root
+                    best_summary = summary_data
             except (json.JSONDecodeError, KeyError) as e:
                 print(f"Error reading {summary_path}: {e}")
     
-    return best_run_path, lowest_avg
+    return best_run_path, lowest_avg, error_key, best_summary
 
 
 if __name__ == "__main__":
@@ -64,11 +69,15 @@ if __name__ == "__main__":
     error_name = args.error
 
     # Find the run with the lowest average error
-    best_run, lowest_avg = find_best_run(root, error_name)
+    best_run, lowest_avg, error_name, best_summary = find_best_run(root, error_name)
     
     if best_run:
-        print(f"The run with the lowest average error is: {best_run}")
-        print(f"Lowest average error: {lowest_avg}")
+        print("BEST RUN FOUND\n" + "*"*15 + "\n")
+        print(f"Run path: {best_run}")
+        print(f"Run error: {error_name}")
+        print(f"Lowest average error: {lowest_avg}\n")
+        print("All results\n" + "*"*13 + "\n")
+        print(json.dumps(best_summary, indent=3))
     else:
         print("No valid runs found.")
 
