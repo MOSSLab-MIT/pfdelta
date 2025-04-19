@@ -1,5 +1,6 @@
 using Pkg
 Pkg.activate(".")
+Pkg.instantiate()
 
 using PowerModels
 using Statistics
@@ -41,7 +42,9 @@ case30 = loadcase("case30")
 case57 = loadcase("case57")
 case118 = loadcase("case118")
 
-if ARGS[1] == "case14"
+if length(ARGS) == 0
+	println("No argument!")
+elseif ARGS[1] == "case14"
 	results, time = OPFLearn.create_samples(case14, 10000)
 	open("time14.json", "w") do io
 	    JSON.print(io, time)
