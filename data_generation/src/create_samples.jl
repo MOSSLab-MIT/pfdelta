@@ -8,7 +8,8 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 						pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, save_certs=false, save_max_load=false,
 						print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 						model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
+						perturb_topology_opts=Dict{Symbol,Any}()::Dict{Symbol}, perturb_costs_opts=Dict{Symbol,Any}()::Dict{Symbol})
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return create_samples(net, K; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -17,7 +18,8 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 							  pd_max=pd_max, pd_min=pd_min, pf_min=pf_min, pf_lagging=pf_lagging, save_certs=save_certs,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while, 
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver,
+							  perturb_topology_opts=perturb_topology_opts, perturb_costs_opts=perturb_costs_opts)
 end
 
 
@@ -74,7 +76,8 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 							pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, reset_level=0, save_certs=false, save_max_load=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
+							perturb_topology_opts=Dict{Symbol,Any}()::Dict{Symbol}, perturb_costs_opts=Dict{Symbol,Any}()::Dict{Symbol}) # arguments for additional perturbations from PFDelta
 	now_str = Dates.format(Dates.now(), "dd-mm-yyy_HH.MM.SS")  # Get date & time for result file names
 	net_name = net["name"]
 	save_order = vcat(input_vars, output_vars, dual_vars)
@@ -105,6 +108,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	s = 0  # Count of samples since last saved (not discarded) sample
 	u = 0  # Count of samples since last unique active set found
 	v = 0  # Count of samples since last increase in variance seen
+	w = 0 # Count of infeasible samples collected
 	start_time = time()  # Start time in seconds
 	m = size(A, 1)  # Number of polytope planes
     while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
@@ -144,12 +148,25 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		
         # Sample uniformly from the interior of the convex polytope space
 		x = sampler(A, b, x, 1; sampler_opts...)
-		
-        # Set network loads to sampled values
-        set_network_load(net, x, scale_load=false)
+
+		# Set network loads to sampled values
+		set_network_load(net, x, scale_load=false)
+
+		######## ADDED FOR PFDELTA #############
+
+		# Create deepcopy the following perturbations are not carried over for the next samples
+		net_perturbed = deepcopy(net)
+
+		# Perturb topology
+		perturb_topology!(net_perturbed; perturb_topology_opts)
+
+		# Perturb generator costs
+		perturb_costs!(net_perturbedt; perturb_costs_opts)
+	
+		#######################################
 
         # Solve OPF for the load sample
-		result, feasible = run_ac_opf(net, print_level=print_level, solver=opf_solver)
+		result, feasible = run_ac_opf(net_perturbed, print_level=print_level, solver=opf_solver)
 		print_level > 0 && println("OPF SUCCESS: " * string(feasible))
 		
         if feasible
@@ -158,10 +175,15 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 													   x, result, discard, variance, net_name, 
 													   now_str, save_path, save_while, save_order,
 													   print_level)
+			
+			store_feasible_sample_json(k, net_perturbed, result, save_path)
 			print_level > 0 && println("Samples: $(k) / $(K),\t Iter: $(i)")
         else
 			save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 							save_while, net_name, now_str, save_order, dual_vars, save_path)
+
+			w = store_infeasible_sample_json(w, net_perturbed, result, save_path)
+
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
 			
@@ -201,10 +223,12 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 				
 				x_star = vcat(xp_, xq_)
                 x = x_star
-                set_network_load(net, x, scale_load=false)
+
+				############# MODIFIED FOR PFDELTA #############
+                set_network_load(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
-				result, feasible = run_ac_opf(net, print_level=print_level, solver=opf_solver)
+				result, feasible = run_ac_opf(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
 				print_level > 0 && println("FNFP OPF SUCCESS: " * string(feasible))
 				
                 if feasible
@@ -213,11 +237,16 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 												  x, result, discard, variance, net_name, 
 												  now_str, save_path, save_while, save_order,
 												  print_level)
+
+					store_feasible_sample_json(k, net_perturbed, result, save_path)
 					println("Samples: $(k) / $(K),\t Iter: $(i)")
                 else
 					save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								    save_while, net_name, now_str, save_order, dual_vars, save_path)
+					w = store_infeasible_sample_json(w, net_perturbed, result, save_path)
 				end
+
+				###############################################
 			end
 		end
 		iter_elapsed_time = time() - iter_start_time

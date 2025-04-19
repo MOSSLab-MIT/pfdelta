@@ -103,6 +103,40 @@ function gt_eps(l, eps_val=EPS)  # Determine what value to use for eps?
     return [x > eps_val for x in l]
 end
 
+function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String)
+	sample = Dict(
+		"network" => net, 
+		"solution" => solution
+	)
+
+	# Ensure the raw folder exists
+	raw_path = joinpath(save_path, "raw")
+	mkpath(raw_path)
+
+	filepath = joinpath(raw_path, "sample_$(k).json")
+	open(filepath, "w") do io
+		write(io, JSON.json(sample))
+	end
+end
+
+function store_infeasible_sample_json(w, net::Dict, result::Dict, save_path::String)
+	sample = Dict(
+		"network" => net, 
+		"solution" => solution
+	)
+
+    # Ensure the raw folder exists
+    raw_path = joinpath(save_path, "infeasible")
+    mkpath(raw_path)
+
+    filepath = joinpath(raw_path, "infeasible_sample_$(w).json")
+
+	open(filepath, "w") do io
+		write(io, JSON.json(sample))
+	end
+	w = w + 1
+	return w
+end
 
 """ 
 Checks if the given sample should be stored and gathers stat tracking info
