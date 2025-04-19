@@ -1,10 +1,15 @@
+using Pkg
+Pkg.activate(".")
+
 using PowerModels
 using Statistics
 using Plots
 using Debugger
+using JSON
 
 
 include("src/OPFLearn.jl")
+include("create_dataset.jl")
 
 
 function loadcase(casenum::String)
@@ -31,12 +36,45 @@ function benchmark_print(benchmark::Dict)
 end
 
 
-N = 1000
 case14 = loadcase("case14")
-# case30 = loadcase("case30")
-# case57 = loadcase("case57")
+case30 = loadcase("case30")
+case57 = loadcase("case57")
+case118 = loadcase("case118")
 
-_, time14 = OPFLearn.create_samples(case14, N)
-# _, time30 = OPFLearn.create_samples(case30, N)
-# _, time57 = OPFLearn.create_samples(case57, N)
-
+if ARGS[1] == "case14"
+	results, time = OPFLearn.create_samples(case14, 10000)
+	open("time14.json", "w") do io
+	    JSON.print(io, time)
+	end
+	open("case14.json", "w") do io
+	    JSON.print(io, results)
+	end
+elseif ARGS[1] == "case30"
+	results, time = OPFLearn.create_samples(case30, 5000)
+	open("time30.json", "w") do io
+	    JSON.print(io, time)
+	end
+	open("results30.json", "w") do io
+	    JSON.print(io, results)
+	end
+elseif ARGS[1] == "case57"
+	results, time = OPFLearn.create_samples(case57, 250)
+	open("time57.json", "w") do io
+	    JSON.print(io, time)
+	end
+	open("results57.json", "w") do io
+	    JSON.print(io, results)
+	end
+elseif ARGS[1] == "case118"
+	results, time = OPFLearn.create_samples(case118, 50)
+	open("time118.json", "w") do io
+	    JSON.print(io, time)
+	end
+	open("results118.json", "w") do io
+	    JSON.print(io, results)
+	end
+elseif ARGS[1] == "algorithm14"
+	all_results = create_dataset_seeds(case14, 1000, min_distance=0.3)
+	json_str = JSON.json(dict; indent=3)
+	print(json_str)
+end
