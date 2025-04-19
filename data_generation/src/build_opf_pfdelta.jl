@@ -108,8 +108,7 @@ function variable_branch_power_pfdelta(pm; nw::Int=PM.nw_id_default)
             JuMP.set_start_value(q[t_idx], branch["qt_start"])
         end
     end
-
-    # sol_component_value_edge(pm, nw, :branch, :pf, :pt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), p)
-    # PM.sol_component_value_edge(pm, nw, :branch, :qf, :qt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), q)
     
+    PM._IM.sol_component_value_edge(pm, PM.pm_it_sym, nw, :branch, :pf, :pt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), p)    # PM.sol_component_value_edge(pm, nw, :branch, :qf, :qt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), q)
+    PM._IM.sol_component_value_edge(pm, PM.pm_it_sym, nw, :branch, :qf, :qt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), q)
 end
