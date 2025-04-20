@@ -28,14 +28,6 @@ function loadcase(casenum::String)
 	return network
 end
 
-function benchmark_print(benchmark::Dict)
-	keys = ["chebyshev", "sample", "acopf", "find_nearest_point", "infeas_cert_and_retry"]
-	for key in keys
-		avg_time = mean(benchmark[key][2:end])
-		println(key, ": ", avg_time)
-	end
-end
-
 
 case14 = loadcase("case14")
 case30 = loadcase("case30")
