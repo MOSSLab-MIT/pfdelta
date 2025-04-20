@@ -61,7 +61,7 @@ elseif ARGS[1] == "case30"
 	    JSON.print(io, results)
 	end
 elseif ARGS[1] == "case57"
-	results, time = OPFLearn.create_samples(case57, 250)
+	results, time = OPFLearn.create_samples(case57, 750)
 	open("time57.json", "w") do io
 	    JSON.print(io, time)
 	end
@@ -77,7 +77,19 @@ elseif ARGS[1] == "case118"
 	    JSON.print(io, results)
 	end
 elseif ARGS[1] == "algorithm14"
-	all_results = create_dataset_seeds(case14, 1000, min_distance=0.3)
+	all_results = create_dataset_seeds(case14, 10000, min_distance=0.3)
+	json_str = JSON.json(dict; indent=3)
+	print(json_str)
+elseif ARGS[1] == "algorithm30"
+	all_results = create_dataset_seeds(case14, 5000, min_distance=0.3)
+	json_str = JSON.json(dict; indent=3)
+	print(json_str)
+elseif ARGS[1] == "algorithm57"
+	all_results = create_dataset_seeds(case14, 500, min_distance=0.3)
+	json_str = JSON.json(dict; indent=3)
+	print(json_str)
+elseif ARGS[1] == "algorithm118"
+	all_results = create_dataset_seeds(case14, 50, min_distance=0.3)
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 end
