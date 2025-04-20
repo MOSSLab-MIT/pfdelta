@@ -7,12 +7,12 @@ include("src/OPFLearn.jl")
 
 function create_dataset_seeds(
 	network::Dict,
-    num_seeds::Integer,
+    num_seeds::Integer;
     starting_distance::Float64=-1.0,
     min_distance::Float64=-1.0,
     exp_reduction::Float64=0.9,
     portion_of_new_seeds::Float64=0.1,
-	file_name::String="experiment.json";
+	file_name::String="experiment.json",
     point_generator=OPFLearn.create_samples
 )
 	# Gather initial set
@@ -65,6 +65,10 @@ function create_dataset_seeds(
 			# Calculate if max_radius is good
 			candidate_seeds = find_maximum_independent_set(g)
 			if length(candidate_seeds) > num_seeds
+				println(
+					"Success! $num_seeds seeds produced!"
+				)
+				println("Saving them...")
 				ds_results = Dict(
 					"good_seeds" => candidate_seeds,
 					"all_seeds" => seeds,
@@ -86,15 +90,18 @@ function create_dataset_seeds(
 				add_vertices!(g, size(seeds, 1) - nv(g))
 			end
 		end
+		num_seeds = size(seeds, 1)
+		println("Current $num_seeds not enough! Producing more seeds")
 		# If it is not enough, create more seeds
 		num_new_seeds = floor(Int, num_seeds * portion_of_new_seeds)
 		new_results, _ = point_generator(network, num_new_seeds)
 		P = new_results["inputs"]["pd"]
 		Q = new_results["inputs"]["qd"]
 		new_seeds = P .+ Q .* im
+		println("Produced $num_new_seeds new seeds! Checking if enough...")
 		# Add them to the set of points
 		seeds = vcat(seeds, new_seeds)
-		g, g_weights = create_graphs(seeds, starting_distance)
+		g, g_weights = create_graph(seeds, starting_distance)
 		if starting_distance != Inf
 			max_radius = starting_distance
 		else
