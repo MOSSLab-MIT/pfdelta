@@ -9,7 +9,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 						print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 						model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
 						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
-						perturb_topology_opts=Dict{Symbol,Any}()::Dict{Symbol}, perturb_costs_opts=Dict{Symbol,Any}()::Dict{Symbol})
+						perturb_topology_method="none", perturb_costs_method="none")
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return create_samples(net, K; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -19,7 +19,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 							  print_level=print_level, stat_track=stat_track, save_while=save_while, 
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
 							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver,
-							  perturb_topology_opts=perturb_topology_opts, perturb_costs_opts=perturb_costs_opts)
+							  perturb_topology_method=perturb_topology_method, perturb_costs_method=perturb_costs_method)
 end
 
 
@@ -77,7 +77,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
 							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							perturb_topology_opts=Dict{Symbol,Any}()::Dict{Symbol}, perturb_costs_opts=Dict{Symbol,Any}()::Dict{Symbol}) # arguments for additional perturbations from PFDelta
+							perturb_topology_method="none", perturb_costs_method="none") # arguments for additional perturbations from PFDelta
 	now_str = Dates.format(Dates.now(), "dd-mm-yyy_HH.MM.SS")  # Get date & time for result file names
 	net_name = net["name"]
 	save_order = vcat(input_vars, output_vars, dual_vars)
@@ -109,6 +109,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	u = 0  # Count of samples since last unique active set found
 	v = 0  # Count of samples since last increase in variance seen
 	w = 0 # Count of infeasible samples collected
+	projection_feasible_counter = 0
 	start_time = time()  # Start time in seconds
 	m = size(A, 1)  # Number of polytope planes
     while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
@@ -158,15 +159,15 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		net_perturbed = deepcopy(net)
 
 		# Perturb topology
-		perturb_topology!(net_perturbed; perturb_topology_opts)
+		perturb_topology!(net_perturbed; method=perturb_topology_method)
 
 		# Perturb generator costs
-		perturb_costs!(net_perturbedt; perturb_costs_opts)
+		perturb_costs!(net_perturbed; method=perturb_costs_method)
 	
 		#######################################
 
         # Solve OPF for the load sample
-		result, feasible = run_ac_opf(net_perturbed, print_level=print_level, solver=opf_solver)
+		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
 		print_level > 0 && println("OPF SUCCESS: " * string(feasible))
 		
         if feasible
@@ -176,13 +177,13 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 													   now_str, save_path, save_while, save_order,
 													   print_level)
 			
-			store_feasible_sample_json(k, net_perturbed, result, save_path)
+			store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path)
 			print_level > 0 && println("Samples: $(k) / $(K),\t Iter: $(i)")
         else
 			save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 							save_while, net_name, now_str, save_order, dual_vars, save_path)
 
-			w = store_infeasible_sample_json(w, net_perturbed, result, save_path)
+			w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
 
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
@@ -228,7 +229,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
                 set_network_load(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
-				result, feasible = run_ac_opf(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
+				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
 				print_level > 0 && println("FNFP OPF SUCCESS: " * string(feasible))
 				
                 if feasible
@@ -238,12 +239,13 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 												  now_str, save_path, save_while, save_order,
 												  print_level)
 
-					store_feasible_sample_json(k, net_perturbed, result, save_path)
+					store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path)
 					println("Samples: $(k) / $(K),\t Iter: $(i)")
+					projection_feasible_counter = projection_feasible_counter + 1
                 else
 					save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								    save_while, net_name, now_str, save_order, dual_vars, save_path)
-					w = store_infeasible_sample_json(w, net_perturbed, result, save_path)
+					w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
 				end
 
 				###############################################
@@ -262,7 +264,8 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
-    return results
+	print("Number of samples resulting from projection: $(projection_feasible_counter)")
+    return results, projection_feasible_counter
 end
 
 

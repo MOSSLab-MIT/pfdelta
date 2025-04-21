@@ -1,4 +1,4 @@
-function perturb_topology!(net;method="none") 
+function perturb_topology!(net; method="none") 
     branch_keys = collect(keys(net["branch"]))
     gen_keys = collect(keys(net["gen"]))
 

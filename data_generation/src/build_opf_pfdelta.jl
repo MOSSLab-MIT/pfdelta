@@ -109,6 +109,6 @@ function variable_branch_power_pfdelta(pm; nw::Int=PM.nw_id_default)
         end
     end
     
-    PM._IM.sol_component_value_edge(pm, PM.pm_it_sym, nw, :branch, :pf, :pt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), p)    # PM.sol_component_value_edge(pm, nw, :branch, :qf, :qt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), q)
+    PM._IM.sol_component_value_edge(pm, PM.pm_it_sym, nw, :branch, :pf, :pt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), p)   
     PM._IM.sol_component_value_edge(pm, PM.pm_it_sym, nw, :branch, :qf, :qt, ref(pm, nw, :arcs_from), ref(pm, nw, :arcs_to), q)
 end
