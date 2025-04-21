@@ -7,16 +7,18 @@ include("src/OPFLearn.jl")
 
 function create_dataset_seeds(
 	network::Dict,
-    num_seeds::Integer;
-    starting_distance::Float64=-1.0,
-    min_distance::Float64=-1.0,
-    exp_reduction::Float64=0.9,
-    portion_of_new_seeds::Float64=0.1,
+	num_seeds::Integer;
+	starting_distance::Float64=-1.0,
+	min_distance::Float64=-1.0,
+	exp_reduction::Float64=0.9,
+	portion_of_new_seeds::Float64=0.1,
 	file_name::String="experiment.json",
-    point_generator=OPFLearn.create_samples
+	point_generator=OPFLearn.create_samples
 )
+	println("Producing $num_seeds good seeds!")
 	# Gather initial set
 	results, _ = point_generator(network, num_seeds)
+	println("Initial seeds produced.")
 	P = results["inputs"]["pd"]
 	Q = results["inputs"]["qd"]
 	seeds = P .+ Q .* im
@@ -36,7 +38,7 @@ function create_dataset_seeds(
 
 	# Set up more default values
 	max_distance = maximum(distances)
-	min_distance < 0 && (min_distance = minimum(distances))
+	min_distance < 0 && (min_distance = minimum(distances) - 0.0001)
 
 	println("$num_seeds samples generated! Will see if they are enough")
 	# Start iterating
@@ -45,29 +47,39 @@ function create_dataset_seeds(
 	else
 		max_radius = max_distance
 	end
+	println("Currently trying radius: $max_radius")
 	counter = 0
 	while true
+		flush(stdout)
 		# First, prune the graph slowly to make it tractable for MIS
+		# Also, it is unlikely that this many edges is conducive to 
+		# a small MIS
 		if ne(g) > nv(g) * 10
-			while length(distances) > nv(g) * 10
+			println("Manually prunning graph to make MIS tractable " *
+				"and to make chances of a big MIS more likely!")
+			while length(g_edges) > nv(g) * 10
+				println("Now trying radius: $max_radius")
 				max_radius *= 0.9
 				mask = distances .< max_radius
 				distances = distances[mask]
 				g_edges = g_edges[mask]
 			end
-			g = Graphs.SimpleGraphs._SimpleGraphFromIterator(g_edges)
-			if nv(g) < size(seeds, 1)
-				add_vertices!(g, size(seeds, 1) - nv(g))
+			# Recreate graph with subset of edges
+			g = SimpleGraph(nv(g))
+			for (u, v) in Tuple.(g_edges)
+				add_edge!(g, u, v)
 			end
 		end
 		# We reduce the max_radius slowly until it hits the right number
+		println("Prunning graph by using MIS now...")
 		while max_radius > min_distance
 			# Calculate if max_radius is good
 			candidate_seeds = find_maximum_independent_set(g)
 			if length(candidate_seeds) > num_seeds
 				println(
-					"Success! $num_seeds seeds produced!"
+					"Success! $num_seeds good seeds produced!"
 				)
+				println("Successful radius: $max_radius")
 				println("Saving them...")
 				ds_results = Dict(
 					"good_seeds" => candidate_seeds,
@@ -78,21 +90,23 @@ function create_dataset_seeds(
 				open(file_name, "w") do io
 					JSON.print(io, all_results)
 				end
-				return ds_results
+				return all_results
 			end
 			# Otherwise, reduce radius
+			println("Current radius gives too small MIS. " *
+				"Now trying radius: $max_radius")
 			max_radius *= 0.9
-			mask = distances .< max_radius
-			distances = distances[mask]
-			g_edges = g_edges[mask]
-			g = Graphs.SimpleGraphs._SimpleGraphFromIterator(g_edges)
-			if nv(g) < size(seeds, 1)
-				add_vertices!(g, size(seeds, 1) - nv(g))
+			mask = distances .> max_radius # True => remove edge
+			distances = distances[.!mask] # keep these
+			bad_edges = g_edges[mask] # remove these
+			g_edges = g_edges[.!mask] # keep these
+			for (u, v) in Tuple.(bad_edges)
+				rem_edge!(g, u, v)
 			end
 		end
 		num_seeds = size(seeds, 1)
 		println("Current $num_seeds not enough! Producing more seeds")
-		# If it is not enough, create more seeds
+		# If it is not enough, create more seeds, reset max_radius
 		num_new_seeds = floor(Int, num_seeds * portion_of_new_seeds)
 		new_results, _ = point_generator(network, num_new_seeds)
 		P = new_results["inputs"]["pd"]
@@ -102,11 +116,15 @@ function create_dataset_seeds(
 		# Add them to the set of points
 		seeds = vcat(seeds, new_seeds)
 		g, g_weights = create_graph(seeds, starting_distance)
+		g_edges = collect(keys(g_weights))
+		distances = collect(values(g_weights))
+		# Reset radius to try
 		if starting_distance != Inf
 			max_radius = starting_distance
 		else
 			max_radius = max_distance
 		end
+		println("Max radius reset to $max_radius")
 		# Save progress
 		all_results[string(counter)] = new_results
 		open(file_name, "w") do io
