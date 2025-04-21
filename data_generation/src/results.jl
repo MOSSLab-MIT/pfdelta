@@ -106,7 +106,7 @@ end
 function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String)
 	sample = Dict(
 		"network" => net, 
-		"solution" => result["solution"]
+		"solution" => result
 	)
 
 	# Ensure the raw folder exists
@@ -123,7 +123,7 @@ function store_infeasible_sample_json(w, net, result, save_path)
 
 	sample = Dict(
 		"network" => net, 
-		"solution" => result["solution"]
+		"solution" => result
 	)
 
     # Ensure the raw folder exists

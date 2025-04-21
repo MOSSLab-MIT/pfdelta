@@ -1,6 +1,6 @@
 using Pkg
 Pkg.activate(@__DIR__)
-Pkg.instantiate()
+# Pkg.instantiate()
 
 using OPFLearn
 using Dates
@@ -8,35 +8,40 @@ using Printf
 using JSON
 
 # Define the cases
+K = 10
+timestamp = Dates.format(Dates.now(), "yyyy-mm-dd_HH-MM-SS")
+base_save_path = joinpath("my_results", timestamp)
+mkpath(base_save_path)
+
 cases = [
     (
         name = "case14",
         file = "pglib_opf_case14_ieee.m",
-        K = 10_000,
-        net_path = "data_generation/pglib",
-        save_path = "my_results/case14"
+        K = K,
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case14")
     ),
     (
         name = "case57",
         file = "pglib_opf_case57_ieee.m",
-        K = 10_000,
-        net_path = "data_generation/pglib",
-        save_path = "my_results/case57"
-    ),
-    (
-        name = "case118",
-        file = "pglib_opf_case118_ieee.m",
-        K = 10_000,
-        net_path = "data_generation/pglib",
-        save_path = "my_results/case118"
-    ), 
-    (
-        name = "case2000",
-        file = "pglib_opf_case2000_goc.m",
-        K = 10_000,
-        net_path = "data_generation/pglib",
-        save_path = "my_results/case2000"
+        K = K,
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case57")
     )
+    # (
+    #     name = "case118",
+    #     file = "pglib_opf_case118_ieee.m",
+    #     K = K,
+    #     net_path = "pglib",
+# save_path = joinpath(base_save_path, name)
+    # ), 
+    # (
+    #     name = "case2000",
+    #     file = "pglib_opf_case2000_goc.m",
+    #     K = K,
+    #     net_path = "pglib",
+    # save_path = joinpath(base_save_path, name)
+    # )
 ]
 
 # Storage for results
@@ -50,7 +55,7 @@ for case in cases
     success = true
 
     # try
-        _, projection_feasible_counter = create_samples(case.file, case.K;
+        results_opflearn , projection_feasible_counter = create_samples(case.file, case.K;
             net_path    = case.net_path,
             save_path   = case.save_path,
             save_while  = true,

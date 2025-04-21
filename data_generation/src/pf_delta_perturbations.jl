@@ -82,6 +82,7 @@ function perturb_topology!(net; method="none")
     end
 end
 
+# benchmark this (could be taking longer than solving the opf)
 function is_connected_adj_matrix(net)
     branches = net["branch"]
     buses = collect(keys(net["bus"]))
