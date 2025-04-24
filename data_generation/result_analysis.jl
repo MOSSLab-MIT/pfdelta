@@ -16,7 +16,8 @@ function benchmark_plot(
 	key::String="chebyshev";
 	xlabel="iteration",
 	ylabel="seconds",
-	yscale=:identity
+	yscale=:identity,
+	skip_first=false
 )
 	results = [time14, time30, time57, time118]
 	cases = ["case14", "case30", "case57", "case118"]
@@ -24,6 +25,9 @@ function benchmark_plot(
 	plt = plot()
 	for (result, case) in zip(results, cases)
 		times = result[key]
+		if skip_first
+			times = times[2:end]
+		end
 		plot!(times, xlabel=xlabel, ylabel=ylabel,
 			plot_title=title, yscale=yscale, label=case)
 	end
