@@ -9,7 +9,7 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							save_max_load=false, save_certs=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return dist_create_samples(net, K::Integer; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -19,7 +19,7 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							  save_certs=save_certs, save_max_load=save_max_load,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while,
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,)
 end
 
 
@@ -72,7 +72,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 								save_max_load=false, save_certs=false, 
 								print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 								model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
-								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
 	# Create channels for transfering data between processes
 	isnothing(nproc) && (nproc = Distributed.nprocs())
 	@assert nproc > 3 "Not enough processors available, nprocs:$(nproc). Need 4+ CPUs for improved runtimes."
@@ -120,7 +120,8 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	results = Distributed.fetch(producer)
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
-	return results
+	Anb = (A, b)
+	return results, Anb
 end
 
 

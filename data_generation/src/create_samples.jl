@@ -10,7 +10,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 						pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, save_certs=false, save_max_load=false,
 						print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 						model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return create_samples(net, K; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -19,7 +19,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 							  pd_max=pd_max, pd_min=pd_min, pf_min=pf_min, pf_lagging=pf_lagging, save_certs=save_certs,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while, 
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,)
 end
 
 
@@ -76,7 +76,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 							pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, reset_level=0, save_certs=false, save_max_load=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
 	keys = ["initialize", "chebyshev", "sample", "acopf", "find_nearest_point", "infeas_cert_and_retry", "samples_to_success"]
 	benchmark = Dict(key => Float64[] for key in keys)
 
@@ -260,7 +260,12 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
-    return results, benchmark
+	if returnAnb
+		Anb = (A, b)
+	    return results, Anb
+	else
+		return results
+	end
 end
 
 
