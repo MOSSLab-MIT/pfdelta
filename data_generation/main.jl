@@ -2,16 +2,15 @@ using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
 
+using Distributed
 using PowerModels
 using Statistics
 using Plots
 using Debugger
 using JSON
 
-
 include("src/OPFLearn.jl")
 include("create_dataset.jl")
-
 
 function loadcase(casenum::String)
 	case_to_path = Dict(
@@ -69,19 +68,32 @@ elseif ARGS[1] == "case118"
 	    JSON.print(io, results)
 	end
 elseif ARGS[1] == "algorithm14"
-	all_results = create_dataset_seeds(case14, 10000, min_distance=0.3)
+	all_results = create_dataset_seeds(
+		case14, 7500; min_distance=0.3, file_name="alg14.json")
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 elseif ARGS[1] == "algorithm30"
-	all_results = create_dataset_seeds(case14, 5000, min_distance=0.3)
+	all_results = create_dataset_seeds(
+		case30, 5000; min_distance=0.3, file_name="alg30.json")
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 elseif ARGS[1] == "algorithm57"
-	all_results = create_dataset_seeds(case14, 500, min_distance=0.3)
+	all_results = create_dataset_seeds(
+		case57, 500; min_distance=0.3, file_name="alg57.json")
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 elseif ARGS[1] == "algorithm118"
-	all_results = create_dataset_seeds(case14, 50, min_distance=0.3)
+	all_results = create_dataset_seeds(
+		case118, 50; min_distance=0.3, file_name="alg118.json")
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
+elseif ARGS[1] == "parallel14"
+	@everywhere begin
+		using Pkg
+		Pkg.activate(".")
+		include("src/OPFLearn.jl")
+		include("create_dataset.jl")
+	end
+	results = OPFLearn.dist_create_samples(case14, 1000)
+	return results
 end

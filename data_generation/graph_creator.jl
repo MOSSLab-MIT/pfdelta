@@ -43,6 +43,7 @@ function find_maximum_independent_set(
 )
 	# Initialize model
 	model = JuMP.Model(optimizer)
+	set_optimizer_attribute(model, "output_flag", false)
 
 	# Create binary variables for vertices
 	@variable(model, vertices[1:nv(g)], Bin)

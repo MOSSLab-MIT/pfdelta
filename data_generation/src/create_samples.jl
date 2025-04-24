@@ -125,6 +125,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		elseif i % (max_iter / 10) == 0
 			println("Iter: $(i)")
 		end
+		flush(stdout)
 		
 		# Set stats to defaults
 		iter_stats = Dict(
