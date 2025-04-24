@@ -1,16 +1,22 @@
+using Distributed
+
+# Activate project on all separately, step by step
+@everywhere begin
 using Pkg
 Pkg.activate(".")
-Pkg.instantiate()
+end
 
-using Distributed
-using PowerModels
-using Statistics
-using Plots
-using Debugger
+@everywhere begin
 using JSON
+using Debugger
+using Plots
+using Statistics
+
+using PowerModels
 
 include("src/OPFLearn.jl")
 include("create_dataset.jl")
+end
 
 function loadcase(casenum::String)
 	case_to_path = Dict(
@@ -88,12 +94,5 @@ elseif ARGS[1] == "algorithm118"
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 elseif ARGS[1] == "parallel14"
-	@everywhere begin
-		using Pkg
-		Pkg.activate(".")
-		include("src/OPFLearn.jl")
-		include("create_dataset.jl")
-	end
 	results = OPFLearn.dist_create_samples(case14, 1000)
-	return results
 end
