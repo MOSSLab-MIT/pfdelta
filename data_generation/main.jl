@@ -2,16 +2,15 @@ using Pkg
 Pkg.activate(".")
 Pkg.instantiate()
 
+using Distributed
 using PowerModels
 using Statistics
 using Plots
 using Debugger
 using JSON
 
-
 include("src/OPFLearn.jl")
 include("create_dataset.jl")
-
 
 function loadcase(casenum::String)
 	case_to_path = Dict(
@@ -88,4 +87,13 @@ elseif ARGS[1] == "algorithm118"
 		case118, 50; min_distance=0.3, file_name="alg118.json")
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
+elseif ARGS[1] == "parallel14"
+	@everywhere begin
+		using Pkg
+		Pkg.activate(".")
+		include("src/OPFLearn.jl")
+		include("create_dataset.jl")
+	end
+	results = OPFLearn.dist_create_samples(case14, 1000)
+	return results
 end

@@ -104,8 +104,9 @@ function create_dataset_seeds(
 				rem_edge!(g, u, v)
 			end
 		end
-		num_seeds = size(seeds, 1)
-		println("Current $num_seeds not enough! Producing more seeds")
+		num_seeds_produced = size(seeds, 1)
+		println("Current $num_seeds_produced" * 
+			" not enough! Producing more seeds")
 		# If it is not enough, create more seeds, reset max_radius
 		num_new_seeds = floor(Int, num_seeds * portion_of_new_seeds)
 		new_results, _ = point_generator(network, num_new_seeds)
