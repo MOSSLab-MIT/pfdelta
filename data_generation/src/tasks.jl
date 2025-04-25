@@ -51,7 +51,6 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	start_time = time()
 	while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
-		flush(stdout)
 		n_certs = length(b)
 		while isready(polytope_ch)
 			(print_level > 0) && println("ADDING SLICE")
@@ -133,7 +132,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
 			end
 			
-			print_level > 0 && println("Samples: $(k) / $(K),\t Iter: $(i)")
+			println("Samples: $(k) / $(K),\t Iter: $(i)")
 			
 			if stat_track > 0
 				update_stats!(stats, duals, iter_stats, save_level=stat_track)
@@ -190,8 +189,8 @@ function sample_processor(net, net_r, r_solver, opf_solver,
     i = 1  # Count of iterations
     while !isready(done_ch)  #TASK: Determine the best way to terminate this loop
         iter_start_time = time()
-		(print_level = 0) && println("Iter: $(i)") #TEST: Printing samples every iteration
-				
+		(print_level > 0) && println("Iter: $(i)") #TEST: Printing samples every iteration
+
 		# Gather sample from sample channel
 		x = take!(sample_ch)
 		
@@ -200,8 +199,9 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		
         # Solve OPF for the load sample
         result, feasible = run_ac_opf(net, solver=opf_solver)
-        (print_level > 0) && println("OPF SUCCESS: " * string(feasible))
-		
+		if feasible
+			println("Sampler found point in feasible region!")
+		end
 		new_cert = false  # Default for iteration stat tracking
 		
 		if !feasible
@@ -242,7 +242,9 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
                 # Solve OPF for the relaxation feasible sample
                 result, feasible = run_ac_opf(net, solver=opf_solver)
-                (print_level > 0 ) && println("FNFP OPF SUCCESS: " * string(feasible))	
+				if feasible
+					println("Projection found point in feasible region!")
+				end
 			end
 		end
 		# Puts OPF results to the results channel to be processed by main thread
