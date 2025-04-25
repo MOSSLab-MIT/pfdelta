@@ -94,5 +94,15 @@ elseif ARGS[1] == "algorithm118"
 	json_str = JSON.json(dict; indent=3)
 	print(json_str)
 elseif ARGS[1] == "parallel14"
-	results = OPFLearn.dist_create_samples(case14, 1000)
+	results = create_dataset_seeds(case14, 10000;
+		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="exp14.json")
+elseif ARGS[1] == "parallel30"
+	results = create_dataset_seeds(case30, 5000;
+		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="exp30.json")
+elseif ARGS[1] == "parallel57"
+	results = create_dataset_seeds(case57, 500;
+		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="exp57.json")
+elseif ARGS[1] == "parallel118"
+	results = create_dataset_seeds(case118, 500;
+		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="exp118.json")
 end
