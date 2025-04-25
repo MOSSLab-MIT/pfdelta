@@ -51,9 +51,10 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	start_time = time()
 	while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
+		flush(stdout)
 		n_certs = length(b)
 		while isready(polytope_ch)
-			println("ADDING SLICE")
+			(print_level > 0) && println("ADDING SLICE")
 			x_star, x = take!(polytope_ch)
 			
 			A, b = add_infeasibility_certificate(A, b, x_star, x)
@@ -189,7 +190,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
     i = 1  # Count of iterations
     while !isready(done_ch)  #TASK: Determine the best way to terminate this loop
         iter_start_time = time()
-		println("Iter: $(i)") #TEST: Printing samples every iteration
+		(print_level = 0) && println("Iter: $(i)") #TEST: Printing samples every iteration
 				
 		# Gather sample from sample channel
 		x = take!(sample_ch)
@@ -199,19 +200,19 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		
         # Solve OPF for the load sample
         result, feasible = run_ac_opf(net, solver=opf_solver)
-        println("OPF SUCCESS: " * string(feasible))
+        (print_level > 0) && println("OPF SUCCESS: " * string(feasible))
 		
 		new_cert = false  # Default for iteration stat tracking
 		
 		if !feasible
-			println("FINDING NEAREST FEASIBLE")
+			(print_level > 0) && println("FINDING NEAREST FEASIBLE")
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
 			
             r, pd, qd, solved = find_nearest_feasible(fnfp_model, px, qx, print_level=print_level)
 			
 			r = sum((pd .- px).^2 + (qd .- qx).^2)
-			println("R:", r)
+			(print_level > 0) && println("R:", r)
 			
             if (r > R_TOLERANCE) & solved
 				new_cert = true  # For iteration stat tracking
@@ -241,7 +242,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
                 # Solve OPF for the relaxation feasible sample
                 result, feasible = run_ac_opf(net, solver=opf_solver)
-                println("FNFP OPF SUCCESS: " * string(feasible))	
+                (print_level > 0 ) && println("FNFP OPF SUCCESS: " * string(feasible))	
 			end
 		end
 		# Puts OPF results to the results channel to be processed by main thread

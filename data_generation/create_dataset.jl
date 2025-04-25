@@ -70,6 +70,7 @@ function create_dataset_seeds(
 		# First, prune the graph slowly to make it tractable for MIS
 		# Also, it is unlikely that this many edges is conducive to 
 		# a small MIS
+		println("Minimum radius: $min_distance")
 		if ne(g) > nv(g) * 10
 			println("Manually prunning graph to make MIS tractable " *
 				"and to make chances of a big MIS more likely!")
@@ -80,7 +81,7 @@ function create_dataset_seeds(
 				distances = distances[mask]
 				g_edges = g_edges[mask]
 			end
-			print("Will use radius of $max_radius for next step.")
+			print("Will use radius of $max_radius for next step. ")
 			# Recreate graph with subset of edges
 			g = SimpleGraph(nv(g))
 			for (u, v) in Tuple.(g_edges)
@@ -89,6 +90,9 @@ function create_dataset_seeds(
 		end
 		# We reduce the max_radius slowly until it hits the right number
 		println("Prunning graph by using MIS now...")
+		if max_radius <= min_distance
+			println("Radius already too small!")
+		end
 		while max_radius > min_distance
 			# Calculate if max_radius is good
 			candidate_seeds = find_maximum_independent_set(g)
@@ -111,9 +115,9 @@ function create_dataset_seeds(
 			end
 			# Otherwise, reduce radius
 			MIS_size = length(candidate_seeds)
+			max_radius *= 0.9
 			println("Current radius gives small MIS of size $MIS_size. " *
 				"Now trying radius: $max_radius")
-			max_radius *= 0.9
 			mask = distances .> max_radius # True => remove edge
 			distances = distances[.!mask] # keep these
 			bad_edges = g_edges[mask] # remove these
