@@ -96,6 +96,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		#TEST: Will it still work with while instead of if? Would likely improve speeds as procs could be waiting on samples?
 		# What happens if results are being returned faster than this loop? Put a limit on it? 10 iters per while?
 		num_new_samples = 0
+		prev_k = k
 		while isready(result_ch) & ((k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V))	 & 
 								   (i < max_iter) & ((time() - start_time) < T)
 			# Get sample result from result channel
@@ -131,12 +132,16 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
 			end
-			
-			println("Samples: $(k) / $(K),\t Iter: $(i)")
+
 			
 			if stat_track > 0
 				update_stats!(stats, duals, iter_stats, save_level=stat_track)
 				save_while && (save_stats(iter_stats, net_name*"_"*now_str*"_stats", dir=save_path))
+			end
+
+			if prev_k < k
+				println("Samples: $(k) / $(K),\t Iter: $(i)")
+				prev_k = k
 			end
 		end
 		
