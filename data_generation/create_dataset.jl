@@ -8,12 +8,10 @@ function dev_to_euc(network, deviation)
 	# Gather loads
 	loads = network["load"]
 	Pd = [loads[string(i)]["pd"] for i in 1:length(loads)]
-	Qd = [loads[string(i)]["qd"] for i in 1:length(loads)]
-	Sd = Pd .+ Qd .* im
 	# Calculate the largest deviation in a +- %deviation
-	dev_Sd = Sd .* deviation
+	dev_Pd = Pd .* deviation
 	# Calculate L2 norm of this deviation, multiply by 2 to guarantee nonoverlap
-	min_distance = sqrt(sum(abs.(dev_Sd).^2)) * 2
+	min_distance = sqrt(sum(dev_Pd.^2)) * 2
 	return min_distance
 end
 
@@ -28,6 +26,10 @@ function create_dataset_seeds(
 	file_name::String="experiment.json",
 	point_generator=OPFLearn.create_samples
 )
+	# Create folder for data
+	folder_name = dirname(file_name)
+	mkpath(folder_name)
+	# Start seed production
 	println("Producing $num_seeds good seeds!")
 	# Gather initial set
 	results, Anb = point_generator(network, num_seeds; returnAnb=true)
@@ -47,7 +49,7 @@ function create_dataset_seeds(
 	starting_distance < 0 && (starting_distance = Inf)
 
 	# Create initial graph
-	g, g_weights = create_graph(seeds, starting_distance)
+	g, g_weights = create_graph(real(seeds), starting_distance)
 	g_edges = collect(keys(g_weights))
 	distances = collect(values(g_weights))
 
@@ -140,7 +142,7 @@ function create_dataset_seeds(
 		println("Produced $num_new_seeds new seeds! Checking if enough...")
 		# Add them to the set of points
 		seeds = vcat(seeds, new_seeds)
-		g, g_weights = create_graph(seeds, starting_distance)
+		g, g_weights = create_graph(real(seeds), starting_distance)
 		g_edges = collect(keys(g_weights))
 		distances = collect(values(g_weights))
 		# Reset radius to try
@@ -156,5 +158,17 @@ function create_dataset_seeds(
 			JSON.print(io, all_results)
 		end
 		counter += 1
+	end
+end
+
+
+function expand_dataset_seeds(
+	seed_location::String,
+	samples_per_seed::Integer;
+	storage_location::String=nothing
+)
+	# Load seeds
+	open(seed_location, "r") do io
+		JSON.parsefile(seed_location)
 	end
 end
