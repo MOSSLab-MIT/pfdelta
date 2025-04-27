@@ -197,7 +197,7 @@ class PFDeltaDataset(InMemoryDataset):
             'train': fnames[:int(0.8 * n)],
             'val': fnames[int(0.8 * n): int(0.9 * n)],
             'test': fnames[int(0.9 * n):],
-            'all': fnames  # 👈 this uses all samples
+            'all': fnames  
         }
 
         for split, files in split_dict.items():
