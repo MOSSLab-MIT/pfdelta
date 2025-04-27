@@ -43,7 +43,7 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 		vm[bus_num] = res_bus[bus_idx]["vm"]
 		va[bus_num] = res_bus[bus_idx]["va"]
 	end
-	v = vm.*exp.(1im*deg2rad.(va))
+	v = vm.*exp.(1im*(va))
 	vmg = vm[gen_bus_nums]
 	
 	primals["vm_bus"] = Array(vm')
@@ -104,12 +104,14 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 	pg_max = zeros(num_gens)
 	qg_min = zeros(num_gens)
 	qg_max = zeros(num_gens)
-	for gen in values(net_gen)
+	for gen in values(net_gen) # TODO: fix needs to happen here because generators could be inactive
+		if gen["gen_status"] == 1
 		gen_idx = gen["index"]
-        pg_min[gen_idx] = JuMP.has_lower_bound(pg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(pg[gen_idx])) : 0.0
-        pg_max[gen_idx] = JuMP.has_upper_bound(pg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(pg[gen_idx])) : 0.0
-        qg_min[gen_idx] = JuMP.has_lower_bound(qg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(qg[gen_idx])) : 0.0
-        qg_max[gen_idx] = JuMP.has_upper_bound(qg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(qg[gen_idx])) : 0.0        
+			pg_min[gen_idx] = JuMP.has_lower_bound(pg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(pg[gen_idx])) : 0.0
+			pg_max[gen_idx] = JuMP.has_upper_bound(pg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(pg[gen_idx])) : 0.0
+			qg_min[gen_idx] = JuMP.has_lower_bound(qg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(qg[gen_idx])) : 0.0
+			qg_max[gen_idx] = JuMP.has_upper_bound(qg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(qg[gen_idx])) : 0.0
+		end        
 	end
 	
 	p_to_max = zeros(num_branches)
@@ -117,21 +119,24 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 	p_fr_max = zeros(num_branches)
 	q_fr_max = zeros(num_branches)
 	if haskey(collect(values(net_branch))[1], "rate_a")
-	for branch in values(net_branch)
-		idx = branch["index"]
-		fr = branch["f_bus"]
-		to = branch["t_bus"]
-		to_key = (idx, fr, to)
-		fr_key = (idx, to, fr)
-		p_to = p[to_key]
-		q_to = q[to_key]
-		p_fr = p[fr_key]
-		q_fr = q[fr_key]
-		
-        p_to_max[idx] = JuMP.has_upper_bound(p_to) ? JuMP.dual(JuMP.UpperBoundRef(p_to)) : 0.0
-        q_to_max[idx] = JuMP.has_upper_bound(q_to) ? JuMP.dual(JuMP.UpperBoundRef(q_to)) : 0.0
-        p_fr_max[idx] = JuMP.has_upper_bound(p_fr) ? JuMP.dual(JuMP.UpperBoundRef(p_fr)) : 0.0
-        q_fr_max[idx] = JuMP.has_upper_bound(q_fr) ? JuMP.dual(JuMP.UpperBoundRef(q_fr)) : 0.0        
+	for branch in values(net_branch) 
+		if branch["br_status"] == 1
+			idx = branch["index"]
+			fr = branch["f_bus"]
+			to = branch["t_bus"]
+			to_key = (idx, fr, to)
+			fr_key = (idx, to, fr)
+
+			p_to = p[to_key]
+			q_to = q[to_key]
+			p_fr = p[fr_key]
+			q_fr = q[fr_key]
+			
+			p_to_max[idx] = JuMP.has_upper_bound(p_to) ? JuMP.dual(JuMP.UpperBoundRef(p_to)) : 0.0
+			q_to_max[idx] = JuMP.has_upper_bound(q_to) ? JuMP.dual(JuMP.UpperBoundRef(q_to)) : 0.0
+			p_fr_max[idx] = JuMP.has_upper_bound(p_fr) ? JuMP.dual(JuMP.UpperBoundRef(p_fr)) : 0.0
+			q_fr_max[idx] = JuMP.has_upper_bound(q_fr) ? JuMP.dual(JuMP.UpperBoundRef(q_fr)) : 0.0      
+		end  
 	end
 	end
 	

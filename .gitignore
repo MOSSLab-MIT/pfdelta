@@ -9,4 +9,7 @@ tutorial.ipynb
 
 data
 runs
-my_results
+data_generation/my_results
+data_generation/old_pfdelta
+data_generation/opfdata
+data_generation/opflearn
