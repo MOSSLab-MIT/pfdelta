@@ -165,7 +165,6 @@ end
 function expand_dataset_seeds(
 	seed_location::String,
 	samples_per_seed::Integer;
-	storage_location::String=nothing;
 	cp_seeds_to_raw::Bool=false,
 	seed_expander=nothing,
 )

@@ -33,6 +33,10 @@ include("io.jl")
 include("sample.jl")
 include("export.jl")
 
+include("pf_delta_perturbations.jl")
+include("build_opf_pfdelta.jl")
+include("run_ac_opf_pfdelta.jl")
+
 const TOL = 1e-6
 const INFEASIBILITY_CERT_SHIFT = 0.0  # Tune this parameter based on willingness to cut out large loads
 const FNFP_SHIFT = 1e-2  # Increase to find more AC-OPF feasible points as FNFP problem
