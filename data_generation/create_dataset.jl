@@ -165,10 +165,49 @@ end
 function expand_dataset_seeds(
 	seed_location::String,
 	samples_per_seed::Integer;
-	storage_location::String=nothing
+	storage_location::String=nothing;
+	cp_seeds_to_raw::Bool=false,
+	seed_expander=nothing,
 )
-	# Load seeds
-	open(seed_location, "r") do io
-		JSON.parsefile(seed_location)
+	# Gather seed information
+	seeds_dict = JSON.parsefile(seed_location)
+	good_seeds = seeds_dict["ds_results"]["good_seeds"]
+	num_seeds = length(good_seeds)
+	sampling_radius = seeds_dict["ds_results"]["max_radius"] / 2
+	# Collect good seeds in raw folder
+	folder_path = dirname(seed_location)
+	raw_path = joinpath(folder_path, "raw")
+	if cp_seeds_to_raw
+		mkpath(raw_path)
+		allseeds_raw_path = joinpath(folder_path, "allseeds_raw")
+		for (i, real_id) in zip(good_seeds, 1:num_seeds)
+			seed_raw_path = joinpath(allseeds_raw_path, "sample_$i.json")
+			new_path = joinpath(raw_path, "sample_$real_id.json")
+			cp(seed_raw_path, new_path)
+		end
+	end
+	# Initialize dictionary to keep track of seed origin, init path too
+	seed_origin = Dict{Integer, Vector{Integer}}()
+	seed_origin_path = joinpath(folder_path, "seed_origin.json")
+	# Produce samples
+	for i in 1:num_seeds
+		# Load pm dict
+		raw_seed_path = joinpath(raw_path, "sample_$i.json")
+		raw_dict = JSON.parsefile(seed_location)
+		# Set starting point according to the other seeds produced
+		starting_id = num_seeds + (i*samples_per_seed)
+		# Produce samples
+		seed_expander(
+			raw_dict=raw_dict,
+			radius=sampling_radius,
+			num_samples=samples_per_seed,
+			path_to_save=raw_seed_path,
+			starting_id=starting_id,
+		)
+		# Update seed_origin
+		seed_origin[i] = starting_id:starting_id+samples_per_seed
+		open(folder, "w") do io
+			JSON.print(io, seed_origin)
+		end
 	end
 end
