@@ -100,7 +100,7 @@ elseif ARGS[1] == "parallel30"
 	results = create_dataset_seeds(case30, 5000;
 		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case30_data/seeds.json")
 elseif ARGS[1] == "parallel57"
-	results = create_dataset_seeds(case57, 500;
+	results = create_dataset_seeds(case57, 1000;
 		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case57_data/seeds.json")
 elseif ARGS[1] == "parallel118"
 	results = create_dataset_seeds(case118, 500;

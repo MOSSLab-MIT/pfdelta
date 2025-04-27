@@ -165,7 +165,6 @@ end
 function expand_dataset_seeds(
 	seed_location::String,
 	samples_per_seed::Integer;
-	storage_location::String=nothing;
 	cp_seeds_to_raw::Bool=false,
 	seed_expander=nothing,
 )
@@ -195,7 +194,7 @@ function expand_dataset_seeds(
 		raw_seed_path = joinpath(raw_path, "sample_$i.json")
 		raw_dict = JSON.parsefile(seed_location)
 		# Set starting point according to the other seeds produced
-		starting_id = num_seeds + (i*samples_per_seed)
+		starting_id = num_seeds + ((i-1)*samples_per_seed)
 		# Produce samples
 		seed_expander(
 			raw_dict=raw_dict,
@@ -203,6 +202,7 @@ function expand_dataset_seeds(
 			num_samples=samples_per_seed,
 			path_to_save=raw_seed_path,
 			starting_id=starting_id,
+			seed_id=i
 		)
 		# Update seed_origin
 		seed_origin[i] = starting_id:starting_id+samples_per_seed
