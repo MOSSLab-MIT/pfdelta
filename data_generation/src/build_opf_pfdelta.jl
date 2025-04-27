@@ -17,6 +17,7 @@ function build_opf_power_flow_delta(pm)
     for i in ids(pm, :branch)
         PM.constraint_ohms_yt_from(pm, i)
         PM.constraint_ohms_yt_to(pm, i)
+        PM.constraint_voltage_angle_difference(pm, i) # added back in to see its effects
     end
 
     for i in ids(pm, :dcline)
@@ -35,6 +36,11 @@ function variable_bus_voltage_pfdelta(pm; nw::Int=PM.nw_id_default)
         [i in ids(pm, nw, :bus)], base_name="$(nw)_vm",
         start = PM.comp_start_value(ref(pm, nw, :bus, i), "vm_start", 1.0)
         )
+
+    # Set general non-negativity
+    for i in ids(pm, nw, :bus)
+        JuMP.set_lower_bound(vm[i], 0.0)
+    end
     
     # Bound voltage magnitudes only at PV and slack buses
     for (i, bus) in ref(pm, :bus)
@@ -68,7 +74,7 @@ function variable_gen_power_pfdelta(pm; nw::Int=PM.nw_id_default)
     for (i, gen) in ref(pm, nw, :gen)
         if !(gen["gen_bus"] in slack_bus)
             JuMP.set_lower_bound(pg[i], gen["pmin"])
-            JuMP.set_lower_bound(pg[i], gen["pmax"])
+            JuMP.set_upper_bound(pg[i], gen["pmax"])
         end
     end
 

@@ -1,14 +1,14 @@
 using Pkg
 Pkg.activate(@__DIR__)
-# Pkg.instantiate()
 
 using OPFLearn
+using Debugger
 using Dates
 using Printf
 using JSON
 
 # Define the cases
-K = 10
+K = 10_000
 timestamp = Dates.format(Dates.now(), "yyyy-mm-dd_HH-MM-SS")
 base_save_path = joinpath("my_results", timestamp)
 mkpath(base_save_path)
@@ -27,20 +27,20 @@ cases = [
         K = K,
         net_path = "pglib",
         save_path = joinpath(base_save_path, "case57")
-    )
-    # (
-    #     name = "case118",
-    #     file = "pglib_opf_case118_ieee.m",
-    #     K = K,
-    #     net_path = "pglib",
-# save_path = joinpath(base_save_path, name)
-    # ), 
+    ),
+    (
+        name = "case118",
+        file = "pglib_opf_case118_ieee.m",
+        K = K,
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case118")
+    )#,
     # (
     #     name = "case2000",
     #     file = "pglib_opf_case2000_goc.m",
     #     K = K,
     #     net_path = "pglib",
-    # save_path = joinpath(base_save_path, name)
+    #     save_path = joinpath(base_save_path, "case2000")
     # )
 ]
 
@@ -53,18 +53,21 @@ for case in cases
     mkpath(case.save_path)
     start_time = time()
     success = true
+    projection_feasible_counter = missing
 
-    # try
-        results_opflearn , projection_feasible_counter = create_samples(case.file, case.K;
+    try
+        results_opflearn, projection_feasible_counter = create_samples(case.file, case.K;
             net_path    = case.net_path,
             save_path   = case.save_path,
             save_while  = true,
-            print_level = 1
+            print_level = 1, 
+            perturb_topology_method = "n-1", 
+            perturb_costs_method = "shuffle"
         )
-    # catch e
-    #     println("❌ Error in $(case.name): $e")
-    #     success = false
-    # end
+    catch e
+        println("❌ Error in $(case.name): $e")
+        success = false
+    end
 
     elapsed = time() - start_time
     push!(results, (case.name, success, round(elapsed, digits=2), case.K))

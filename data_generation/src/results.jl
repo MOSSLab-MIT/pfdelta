@@ -103,21 +103,31 @@ function gt_eps(l, eps_val=EPS)  # Determine what value to use for eps?
     return [x > eps_val for x in l]
 end
 
-function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String)
-	sample = Dict(
-		"network" => net, 
-		"solution" => result
-	)
+function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String; seed_id=-1)
+    if seed_id==-1
+        sample = Dict(
+            "network" => net, 
+            "solution" => result,
+			"parent_seed"=> -1
+        )
+    else
+        sample = Dict(
+            "network" => net, 
+            "solution" => result,
+            "parent_seed" => seed_id,
+        )
+    end
 
-	# Ensure the raw folder exists
-	raw_path = joinpath(save_path, "raw")
-	mkpath(raw_path)
+    # Ensure the raw folder exists
+    raw_path = joinpath(save_path, "raw")
+    mkpath(raw_path)
 
-	filepath = joinpath(raw_path, "sample_$(k).json")
-	open(filepath, "w") do io
-		write(io, JSON.json(sample))
-	end
+    filepath = joinpath(raw_path, "sample_$(k).json")
+    open(filepath, "w") do io
+        write(io, JSON.json(sample))
+    end
 end
+
 
 function store_infeasible_sample_json(w, net, result, save_path)
 

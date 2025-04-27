@@ -109,7 +109,13 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	u = 0  # Count of samples since last unique active set found
 	v = 0  # Count of samples since last increase in variance seen
 	w = 0 # Count of infeasible samples collected
+
+	#### Added for benchmarking #######
+	tries_per_sample = Int[]
+	tries_to_feasible = 0
 	projection_feasible_counter = 0
+	###################################
+
 	start_time = time()  # Start time in seconds
 	m = size(A, 1)  # Number of polytope planes
     while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
@@ -163,14 +169,17 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 
 		# Perturb generator costs
 		perturb_costs!(net_perturbed; method=perturb_costs_method)
-	
+
 		#######################################
 
         # Solve OPF for the load sample
+		tries_to_feasible = tries_to_feasible + 1
 		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
 		print_level > 0 && println("OPF SUCCESS: " * string(feasible))
 		
         if feasible
+			push!(tries_per_sample, tries_to_feasible)
+			tries_to_feasible = 0
 			s, u, v, k, iter_stats = store_feasible_sample(s, u, v, k, i, K, iter_stats,
 										               AC_inputs, AC_outputs, duals, dual_vars,
 													   x, result, discard, variance, net_name, 
@@ -261,11 +270,11 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		
         i = i + 1
 	end
-	
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
 	print("Number of samples resulting from projection: $(projection_feasible_counter)")
-    return results, projection_feasible_counter
+    @bp
+	return results, projection_feasible_counter
 end
 
 
