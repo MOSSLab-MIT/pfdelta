@@ -6,10 +6,11 @@ from tqdm import tqdm
 from torch_geometric.data import InMemoryDataset, HeteroData
 
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
+        self.add_bus_type = add_bus_type
         root = os.path.join(root_dir, case_name)
         super().__init__(root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.processed_paths[self._split_to_idx()]) 
@@ -36,6 +37,15 @@ class PFDeltaDataset(InMemoryDataset):
         bus_voltages = []
         bus_type = []
         bus_shunts = []
+        bus_gen, bus_demand = [], []
+
+        PQ_bus_x, PQ_bus_y = [], []
+        PV_bus_x, PV_bus_y = [], []
+        PV_demand, PV_generation = [], []
+        slack_x, slack_y = [], []
+        slack_demand, slack_generation = [], []
+        PV_to_bus, PQ_to_bus, slack_to_bus = [], [], []
+        pq_idx, pv_idx, slack_idx = 0, 0, 0
 
         for bus_id_str, bus in sorted(network_data['bus'].items(), key=lambda x: int(x[0])):
             bus_id = int(bus_id_str)
@@ -60,6 +70,8 @@ class PFDeltaDataset(InMemoryDataset):
                     pd += load['pd']
                     qd += load['qd']
 
+            bus_demand.append(torch.tensor([pd, qd]))
+
             # Gen
             pg, qg = 0.0, 0.0
             for gen_id, gen in sorted(network_data['gen'].items(), key=lambda x: int(x[0])):
@@ -71,35 +83,49 @@ class PFDeltaDataset(InMemoryDataset):
                     else:
                         assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
+            bus_gen.append(torch.tensor([pg, qg]))
+
             # Now decide final bus type
             bus_type_now = bus['bus_type']
 
             if bus_type_now == 2 and pg == 0.0 and qg == 0.0:
                 bus_type_now = 1  # PV bus with no gen --> becomes PQ
+                # maybe add an assert here to check if all gens were off.
 
             bus_type.append(torch.tensor(bus_type_now))
 
             if bus_type_now == 1:
                 pf_x.append(torch.tensor([pd, qd]))
                 pf_y.append(torch.tensor([va, vm]))
+
+                PQ_bus_x.append(torch.tensor([pd, qd]))
+                PQ_bus_y.append(torch.tensor([va, vm]))
+                PQ_to_bus.append(torch.tensor([pq_idx, bus_idx]))
+                pq_idx += 1
             elif bus_type_now == 2:
                 pf_x.append(torch.tensor([pg - pd, vm]))
                 pf_y.append(torch.tensor([qg - qd, va]))
+                
+                PV_bus_x.append(torch.tensor([pg - pd, vm]))
+                PV_bus_y.append(torch.tensor([qg - qd, va]))
+                PV_demand.append(torch.tensor([pd, qd]))
+                PV_generation.append(torch.tensor([pg, qg]))
+                PV_to_bus.append(torch.tensor([pv_idx, bus_idx]))
+                pv_idx += 1
             elif bus_type_now == 3:
                 pf_x.append(torch.tensor([va, vm]))
                 pf_y.append(torch.tensor([pg - pd, qg - qd]))
 
-        generation, limits, slack_gen, slack_limits  = [], [], [], []
+                slack_x.append(torch.tensor([va, vm]))
+                slack_y.append(torch.tensor([pg - pd, qg - qd]))
+                slack_demand.append(torch.tensor([pd, qd]))
+                slack_generation.append(torch.tensor([pg, qg]))
+                slack_to_bus.append(torch.tensor([slack_idx, bus_idx]))
+                slack_idx += 1
 
-        # Generator nodes
-        # Slack generator limits, [PMAX, PMIN]
-        if self.case_name == 'case14':
-            slack_limits.append(torch.tensor([3.4, 0.0]))
-        elif self.case_name == 'case57':
-            slack_limits.append(torch.tensor([2.45, 0.0]))
-        elif self.case_name == 'case118':
-            slack_limits.append(torch.tensor([11.82, 0.0]))
-            
+        generation, limits, slack_gen  = [], [], []
+
+        # Generator nodes   
         for gen_id, gen in sorted(network_data['gen'].items(), key=lambda x: int(x[0])):
             if gen['gen_status'] == 1:
                 gen_sol = solution_data['gen'][gen_id] 
@@ -162,8 +188,10 @@ class PFDeltaDataset(InMemoryDataset):
             load_to_bus_index.append(torch.tensor([int(load_id) - 1, load_bus]))
 
         # Create graph nodes and edges
-        data['bus'].pf_x = torch.stack(pf_x)
-        data['bus'].pf_y = torch.stack(pf_y)
+        data['bus'].x = torch.stack(pf_x)
+        data['bus'].y = torch.stack(pf_y)
+        data['bus'].bus_gen = torch.stack(bus_gen) # aggregated
+        data['bus'].bus_demand = torch.stack(bus_demand) # aggregated
         data['bus'].bus_voltages = torch.stack(bus_voltages)
         data['bus'].bus_type = torch.stack(bus_type)
         data['bus'].shunt = torch.stack(bus_shunts)
@@ -171,9 +199,22 @@ class PFDeltaDataset(InMemoryDataset):
         data['gen'].limits = torch.stack(limits)
         data['gen'].generation = torch.stack(generation)
         data['gen'].slack_gen = torch.stack(slack_gen)
-        data['gen'].slack_limits = torch.stack(slack_limits)
 
         data['load'].demand = torch.stack(demand)
+
+        if self.add_bus_type:
+            data['PQ'].x = torch.stack(PQ_bus_x) 
+            data['PQ'].y = torch.stack(PQ_bus_y)
+
+            data['PV'].x = torch.stack(PV_bus_x) 
+            data['PV'].y = torch.stack(PV_bus_y) 
+            data['PV'].generation = torch.stack(PV_generation) 
+            data['PV'].demand = torch.stack(PV_demand) 
+
+            data['slack'].x = torch.stack(slack_x) 
+            data['slack'].y = torch.stack(slack_y)
+            data['slack'].generation = torch.stack(slack_generation) 
+            data['slack'].demand = torch.stack(slack_demand)         
 
         for link_name, edges in {
             ('bus', 'branch', 'bus'): edge_index,
@@ -186,6 +227,16 @@ class PFDeltaDataset(InMemoryDataset):
             if link_name == ('bus', 'branch', 'bus'): 
                 data[link_name].edge_attr = torch.stack(edge_attr) 
         
+        if self.add_bus_type:
+            for link_name, edges in {
+                ('PV', 'PV_link', 'bus'): PV_to_bus,
+                ('PQ', 'PQ_link', 'bus'): PQ_to_bus,
+                ('slack', 'slack_link', 'bus'): slack_to_bus
+            }.items():
+                edge_tensor = torch.stack(edges, dim=1) 
+                data[link_name].edge_index = edge_tensor
+                data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
+
         return data
 
     def process(self):
@@ -197,7 +248,7 @@ class PFDeltaDataset(InMemoryDataset):
             'train': fnames[:int(0.8 * n)],
             'val': fnames[int(0.8 * n): int(0.9 * n)],
             'test': fnames[int(0.9 * n):],
-            'all': fnames  
+            'all': fnames  # 👈 this uses all samples
         }
 
         for split, files in split_dict.items():
