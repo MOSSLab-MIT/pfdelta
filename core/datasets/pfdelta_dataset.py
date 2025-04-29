@@ -265,8 +265,8 @@ class PFDeltaDataset(InMemoryDataset):
 
 
 class PFDeltaGNS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
