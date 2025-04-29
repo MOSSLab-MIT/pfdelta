@@ -337,3 +337,26 @@ class PFDeltaGNS(PFDeltaDataset):
         data['load'].num_nodes = num_loads
 
         return data
+
+
+class PFDeltaCANOS(PFDeltaDataset): 
+    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+
+    def build_heterodata(self, pm_case):
+        # call base version
+        data = super().build_heterodata(pm_case)
+
+        # Now prune the data to only keep bus, PV, PQ, slack
+        keep_nodes = {"bus", "PV", "PQ", "slack"}
+
+        for node_type in list(data.node_types):
+            if node_type not in keep_nodes:
+                del data[node_type]
+
+        for edge_type in list(data.edge_types):
+            src, _, dst = edge_type
+            if src not in keep_nodes or dst not in keep_nodes:
+                del data[edge_type]
+
+        return data
