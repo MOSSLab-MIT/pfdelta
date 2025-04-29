@@ -20,7 +20,8 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 							  pd_max=pd_max, pd_min=pd_min, pf_min=pf_min, pf_lagging=pf_lagging, save_certs=save_certs,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while, 
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,
+							  perturb_topology_method=perturb_topology_method, perturb_costs_method=perturb_costs_method)
 end
 
 
@@ -78,7 +79,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
 							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
-							perturb_topology_method="none", perturb_costs_method="none")
+							perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
 
 	now_str = Dates.format(Dates.now(), "dd-mm-yyy_HH.MM.SS")  # Get date & time for result file names
 	net_name = net["name"]
@@ -105,14 +106,15 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	stat_track > 0 && (stats = results["stats"])
 	
 	# Set up sample processing while loop 
-	k = 0  # Count of feasible samples collected
+	k = starting_k  # Count of feasible samples collected
     i = 1  # Count of iterations
 	s = 0  # Count of samples since last saved (not discarded) sample
 	u = 0  # Count of samples since last unique active set found
 	v = 0  # Count of samples since last increase in variance seen
 	start_time = time()  # Start time in seconds
 	m = size(A, 1)  # Number of polytope planes
-    while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
+	w = 0
+    while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
 		  (i < max_iter) & ((time() - start_time) < T)
         iter_start_time = time()
 		
@@ -178,9 +180,11 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 													   x, result, discard, variance, net_name, 
 													   now_str, save_path, save_while, save_order,
 													   print_level)
+			store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
         else
 			save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 							save_while, net_name, now_str, save_order, dual_vars, save_path)
+			w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
 
@@ -220,7 +224,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 				
 				x_star = vcat(xp_, xq_)
                 x = x_star
-                set_network_load(net, x, scale_load=false)
+                set_network_load(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
 				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
@@ -233,10 +237,12 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 												  x, result, discard, variance, net_name, 
 												  now_str, save_path, save_while, save_order,
 												  print_level)
+					store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 					println("Samples: $(k) / $(K),\t Iter: $(i)")
                 else
 					save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								    save_while, net_name, now_str, save_order, dual_vars, save_path)
+					w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
 				end
 			end
 		end

@@ -1,6 +1,7 @@
 module OPFLearn
 
 import Dates
+import JSON
 using DelimitedFiles: readdlm, writedlm
 import Distributed
 import LinearAlgebra: diag, eigvals, I, cholesky, norm, Hermitian, dot, norm, logdet
@@ -15,6 +16,7 @@ const MOI = MathOptInterface
 import PowerModels
 import PowerModels: ref, ids, var
 const PM = PowerModels
+PM.silence()
 
 import Random
 
@@ -36,6 +38,7 @@ include("export.jl")
 include("pf_delta_perturbations.jl")
 include("build_opf_pfdelta.jl")
 include("run_ac_opf_pfdelta.jl")
+include("create_seed_samples.jl")
 
 const TOL = 1e-6
 const INFEASIBILITY_CERT_SHIFT = 0.0  # Tune this parameter based on willingness to cut out large loads

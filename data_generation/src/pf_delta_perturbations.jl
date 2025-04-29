@@ -129,6 +129,7 @@ function perturb_load!(net, r)
     n_loads = length(pd0)
 
     success = false
+    pd_new = similar(pd0)
     while !success
         # Sample uniformly from a ball around pd0
         pd_new = sample_ball(pd0, r)

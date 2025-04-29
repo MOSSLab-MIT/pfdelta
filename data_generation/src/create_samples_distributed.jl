@@ -9,7 +9,8 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							save_max_load=false, save_certs=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
+							perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return dist_create_samples(net, K::Integer; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -19,7 +20,8 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							  save_certs=save_certs, save_max_load=save_max_load,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while,
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,
+							  perturb_topology_method=perturb_topology_method, perturb_costs_method=perturb_costs_method, starting_k=starting_k)
 end
 
 
@@ -72,7 +74,8 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 								save_max_load=false, save_certs=false, 
 								print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 								model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
-								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,)
+								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
+								perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
 	# Create channels for transfering data between processes
 	isnothing(nproc) && (nproc = Distributed.nprocs())
 	@assert nproc > 3 "Not enough processors available, nprocs:$(nproc). Need 4+ CPUs for improved runtimes."
@@ -110,7 +113,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level)
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k)
 	for proc in procs[2:end]
 		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver, 
 							   sample_ch, final_ch, polytope_ch, result_ch,

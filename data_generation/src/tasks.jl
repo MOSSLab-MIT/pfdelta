@@ -18,7 +18,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 save_while, save_infeasible, stat_track, save_certs,
 						 net_name, dual_vars, save_order, replace_samples,
 						 save_path, sample_ch, polytope_ch, result_ch, final_ch,
-						 print_level)
+						 print_level, starting_k)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	
 	AC_inputs = results["inputs"]
@@ -42,14 +42,14 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		put!(sample_ch, sample)
 	end
 	
-	k = 0  # Count of feasible samples collected
+	k = starting_k  # Count of feasible samples collected
     i = 0  # Count of samples generated
 	u = 0  # Count of feasible samples since last unique active set found
 	v = 0  # Count of feasible samples since last increase in variance seen
 	s = 0  # Count of feasible samples since last saved (not discarded) sample
 	(print_level > 0) && println("Starting sample production...")
 	start_time = time()
-	while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
+	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
 		n_certs = length(b)
 		while isready(polytope_ch)
@@ -202,8 +202,21 @@ function sample_processor(net, net_r, r_solver, opf_solver,
         # Set network loads to sampled values
         set_network_load(net, x, scale_load=false)
 		
+		######## ADDED FOR PFDELTA #############
+		
+		# Create deepcopy the following perturbations are not carried over for the next samples
+		net_perturbed = deepcopy(net)
+		
+		# Perturb topology
+		perturb_topology!(net_perturbed; method=perturb_topology_method)
+		
+		# Perturb generator costs
+		perturb_costs!(net_perturbed; method=perturb_costs_method)
+		
+		#######################################
         # Solve OPF for the load sample
-        result, feasible = run_ac_opf(net, solver=opf_solver)
+		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
+        # result, feasible = run_ac_opf(net, solver=opf_solver)
 		if feasible
 			println("Sampler found point in feasible region!")
 		end
@@ -243,10 +256,11 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 				xq_[xq_ .< 0] .= 0
                 x = vcat(xp_, xq_)
 
-                set_network_load(net, x, scale_load=false)
+                set_network_load(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
-                result, feasible = run_ac_opf(net, solver=opf_solver)
+                # result, feasible = run_ac_opf(net, solver=opf_solver)
+				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
 				if feasible
 					println("Projection found point in feasible region!")
 				end
@@ -256,6 +270,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		iter_elapsed_time = time() - iter_start_time
 		
 		put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time))
-        i = i + 1
+		store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path,)
+		i = i + 1
 	end
 end

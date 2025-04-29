@@ -33,11 +33,19 @@ function loadcase(casenum::String)
 	return network
 end
 
-
 case14 = loadcase("case14")
 case30 = loadcase("case30")
 case57 = loadcase("case57")
 case118 = loadcase("case118")
+cases = Dict(
+	"case14" => case14,
+	"case30" => case30,
+	"case57" => case57,
+	"case118" => case118,
+	"case500" => loadcase("case500"),
+	"case2000" => loadcase("case2000")
+)
+println("Cases loaded!")
 
 if length(ARGS) == 0
 	println("No argument!")
@@ -58,7 +66,7 @@ elseif ARGS[1] == "case30"
 	    JSON.print(io, results)
 	end
 elseif ARGS[1] == "case57"
-	results, time = OPFLearn.create_samples(case57, 750)
+	results, time = OPFLearn.create_samples(case57, 5600)
 	open("time57.json", "w") do io
 	    JSON.print(io, time)
 	end
@@ -73,36 +81,34 @@ elseif ARGS[1] == "case118"
 	open("results118.json", "w") do io
 	    JSON.print(io, results)
 	end
-elseif ARGS[1] == "algorithm14"
-	all_results = create_dataset_seeds(
-		case14, 7500; min_distance=0.3, file_name="alg14.json")
-	json_str = JSON.json(dict; indent=3)
-	print(json_str)
-elseif ARGS[1] == "algorithm30"
-	all_results = create_dataset_seeds(
-		case30, 5000; min_distance=0.3, file_name="alg30.json")
-	json_str = JSON.json(dict; indent=3)
-	print(json_str)
-elseif ARGS[1] == "algorithm57"
-	all_results = create_dataset_seeds(
-		case57, 500; min_distance=0.3, file_name="alg57.json")
-	json_str = JSON.json(dict; indent=3)
-	print(json_str)
-elseif ARGS[1] == "algorithm118"
-	all_results = create_dataset_seeds(
-		case118, 50; min_distance=0.3, file_name="alg118.json")
-	json_str = JSON.json(dict; indent=3)
-	print(json_str)
-elseif ARGS[1] == "parallel14"
-	results = create_dataset_seeds(case14, 10000;
-		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case14_data/seeds.json")
-elseif ARGS[1] == "parallel30"
-	results = create_dataset_seeds(case30, 5000;
-		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case30_data/seeds.json")
-elseif ARGS[1] == "parallel57"
-	results = create_dataset_seeds(case57, 500;
-		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case57_data/seeds.json")
-elseif ARGS[1] == "parallel118"
-	results = create_dataset_seeds(case118, 500;
-		min_distance=-2., point_generator=OPFLearn.dist_create_samples, file_name="case118_data/seeds.json")
+else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
+	comp_method = ARGS[1]
+	network_name = ARGS[2]
+	topology_perturb = ARGS[3]
+	if comp_method == "linear"
+		point_generator=OPFLearn.create_samples
+	elseif comp_method == "parallel"
+		point_generator=OPFLearn.dist_create_samples
+	end
+	network = cases[network_name]
+	if topology_perturb == "none"
+		dataset_size = 56000
+	elseif topology_perturb == "n-1"
+		dataset_size = 29000
+	else
+		dataset_size = 20000
+		dataset_size=200
+	end
+	seeds_needed = trunc(Int, dataset_size * 0.03)
+	samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
+	folder_path = joinpath("$(network_name)_seeds", topology_perturb)
+	allseeds = create_dataset_seeds(
+		network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+		min_distance=-2., save_path=folder_path)
+	println("\n\n\n#########################\n\n\n")
+	expand_dataset_seeds(
+		joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
+		cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
+		perturb_topology_method=topology_perturb, perturb_costs_method="shuffle"
+	)
 end
