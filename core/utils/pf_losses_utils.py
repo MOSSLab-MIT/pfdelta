@@ -77,3 +77,71 @@ def PowerBalanceLoss(predictions, data):
     delta_PQ_magnitude = torch.sqrt(delta_P**2 + delta_Q**2)
     return delta_PQ_magnitude, delta_P, delta_Q
 
+
+@registry.register_loss("pf_constraint_violation")
+class constraint_violations_loss_pf:
+    def __init__(self, ):
+        self.constraint_loss = None
+        self.bus_real_mismatch = None
+        self.bus_reactive_mismatch = None
+        
+    def __call__(self, output_dict, data):
+        device = data["bus"].x.device
+        # Get the predictions and edge features
+        bus_pred = output_dict["bus"]
+        edge_pred = output_dict["edge_preds"]
+        edge_indices = data["bus", "branch", "bus"].edge_index
+        edge_features = data["bus", "branch", "bus"].edge_attr
+        va, vm = bus_pred.T
+        complex_voltage = vm * torch.exp(1j* va)
+
+        # Get the branch flows from the edge predictions
+        n = data["bus"].x.shape[0]
+        sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
+        flows_rev = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
+        flows_fwd = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
+        sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
+
+        # Generator flows (already aggregated per bus)
+        bus_gen = data["bus"].bus_gen.to(device) 
+        gen_flows = bus_gen[:, 0] + 1j * bus_gen[:, 1]
+
+        # Demand flows (already aggregated per bus)
+        bus_demand = data["bus"].bus_demand.to(device) 
+        demand_flows = bus_demand[:, 0] + 1j * bus_demand[:, 1]
+
+        # Shunt admittances
+        bus_shunts = data["bus"].shunt.to(device)  
+        shunt_flows = (torch.abs(vm) ** 2) * (bus_shunts[:, 1] + 1j * bus_shunts[:, 0])  # (b_shunt + j*g_shunt)
+
+        power_balance = gen_flows - demand_flows - shunt_flows - sum_branch_flows
+        real_power_mismatch = torch.abs(torch.real(power_balance))
+        reactive_power_mismatch = torch.abs(torch.imag(power_balance))
+
+        # power: real and imaginary mismatches
+        violation_degree_real_mismatch = real_power_mismatch.mean()
+        violation_degree_imag_mismatch = reactive_power_mismatch.mean()
+
+        # branch flows: ground truth mismatch, real
+        p_flows_true = data["bus", "branch", "bus"].edge_label[:,-2] # this is from bus flow
+        p_flows_mismatch = torch.real(flows_fwd) - p_flows_true
+        violation_degree_real_flow_mismatch = torch.abs(p_flows_mismatch).mean()
+
+        # branch flows: ground truth mismatch, reactive
+        q_flows_true = data["bus", "branch", "bus"].edge_label[:,-1] # this is from bus flow
+        q_flows_mismatch = torch.imag(flows_fwd) - q_flows_true
+        violation_degree_imag_flow_mismatch = torch.abs(q_flows_mismatch).mean()
+
+        # loss
+        loss_c = (violation_degree_real_mismatch + violation_degree_imag_mismatch + 
+                  violation_degree_real_flow_mismatch + violation_degree_imag_flow_mismatch)
+        
+        self.constraint_loss = loss_c
+        self.bus_real_mismatch = violation_degree_real_mismatch
+        self.bus_reactive_mismatch = violation_degree_imag_mismatch
+        self.real_flow_mismatch_violation = violation_degree_real_flow_mismatch
+        self.imag_flow_mismatch_violation = violation_degree_imag_flow_mismatch
+
+        return loss_c
+
