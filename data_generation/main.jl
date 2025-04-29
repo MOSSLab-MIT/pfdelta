@@ -97,7 +97,6 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 		dataset_size = 29000
 	else
 		dataset_size = 20000
-		dataset_size=200
 	end
 	seeds_needed = trunc(Int, dataset_size * 0.03)
 	samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
