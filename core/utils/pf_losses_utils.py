@@ -78,6 +78,85 @@ def PowerBalanceLoss(predictions, data):
     return delta_PQ_magnitude, delta_P, delta_Q
 
 
+@registry.register_loss("GNSPowerBalanceLoss")
+class GNSPowerBalanceLoss:
+    """
+    Compute the power balance loss.
+    """
+    def __init__(self):
+        self.power_balance_loss = None
+    
+    def __call__(self, data, layer_loss=False, training=False):
+        edge_index = data[('bus', 'branch', 'bus')].edge_index
+        edge_attr = data[('bus', 'branch', 'bus')].edge_attr
+        src, dst = edge_index
+
+        # Bus values
+        v = data['bus'].v
+        theta = data['bus'].theta
+        b_s = data['bus'].shunt[:, 1]
+        g_s = data['bus'].shunt[:, 0]
+        pg = data['bus'].pg
+        pd = data['bus'].pd
+        qd = data['bus'].qd
+        qg = data['bus'].qg
+
+        # Edge values
+        br_r = edge_attr[:, 0]
+        br_x = edge_attr[:, 1]
+        b_ij = edge_attr[:, 3]
+        shift_ij = edge_attr[:, -1]
+        tau_ij = edge_attr[:, -2]
+        y = 1 / (torch.complex(br_r, br_x))
+        y_ij = torch.abs(y)
+        delta_ij = torch.angle(y)
+
+        # Gather per-branch bus features
+        v_i = v[src]
+        v_j = v[dst]
+        theta_i = theta[src]
+        theta_j = theta[dst]
+
+        # Active power flows
+        P_flow_src = (
+            (v_i * v_j * y_ij / tau_ij) * torch.sin(theta_i - theta_j - delta_ij - shift_ij) 
+            + ((v_i / tau_ij) ** 2) * (y_ij * torch.sin(delta_ij))
+        ) 
+
+        P_flow_dst = (
+            (v_j * v_i * y_ij / tau_ij) * torch.sin(theta_j - theta_i - delta_ij + shift_ij)
+            + ((v_j) ** 2) * (y_ij * torch.sin(delta_ij))
+        )
+
+        # Reactive power flows
+        Q_flow_src = (
+            (-v_i * v_j * y_ij / tau_ij) * torch.cos(theta_i - theta_j - delta_ij - shift_ij)
+            + ((v_i / tau_ij) ** 2) * (y_ij * torch.cos(delta_ij) - b_ij / 2)
+        )
+
+        Q_flow_dst = (
+            (-v_j * v_i * y_ij / tau_ij) * torch.cos(theta_j - theta_i - delta_ij + shift_ij)
+            + ((v_j) ** 2) * (y_ij * torch.sin(delta_ij) - b_ij / 2)
+        ) 
+
+        # Aggregate contributions for all nodes
+        Pbus_pred = torch.zeros_like(v).scatter_add_(0, src, P_flow_src)
+        Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
+        Qbus_pred = torch.zeros_like(v).scatter_add_(0, src, Q_flow_src)
+        Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
+
+        if layer_loss: 
+            delta_p = (pg - pd - g_s * (v ** 2)) + Pbus_pred
+            delta_q = qg - qd + b_s * (v ** 2) + Qbus_pred
+            delta_s = (delta_p ** 2 + delta_q ** 2).mean()
+            if training: 
+                self.power_balance_loss = delta_s
+            return delta_p, delta_q, delta_s
+        else: 
+            qg = qd - b_s * v**2 - Qbus_pred
+            return qg
+
+
 @registry.register_loss("pf_constraint_violation")
 class constraint_violations_loss_pf:
     def __init__(self, ):
