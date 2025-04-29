@@ -263,3 +263,77 @@ class PFDeltaDataset(InMemoryDataset):
             data, slices = self.collate(data_list)
             torch.save((data, slices), os.path.join(self.processed_dir, f'{split}.pt'))
 
+
+class PFDeltaGNS(PFDeltaDataset): 
+    def __init__(self, root_dir='data', case_name='', split='train', transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, transform, pre_transform, pre_filter, force_reload)
+
+    def build_heterodata(self, pm_case):
+        # call base version
+        data = super().build_heterodata(pm_case)
+        num_buses = data['bus'].x.size(0)
+        num_gens = data['gen'].generation.size(0)
+        num_loads = data['load'].demand.size(0)
+
+        # Init bus-level fields
+        v_buses      = torch.zeros(num_buses)
+        theta_buses  = torch.zeros(num_buses)
+        pd_buses     = torch.zeros(num_buses)
+        qd_buses     = torch.zeros(num_buses)
+        pg_buses     = torch.zeros(num_buses)
+        qg_buses     = torch.zeros(num_buses)
+
+        # Read bus types
+        bus_types = data['bus'].bus_type 
+        x_gns = torch.zeros((num_buses, 2))
+
+        for bus_idx in range(num_buses):
+            bus_type = bus_types[bus_idx].item()
+            pf_x = data['bus'].x[bus_idx]
+            pf_y = data['bus'].x[bus_idx]
+            bus_demand = data['bus'].bus_demand[bus_idx]
+            bus_gen = data['bus'].bus_gen[bus_idx]
+
+            if bus_type == 1:  # PQ bus
+                # Flat start for PQ bus
+                x_gns[bus_idx] = torch.tensor([1.0, 0.0])
+                pd = pf_x[0]
+                qd = pf_x[1]
+                pg = bus_gen[0]
+                qg = bus_gen[1]
+            elif bus_type == 2:  # PV bus
+                v = pf_x[1]
+                theta = torch.tensor(0.0)
+                x_gns[bus_idx] = torch.stack([v, theta])
+                pd = bus_demand[0]
+                qd = bus_demand[1]
+                pg = bus_gen[0]
+                qg = bus_gen[1]
+            elif bus_type == 3:  # Slack bus
+                x_gns[bus_idx] = pf_x
+                pd = bus_demand[0]
+                qd = bus_demand[1]
+                pg = bus_gen[0]
+                qg = bus_gen[1]
+
+            v_buses[bus_idx] = x_gns[bus_idx][0]
+            theta_buses[bus_idx] = x_gns[bus_idx][1]
+            pd_buses[bus_idx] = pd
+            qd_buses[bus_idx] = qd
+            pg_buses[bus_idx] = pg
+            qg_buses[bus_idx] = qg
+
+        # Store in bus
+        data['bus'].x_gns = x_gns
+        data['bus'].v = v_buses
+        data['bus'].theta = theta_buses
+        data['bus'].pd = pd_buses
+        data['bus'].qd = qd_buses
+        data['bus'].pg = pg_buses
+        data['bus'].qg = qg_buses
+        data['bus'].delta_p = torch.zeros_like(v_buses)
+        data['bus'].delta_q = torch.zeros_like(v_buses)
+        data['gen'].num_nodes = num_gens
+        data['load'].num_nodes = num_loads
+
+        return data
