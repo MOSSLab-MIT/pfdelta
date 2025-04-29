@@ -42,7 +42,6 @@ class InteractionNetwork(nn.Module):
     def __init__(self, edge_type_dict, node_type_dict, edge_dim, node_dim, hidden_dim, include_sent_messages=False):
         """
         PyTorch implementation of the Interaction Network.
-
         Args:
             projected_edges (dict): Dictionary of projected edge features.
             projected_nodes (dict): Dictionary of projected node features.
@@ -59,20 +58,18 @@ class InteractionNetwork(nn.Module):
     def forward(self, nodes, edges, data):
         """
         Forward pass of the Interaction Network.
-
         Args:
             nodes (Dict): !!!!
             edges (Dict): !!!!
             senders (Tensor): Indices of sender nodes [num_edges].
             receivers (Tensor): Indices of receiver nodes [num_edges].
-
         Returns:
             Updated nodes and edges.
         """
         # Apply marshalling and relational model phi_r (edge update)
         # phi_r is applied onto src node features, dst node features, and edges
-        device = data["x"].device
-        edge_hidden_dim = edges["('bus', 'ac_line', 'bus')"].shape[-1]
+        device = data["bus"].x.device
+        edge_hidden_dim = (edges.get("('bus', 'ac_line', 'bus')") or edges.get("('bus', 'branch', 'bus')")).shape[-1]
         sent_received_node_type = {node_type: torch.zeros(n.shape[0], edge_hidden_dim, device=device) for node_type, n in nodes.items()}
         updated_nodes_dict = {}
         updated_edges_dict = {}
