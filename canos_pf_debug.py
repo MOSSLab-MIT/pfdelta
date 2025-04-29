@@ -272,7 +272,7 @@ class PFDeltaDataset(InMemoryDataset):
 
 
 class PFDeltaCANOS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
@@ -742,7 +742,7 @@ def CANOSMSE(output_dict, data):
 
 
 if __name__ == "__main__": 
-    case_14_data = PFDeltaCANOS(root_dir='data/gns_data/', case_name='case14', add_bus_type=True, split='train')
+    case_14_data = PFDeltaCANOS(root_dir='data/gns_data/', case_name='case14', split='train')
     model = CANOS_PF(dataset=case_14_data, hidden_dim=128, include_sent_messages=True, k_steps=5)
     device='cpu'
     epochs = 10
