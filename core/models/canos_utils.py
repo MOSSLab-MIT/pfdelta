@@ -16,11 +16,11 @@ class Encoder(nn.Module):
         self.edge_projections = nn.ModuleDict({
             str(edge_type): nn.Linear(data.num_edge_features[edge_type], hidden_size)
             for edge_type in data.num_edge_features.keys() if data.num_edge_features[edge_type] != 0
-                   # so we’re not including subnode links which have no attributes.
+            # not including subnode links which have no attributes.
         })
-
+    
     def forward(self, data):
-        device = data["x"].device
+        device = data["bus"].x.device
         projected_nodes = {
             node_type: self.node_projections[node_type](data[node_type].x)
             for node_type in data.num_node_features.keys()
