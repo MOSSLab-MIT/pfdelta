@@ -109,7 +109,6 @@ class EdgeUpdate(nn.Module):
     def __init__(self, edge_dim, node_dim, hidden_dim, edge_type_dict):
         """
         Edge update function for updating edge features.
-
         Args:
             edge_dim (int): Dimension of edge features.
             node_dim (int): Dimension of node features.
@@ -127,12 +126,10 @@ class EdgeUpdate(nn.Module):
     def forward(self, edges, sender_features, receiver_features, edge_type):
         """
         Compute updated edge features.
-
         Args:
             edges (Tensor): Shape [num_edges, edge_feat_dim].
             sender_features (Tensor): Shape [num_edges, node_feat_dim].
             receiver_features (Tensor): Shape [num_edges, node_feat_dim].
-
         Returns:
             Tensor: Updated edge features of shape [num_edges, out_dim].
         """
@@ -144,7 +141,6 @@ class NodeUpdate(nn.Module):
     def __init__(self, node_dim, hidden_dim, node_type_dict, include_sent_messages=False):
         """
         Node update module for updating node features.
-
         Args:
             input_dim (int): Dimension of node features.
             output_dim (int): Output node feature dimension.
@@ -162,22 +158,21 @@ class NodeUpdate(nn.Module):
     def forward(self, node_features, updated_messages, node_type):
         """
         Compute updated node features.
-
         Args:
             node_features (Tensor): Shape [num_nodes, node_feat_dim].
             received_messages (Tensor): Shape [num_nodes, node_feat_dim].
             sent_messages (Tensor, optional): Shape [num_nodes, node_feat_dim].
-
         Returns:
             Tensor: Updated node features of shape [num_nodes, output_dim].
         """
         x = torch.cat([node_features, updated_messages], dim=-1)
         return self.mlps[node_type](x)
+    
 
 #  Decoder
-class Decoder(nn.Module):
+class DecoderOPF(nn.Module):
     def __init__(self, hidden_size: int):
-        super(Decoder, self).__init__()
+        super(DecoderOPF, self).__init__()
 
         # Linear projection for all node features
         self.node_decodings = nn.ModuleDict({
@@ -215,5 +210,58 @@ class Decoder(nn.Module):
             "bus": torch.stack([output_va, output_vm], dim=1),
             "generator": torch.stack([output_pg, output_qg], dim=1)
         }
+
+        return output_dict
+
+
+class DecoderPF(nn.Module):
+    def __init__(self, hidden_size: int):
+        super(DecoderPF, self).__init__()
+
+        # Linear projection for all node features
+        self.node_decodings = nn.ModuleDict({
+            node_type: nn.Sequential(nn.Linear(hidden_size, 256),
+                                     nn.LayerNorm(256),
+                                     nn.ReLU(),
+                                     nn.Linear(256, 256),
+                                     nn.LayerNorm(256),
+                                     nn.ReLU(),
+                                     nn.Linear(256, 2)
+                                     )
+            for node_type in ["PV", "PQ", "slack"]
+        })
+
+    def forward(self, node_dict, data):
+        
+        device = data["bus"].x.device
+        output_dict = {
+            node_type: self.node_decodings[node_type](node_dict[node_type])
+            for node_type in ["PV", "PQ", "slack"]
+        }
+
+        # Reconstructing the bus-level data
+        num_buses = data["bus"].num_nodes
+        bus_va = torch.zeros(num_buses, device=device)
+        bus_vm = torch.zeros(num_buses, device=device)
+
+        # PQ
+        pq_idx = data["PQ", "PQ_link", "bus"].edge_index[1]
+        pq_outputs = output_dict["PQ"]
+        bus_va[pq_idx] = pq_outputs[:, 0]
+        bus_vm[pq_idx] = pq_outputs[:, 1]
+
+        # PV
+        pv_idx = data["PV", "PV_link", "bus"].edge_index[1]
+        pv_outputs = output_dict["PV"]
+        bus_va[pv_idx] = pv_outputs[:, 1]
+        bus_vm[pv_idx] = data["PV"].x[:, 1]
+
+        # Slack
+        slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+        slack_va_vm = data["slack"].x
+        bus_va[slack_idx] = slack_va_vm[:, 0]
+        bus_vm[slack_idx] = slack_va_vm[:, 1]
+
+        output_dict["bus"] = torch.stack([bus_va, bus_vm], dim=-1)
 
         return output_dict
