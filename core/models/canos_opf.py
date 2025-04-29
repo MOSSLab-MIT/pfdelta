@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch import scatter_add
 import functools
 
-from core.models.canos_utils import Encoder, InteractionNetwork, Decoder, EdgeUpdate, NodeUpdate
+from core.models.canos_utils import Encoder, InteractionNetwork, DecoderOPF, EdgeUpdate, NodeUpdate
 from core.utils.registry import registry
 
 # CANOS Architecture
@@ -37,7 +37,7 @@ class CANOS_OPF(nn.Module):
                                include_sent_messages=include_sent_messages) for _ in range(k_steps))
 
         # Define the decoder to get the model outputs
-        self.decoder = Decoder(hidden_size=hidden_dim)
+        self.decoder = DecoderOPF(hidden_size=hidden_dim)
         self.k_steps = k_steps
 
     def forward(self, data):
