@@ -148,7 +148,6 @@ class PFDeltaDataset(InMemoryDataset):
             demand.append(torch.tensor([pd, qd]))
 
         # Edges
-
         # bus to bus edges
         edge_index, edge_attr, edge_label = [], [], []
         for branch_id_str, branch in sorted(network_data['branch'].items(), key=lambda x: int(x[0])):
@@ -226,6 +225,7 @@ class PFDeltaDataset(InMemoryDataset):
             data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
             if link_name == ('bus', 'branch', 'bus'): 
                 data[link_name].edge_attr = torch.stack(edge_attr) 
+                data[link_name].edge_label = torch.stack(edge_label) 
         
         if self.add_bus_type:
             for link_name, edges in {
