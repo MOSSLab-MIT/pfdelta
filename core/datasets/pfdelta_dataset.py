@@ -360,3 +360,100 @@ class PFDeltaCANOS(PFDeltaDataset):
                 del data[edge_type]
 
         return data
+
+
+class PFDeltaPFNet(PFDeltaDataset): 
+    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+
+    def build_heterodata(self, pm_case):
+        # call base version
+        data = super().build_heterodata(pm_case)
+
+        num_buses = data['bus'].x.size(0)
+        bus_types = data['bus'].bus_type
+        pf_x = data['bus'].x
+        pf_y = data['bus'].y
+        shunts = data['bus'].shunt
+        num_gens = data['gen'].generation.size(0)
+        num_loads = data['load'].demand.size(0)
+
+        # New node features for PFNet
+        x_pfnet = []
+        y_pfnet = []
+        for i in range(num_buses):
+            bus_type = int(bus_types[i].item())
+
+            # One-hot encode bus type
+            one_hot = torch.zeros(4) 
+            one_hot[bus_type - 1] = 1  
+            gs, bs = shunts[i]
+
+            # Prediction mask
+            if bus_type == 1:   # PQ
+                pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
+                va, vm =  pf_y[i] 
+                pd, qd = pf_x[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pd, qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pd, qd, gs, bs])
+            elif bus_type == 2: # PV
+                pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
+                pg_pd, vm =  pf_x[i]
+                qg_qd, va = pf_y[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+            elif bus_type == 3: # Slack
+                pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
+                va, vm =  pf_x[i]
+                pg_pd, qg_qd = pf_y[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+
+            x_pfnet.append(torch.cat([features, pred_mask]))
+            y_pfnet.append(y)
+
+        x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
+        y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
+
+        if self.split == 'train':
+            # Strip one-hot and pred_mask
+            x_cont = x_pfnet[:, 4:10]  # shape [N, 6]
+            y_cont = y_pfnet           # shape [N, 6]
+
+            xy = torch.cat([x_cont, y_cont], dim=0)
+            mean = xy.mean(dim=0, keepdim=True)
+            std = xy.std(dim=0, keepdim=True) + 1e-7
+
+            self.norm_mean = mean
+            self.norm_std = std
+
+            x_cont_norm = (x_cont - mean) / std
+            y_norm = (y_cont - mean) / std
+
+            x_normalized = torch.cat([x_pfnet[:, :4], x_cont_norm, x_pfnet[:, 10:]], dim=1)
+
+            data['bus'].x = x_normalized
+            data['bus'].y = y_norm
+        else:
+            data['bus'].x = x_pfnet
+            data['bus'].y = y_pfnet
+
+        data['gen'].num_nodes = num_gens
+        data['load'].num_nodes = num_loads
+
+        edge_attrs = []
+        for attr in data['bus', 'branch', 'bus'].edge_attr:
+            r, x = attr[0], attr[1]
+            b = attr[2] + attr[4]
+            tau, angle = attr[6], attr[7]
+            edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
+
+        data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+
+        return data
