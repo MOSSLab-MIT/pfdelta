@@ -114,7 +114,7 @@ function create_dataset_seeds(
 		while max_radius > min_distance
 			# Calculate if max_radius is good
 			candidate_seeds = find_maximum_independent_set(g)
-			if length(candidate_seeds) > num_seeds
+			if length(candidate_seeds) >= num_seeds
 				println(
 					"Success! $num_seeds good seeds produced!"
 				)
@@ -233,6 +233,7 @@ function expand_dataset_seeds(
 			push!(seed_origin_data, origin_datum)
 		end
 	end
+	println("Seed expansion has ended! Saving seed origin dictionary and closing...")
 	# Create seed origin and save it
 	for datum in seed_origin_data
 		i, i_range = datum

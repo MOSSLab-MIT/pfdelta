@@ -244,11 +244,9 @@ function find_max_loads(pm; print_level=0, nw=NW_DEFAULT, min_load=0.0,
 		load_bus = loads[load_idx]["load_bus"]
 		pd_max[load_idx] = JuMP.objective_value(model)
 		
-		if print_level > 0
-			println("")
-			println("Load Bus: ", load_bus)
-			println(JuMP.solution_summary(model))
-		end
+		println("")
+		println("Load Bus: ", load_bus)
+		println(JuMP.solution_summary(model))
 		
 		# Check if solution was found & no errors occured
 		status = JuMP.termination_status(model)

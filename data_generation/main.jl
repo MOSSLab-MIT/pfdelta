@@ -101,9 +101,15 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	seeds_needed = trunc(Int, dataset_size * 0.03)
 	samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
 	folder_path = joinpath("$(network_name)_seeds", topology_perturb)
+	if network_name == "case57"
+		portion_of_new_seeds = 0.3
+	else
+		portion_of_new_seeds = 0.1
+	end
+	println("Doing case: $network_name")
 	allseeds = create_dataset_seeds(
 		network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-		min_distance=-2., save_path=folder_path)
+		min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds)
 	println("\n\n\n#########################\n\n\n")
 	expand_dataset_seeds(
 		joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
