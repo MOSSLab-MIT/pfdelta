@@ -91,13 +91,13 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	final_ch = Distributed.RemoteChannel(()->final_chnl, pid)
 	
 	num_procs = nproc - 2  #TASK: Determine why the producer gets stuck running on the main proc
-	
+
 	net_name = net["name"]
 	save_order = vcat(input_vars, output_vars, dual_vars)
     if net_path == ""  # Set net path to save path if not specified for saving network max loads
 		net_path = save_path
 	end
-	
+
 	# Gather network information used during processing
 	A, b, x, results, fnfp_model, base_load_feasible, net_r = initialize(net, pf_min, pf_lagging, pd_max, pd_min,
 																		 input_vars, output_vars, dual_vars,
@@ -115,8 +115,9 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
 						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k,)
 	for proc in procs[2:end]
-		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver, 
-							   sample_ch, final_ch, polytope_ch, result_ch, print_level, model_type,)
+		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver,
+							   sample_ch, final_ch, polytope_ch, result_ch, perturb_topology_method, 
+							   perturb_costs_method, print_level, model_type)
 	end
 
 	results = Distributed.fetch(producer)

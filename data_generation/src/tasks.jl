@@ -13,12 +13,11 @@ sample channel are replaced.
 Runs until the given termination criteria are met.
 """
 function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
-					     K, U, S, V, max_iter, T, num_procs, results, 
-						 discard, variance, reset_level, 
-						 save_while, save_infeasible, stat_track, save_certs,
-						 net_name, dual_vars, save_order, replace_samples,
-						 save_path, sample_ch, polytope_ch, result_ch, final_ch,
-						 print_level, starting_k)
+					     K, U, S, V, max_iter, T, num_procs, results,
+						 discard, variance, reset_level, save_while, save_infeasible,
+						 stat_track, save_certs, net_name, dual_vars, save_order,
+						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
+						 final_ch, print_level, starting_k,)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	
 	AC_inputs = results["inputs"]
@@ -97,10 +96,10 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		# What happens if results are being returned faster than this loop? Put a limit on it? 10 iters per while?
 		num_new_samples = 0
 		prev_k = k
-		while isready(result_ch) & ((k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V))	 & 
-								   (i < max_iter) & ((time() - start_time) < T)
+		while isready(result_ch) & ((k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)) &
+							       (i < max_iter) & ((time() - start_time) < T)
 			# Get sample result from result channel
-			x, result, feasible, new_cert, iter_elapsed_time = take!(result_ch)
+			x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed = take!(result_ch)
 			
 			# Set stats to defaults
 			iter_stats = Dict(:new_cert => new_cert,
@@ -122,6 +121,8 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			i += 1  # Increment iterations
 			
 			if feasible
+				# Save PFDelta info
+				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 				s, u, v, k, iter_stats = store_feasible_sample(s, u, v, k, i, K, iter_stats,
 											  AC_inputs, AC_outputs, duals, dual_vars,
 											  x, result, discard, variance, net_name, 
@@ -184,6 +185,7 @@ the done_ch.
 """
 function sample_processor(net, net_r, r_solver, opf_solver,
 						  sample_ch, done_ch, poly_ch, result_ch,
+						  perturb_topology_method, perturb_costs_method,
 						  print_level=0, model_type=PM.QCLSPowerModel)
 	
 	(print_level > 0) && println("Create FNFP Model...")
@@ -198,22 +200,23 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
 		# Gather sample from sample channel
 		x = take!(sample_ch)
-		
-        # Set network loads to sampled values
-        set_network_load(net, x, scale_load=false)
-		
+
 		######## ADDED FOR PFDELTA #############
 		
 		# Create deepcopy the following perturbations are not carried over for the next samples
 		net_perturbed = deepcopy(net)
-		
+
+        # Set network loads to sampled values
+        set_network_load!(net_perturbed, x, scale_load=false)
+
 		# Perturb topology
 		perturb_topology!(net_perturbed; method=perturb_topology_method)
-		
+
 		# Perturb generator costs
 		perturb_costs!(net_perturbed; method=perturb_costs_method)
-		
+
 		#######################################
+
         # Solve OPF for the load sample
 		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
         # result, feasible = run_ac_opf(net, solver=opf_solver)
@@ -269,8 +272,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		# Puts OPF results to the results channel to be processed by main thread
 		iter_elapsed_time = time() - iter_start_time
 		
-		put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time))
-		store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path,)
+		put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed))
 		i = i + 1
 	end
 end
