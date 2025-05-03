@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 
 from core.utils.pf_losses_utils import GNSPowerBalanceLoss
+from core.utils.registry import registry
 
 
+@registry.register_model("graph_neural_solver")
 class GraphNeuralSolver(nn.Module):
     def __init__(self, K, hidden_dim, gamma):
         super().__init__()

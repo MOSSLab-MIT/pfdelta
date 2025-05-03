@@ -3,8 +3,13 @@ import os
 import torch
 import random
 from tqdm import tqdm
+
 from torch_geometric.data import InMemoryDataset, HeteroData
 
+from core.utils.registry import registry
+
+
+@registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
     def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
@@ -264,6 +269,7 @@ class PFDeltaDataset(InMemoryDataset):
             torch.save((data, slices), os.path.join(self.processed_dir, f'{split}.pt'))
 
 
+@registry.register_dataset("pfdeltaGNS")
 class PFDeltaGNS(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
@@ -339,6 +345,7 @@ class PFDeltaGNS(PFDeltaDataset):
         return data
 
 
+@registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
@@ -362,6 +369,7 @@ class PFDeltaCANOS(PFDeltaDataset):
         return data
 
 
+@registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
