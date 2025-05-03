@@ -154,7 +154,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		x = sampler(A, b, x, 1; sampler_opts...)
 		
         # Set network loads to sampled values
-		set_network_load(net, x, scale_load=false)
+		set_network_load!(net, x, scale_load=false)
 
 		######## ADDED FOR PFDELTA #############
 
@@ -224,7 +224,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 				
 				x_star = vcat(xp_, xq_)
                 x = x_star
-                set_network_load(net_perturbed, x, scale_load=false)
+                set_network_load!(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
 				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
