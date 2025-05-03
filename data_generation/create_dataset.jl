@@ -44,7 +44,8 @@ function create_dataset_seeds(
 	end
 	# Gather initial set
 	results, Anb = point_generator(network, num_seeds; returnAnb=true, save_path=save_path,
-		perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method)
+		perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method,
+		net_path=save_path, save_max_load=true,)
 	print("\n\n\n")
 	A, b = Anb
 	println("Initial seeds produced.")
@@ -151,7 +152,8 @@ function create_dataset_seeds(
 		num_new_seeds = floor(Int, num_seeds * portion_of_new_seeds)
 		new_results, (A, b) = point_generator(network, num_new_seeds; returnAnb=true, A=A, b=b,
 			save_path=save_path, perturb_costs_method=perturb_costs_method,
-			perturb_topology_method=perturb_topology_method, starting_k=num_seeds_produced)
+			perturb_topology_method=perturb_topology_method, starting_k=num_seeds_produced,
+			net_path=save_path, save_max_load=true)
 		print("\n\n\n")
 		P = new_results["inputs"]["pd"]
 		Q = new_results["inputs"]["qd"]
