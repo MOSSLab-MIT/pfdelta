@@ -259,7 +259,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 				xq_[xq_ .< 0] .= 0
                 x = vcat(xp_, xq_)
 
-                set_network_load(net_perturbed, x, scale_load=false)
+                set_network_load!(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
                 # result, feasible = run_ac_opf(net, solver=opf_solver)
