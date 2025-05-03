@@ -86,9 +86,11 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	network_name = ARGS[2]
 	topology_perturb = ARGS[3]
 	if comp_method == "linear"
-		point_generator=OPFLearn.create_samples
+		point_generator = OPFLearn.create_samples
+		parallel = false
 	elseif comp_method == "parallel"
-		point_generator=OPFLearn.dist_create_samples
+		point_generator = OPFLearn.dist_create_samples
+		parallel = true
 	end
 	network = cases[network_name]
 	if topology_perturb == "none"
@@ -106,7 +108,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	else
 		portion_of_new_seeds = 0.1
 	end
-	println("Doing case: $network_name")
+	println("Doing case: $network_name, perturbation: $topology_perturb, and comp method: $comp_method")
 	allseeds = create_dataset_seeds(
 		network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
 		min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds)
@@ -114,6 +116,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	expand_dataset_seeds(
 		joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
 		cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-		perturb_topology_method=topology_perturb, perturb_costs_method="shuffle"
+		perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+		parallel=parallel
 	)
 end

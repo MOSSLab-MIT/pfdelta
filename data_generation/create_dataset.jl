@@ -210,6 +210,7 @@ function expand_dataset_seeds(
 			new_path = joinpath(raw_path, "sample_$real_id.json")
 			cp(seed_raw_path, new_path)
 		end
+		println("Seeds copied!")
 	end
 	# Initialize dictionary to keep track of seed origin, init path too
 	seed_origin = Dict{Int, Vector{Integer}}()
@@ -244,10 +245,11 @@ function expand_dataset_seeds(
 	end
 end
 
+
 function expand_one_seed(i, raw_path, samples_per_seed, num_seeds, seed_expander,
 	sampling_radius, perturb_topology_method, perturb_costs_method, base_case
 )
-	println("## EXPANDING SEED $i")
+	println("### EXPANDING SEED $i / $num_seeds")
 	# Load pm dict
 	raw_seed_path = joinpath(raw_path, "sample_$i.json")
 	raw_dict = JSON.parsefile(raw_seed_path)

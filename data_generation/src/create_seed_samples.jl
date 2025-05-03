@@ -31,7 +31,7 @@ function create_seed_samples(; net, radius, num_samples, base_case,
         if feasible
             k += 1
             store_feasible_sample_json(k + starting_id, net_perturbed, results_pfdelta, path_to_save; seed_id=seed_id)
-            println("Samples: $(k) / $(num_samples),\t Iterations: $(i)")
+            println("Seed: $(seed_id),\t Samples: $(k) / $(num_samples),\t Iterations: $(i)")
         end
     end
 end
