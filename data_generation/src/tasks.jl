@@ -96,7 +96,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		# What happens if results are being returned faster than this loop? Put a limit on it? 10 iters per while?
 		num_new_samples = 0
 		prev_k = k
-		while isready(result_ch) & ((k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)) &
+		while isready(result_ch) & ((k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)) &
 							       (i < max_iter) & ((time() - start_time) < T)
 			# Get sample result from result channel
 			x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed = take!(result_ch)
@@ -141,7 +141,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			end
 
 			if prev_k < k
-				println("Samples: $(k) / $(K),\t Iter: $(i)")
+				println("Samples: $(k - starting_k) / $(K),\t Iter: $(i)")
 				prev_k = k
 			end
 		end
@@ -187,7 +187,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 						  sample_ch, done_ch, poly_ch, result_ch,
 						  perturb_topology_method, perturb_costs_method,
 						  print_level=0, model_type=PM.QCLSPowerModel)
-	
+
 	(print_level > 0) && println("Create FNFP Model...")
 	pm = PowerModels.instantiate_model(net_r, model_type, build_opf_var_load)
 	fnfp_model = find_nearest_feasible_model(pm, print_level=print_level, solver=r_solver)
