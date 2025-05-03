@@ -83,7 +83,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	pid = Distributed.myid()
 	sample_chnl = Distributed.Channel{Any}(4 * nproc) 
 	polytope_chnl = Distributed.Channel{Any}(4 * nproc)  
-	result_chnl = Distributed.Channel{Any}(4 * nproc) 
+	result_chnl = Distributed.Channel{Any}(4 * nproc)
 	final_chnl = Distributed.Channel{Any}(1)
 	sample_ch = Distributed.RemoteChannel(()->sample_chnl, pid)
 	polytope_ch = Distributed.RemoteChannel(()->polytope_chnl, pid)
@@ -113,11 +113,10 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k)
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k,)
 	for proc in procs[2:end]
 		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver, 
-							   sample_ch, final_ch, polytope_ch, result_ch,
-							   print_level, model_type)
+							   sample_ch, final_ch, polytope_ch, result_ch, print_level, model_type,)
 	end
 
 	results = Distributed.fetch(producer)
