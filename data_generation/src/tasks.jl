@@ -122,12 +122,12 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			
 			if feasible
 				# Save PFDelta info
-				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 				s, u, v, k, iter_stats = store_feasible_sample(s, u, v, k, i, K, iter_stats,
 											  AC_inputs, AC_outputs, duals, dual_vars,
 											  x, result, discard, variance, net_name, 
 											  now_str, save_path, save_while, save_order,
 											  print_level)
+				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 				
 			elseif !isnothing(result)  # Infeasible
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
