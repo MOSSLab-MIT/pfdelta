@@ -421,6 +421,12 @@ class BaseTrainer:
             # Do any post setup before each epoch
             self.setup_post_epoch()
 
+            # Early stopping condition
+            stop_now = self.early_stop_now()
+            if stop_now:
+                print("\n## Early stop triggered...")
+                break
+
             # End training condition
             if self.max_epoch is None:
                 if self.train_step >= self.max_train_step - 1:
@@ -439,6 +445,64 @@ class BaseTrainer:
         if self.postprocess is not None:
             self.postprocess_method()
         print()
+
+
+    def early_stop_now(self,):
+        val_params = self.config["optim"]["val_params"]
+        time_to_stop = False
+
+        # Only calculate early stop if included and if it is a report_every epoch
+        if "early_stop" not in val_params:
+            return time_to_stop
+
+        # Gather early stop information
+        curr_point = self.train_step if self.max_epoch is None else self.epoch
+        report_every = val_params["report_every"]
+        decrease_for = val_params["early_stop"]["decrease_for"]
+        decrease_by = val_params["early_stop"]["decrease_by"]
+        assert report_every % decrease_for, \
+            "report_every needs to divide decrease_for evenly!"
+
+        # Cannot do early stop too early
+        if curr_point < decrease_for:
+            return time_to_stop
+
+        # Should only check if this is a val error epoch/train step
+        if (curr_point + 1) % report_every == 0:
+            # Calculate good differences
+            too_small = True
+            for i in range(
+                    curr_point - decrease_for,
+                    curr_point - report_every + 1,
+                    report_every
+            ):
+                # Gather step info
+                prev = self.val_errors[str(i)]
+                curr = self.val_errors[str(i + report_every)]
+                # Gather leading error
+                lead_err = list(prev[0].keys())[0]
+                # Average lead error over all val errors
+                prev_err = sum([val[lead_err] for val in prev]) / len(prev)
+                curr_err = sum([val[lead_err] for val in curr]) / len(prev)
+                # Calculate if error decrease is enough
+                if abs((prev_err - curr_err) / prev_err) <= decrease_by:
+                    too_small = too_small and True
+                else:
+                    too_small = False
+            # Verify best epoch happened recently
+            needs_best_every = val_params["early_stop"]["needs_best_every"]
+            recent_improvement = False
+            if abs(int(self.best_point) - curr_point) <= needs_best_every:
+                recent_improvement = True
+
+            # Set if it is time to stop
+            time_to_stop = not recent_improvement or too_small
+            if not recent_improvement:
+                print(f"\nBest point was more than {needs_best_every} epochs/train steps ago!")
+            if too_small:
+                print(f"\nNo sufficient improvement seen in {decrease_for} epochs/train steps!")
+
+        return time_to_stop
 
 
     def postprocess_method(self,):
