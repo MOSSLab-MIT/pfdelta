@@ -3,6 +3,7 @@ import os
 import torch
 import random
 from tqdm import tqdm
+import numpy as np
 
 from torch_geometric.data import InMemoryDataset, HeteroData
 
