@@ -109,15 +109,24 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 		portion_of_new_seeds = 0.1
 	end
 	println("Doing case: $network_name, perturbation: $topology_perturb, and comp method: $comp_method")
-	allseeds = create_dataset_seeds(
-		network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-		min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds,
-		point_generator=point_generator)
-	println("\n\n\n#########################\n\n\n")
-	expand_dataset_seeds(
-		joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
-		cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-		perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-		parallel=parallel
-	)
+	if length(ARGS) == 4 && ARGS[4] == "just_expansion"
+		expand_dataset_seeds(
+			joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
+			cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
+			perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+			parallel=parallel
+		)
+	else
+		allseeds = create_dataset_seeds(
+			network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+			min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds,
+			point_generator=point_generator)
+		println("\n\n\n#########################\n\n\n")
+		expand_dataset_seeds(
+			joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
+			cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
+			perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+			parallel=parallel
+		)
+	end
 end

@@ -122,7 +122,7 @@ function create_dataset_seeds(
 				println("Successful radius: $max_radius")
 				println("Saving them...")
 				ds_results = Dict(
-					"good_seeds" => candidate_seeds,
+					"good_seeds" => candidate_seeds .- 1, # Index at 0
 					"all_seeds" => seeds,
 					"max_radius" => max_radius
 				)
