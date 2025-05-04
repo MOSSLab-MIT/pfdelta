@@ -9,20 +9,57 @@ from torch_geometric.data import InMemoryDataset, HeteroData
 
 from core.utils.registry import registry
 
-
+# properties to maintain robust inmemorydataset
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
         self.add_bus_type = add_bus_type
-        root = os.path.join(root_dir, case_name)
-        super().__init__(root, transform, pre_transform, pre_filter, force_reload=force_reload)
+        self.task = task
+        self.model = model
+        self.root = os.path.join(root_dir)
+        super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.processed_paths[self._split_to_idx()]) 
 
+        self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+        self.task_config = {
+            1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
+            1.2: {"feasible":{"none": 27000, "n-1": 27000, "n-2": 0}},
+            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            2.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            2.2: {"feasible":{"none": 12000, "n-1": 12000, "n-2": 12000}},
+            2.3: {"feasible":{"none": 6000,  "n-1": 6000,  "n-2": 6000}},
+            3.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            3.2: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            3.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            4.1: {"feasible": {}, "near infeasible": {}}, 
+            4.2: {"feasible": {}, "approaching infeasible": {}, "near infeasible": {}},
+        } 
+        self.feasibility_config = {
+            "feasible": {
+                "none": 56000,
+                "n-1": 29000,
+                "n-2": 20000,
+                "test": {"none": 2000, "n-1": 2000, "n-2": 2000}
+            },
+            "approaching infeasible": {
+                "none": 7200,
+                "n-1": 7200,
+                "n-2": 7200,
+                "test": None  # no test set for this regime
+            },
+            "near infeasible": {
+                "none": 2000,
+                "n-1": 2000,
+                "n-2": 2000,
+                "test": {"none": 200, "n-1": 200, "n-2": 200}
+            },
+        }
+
     def _split_to_idx(self):
-        return {'train': 0, 'val': 1, 'test': 2, 'all': 3}[self.split]
+        return {'train': 0, 'val': 1, 'test': 2}[self.split]
 
     @property
     def raw_file_names(self):
@@ -30,7 +67,7 @@ class PFDeltaDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ['train.pt', 'val.pt', 'test.pt', 'all.pt']
+        return ['train.pt', 'val.pt', 'test.pt']
 
     def build_heterodata(self, pm_case):
         data = HeteroData()
@@ -244,30 +281,76 @@ class PFDeltaDataset(InMemoryDataset):
                 data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
 
         return data
+    
+    def shuffle_split_and_save_data(self, root): 
+
+        task, model = self.task, self.model 
+        task_config = self.task_config[task]
+
+        for feasibility, train_cfg_dict in task_config.items():
+            feasibility_config = self.feasibility_config[feasibility]
+
+            for grid_type in ["none", "n-1", "n-2"]:
+                train_size = train_cfg_dict[grid_type]
+                test_cfg = feasibility_config.get("test", {})
+                test_size = test_cfg.get(grid_type) if test_cfg else 0
+
+                shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
+                with open(shuffle_path, "r") as f:
+                    shuffle_dict = json.load(f)
+                shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
+
+                raw_path = os.path.join(root, grid_type, "raw")
+                raw_fnames = [os.path.join(raw_path, f"sample_{i+1}.json") for i in shuffle_map.keys()]
+                fnames_shuffled = [raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()]
+
+                # extend the lists instead of overwriting
+                split_dict = {
+                        'train': fnames_shuffled[:int(0.9 * train_size)],
+                        'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
+                        'test': fnames_shuffled[:-int(test_size)],
+                    }
+                
+                for split, files in split_dict.items():
+                    data_list = []
+                    print(f"Processing split: {model} {task} {split} ({len(files)} files)")
+                    for fname in tqdm(files, desc=f"Building {split} data"):
+                        with open(os.path.join(raw_path, fname)) as f:
+                            pm_case = json.load(f)
+                        data = self.build_heterodata(pm_case)
+                        data_list.append(data)
+
+                    data, slices = self.collate(data_list)
+                    processed_path = os.path.join(self.root, f"{grid_type}/processed/task_{task}_{model}")
+                    torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+
 
     def process(self):
-        fnames = self.raw_file_names
-        random.shuffle(fnames)
-        n = len(fnames)
+        task = self.task
 
-        split_dict = {
-            'train': fnames[:int(0.8 * n)],
-            'val': fnames[int(0.8 * n): int(0.9 * n)],
-            'test': fnames[int(0.9 * n):],
-            'all': fnames  # 👈 this uses all samples
-        }
+        if task in [3.1, 3.2, 3.3]:
+            roots = [os.path.join(self.root_dir, case) for case in self.all_case_names] 
+        else:
+            roots = [os.path.join(self.root_dir, self.case_name)]
 
-        for split, files in split_dict.items():
-            data_list = []
-            print(f"Processing split: {split} ({len(files)} files)")
-            for fname in tqdm(files, desc=f"Building {split} data"):
-                with open(os.path.join(self.raw_dir, fname)) as f:
-                    pm_case = json.load(f)
-                data = self.build_heterodata(pm_case)
-                data_list.append(data)
+        for root in roots:
+            print(f"Processing task: {task}")
+            self.shuffle_split_and_save_data(root)
+    
 
-            data, slices = self.collate(data_list)
-            torch.save((data, slices), os.path.join(self.processed_dir, f'{split}.pt'))
+    def load(self):
+        task = self.task
+
+        if task == 3.1: 
+            # only load the casename in self.casename for train 
+            # load every casename for test 
+            pass 
+        elif task == 3.2: 
+            pass 
+        elif task == 3.3: 
+            pass 
+        else:
+            # load the casename train, val, test across perturbations and concatenate
 
 
 @registry.register_dataset("pfdeltaGNS")
