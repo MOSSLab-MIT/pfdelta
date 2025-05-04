@@ -5,19 +5,19 @@ import json
 
 
 FEASIBILITY_CONFIG = {
-    "just feasible": {
+    "feasible": {
         "none": 56000,
         "n-1": 29000,
         "n-2": 20000,
         "test": {"none": 2000, "n-1": 2000, "n-2": 2000}
     },
-    "around the nose": {
+    "approaching infeasible": {
         "none": 7200,
         "n-1": 7200,
         "n-2": 7200,
         "test": None  # no test set for this regime
     },
-    "just the nose": {
+    "near infeasible": {
         "none": 2000,
         "n-1": 2000,
         "n-2": 2000,
@@ -32,7 +32,7 @@ TASK_CONFIG = {
     2.1: {"none": 18000, "n-1": 18000, "n-2": 18000},
     2.2: {"none": 12000, "n-1": 12000, "n-2": 12000},
     2.3: {"none": 6000,  "n-1": 6000,  "n-2": 6000},
-    3.1: {"none": 18000, "n-1": 18000, "n-2": 18000},``
+    3.1: {"none": 18000, "n-1": 18000, "n-2": 18000},
     3.2: {"none": 18000, "n-1": 18000, "n-2": 18000},
     3.3: {"none": 18000, "n-1": 18000, "n-2": 18000}, # can add 4.1 and 4.2 later? 
 }
