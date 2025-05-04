@@ -1,5 +1,5 @@
 export create_samples, dist_create_samples, save_results_csv, save_stats, 
-	   save_polytope, results_to_array
+	   save_polytope, results_to_array, create_samples_distributed
 export sample_polytope_cprnd, sample_uniform, sample_uniform_w_pf
 
 import Distributed

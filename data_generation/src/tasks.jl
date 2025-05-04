@@ -194,11 +194,11 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		# Gather sample from sample channel
 		x = take!(sample_ch)
 		
-        # Set network loads to sampled values
+        # Set network loads to sampled values # add here other perturbations
         set_network_load(net, x, scale_load=false)
 		
         # Solve OPF for the load sample
-        result, feasible = run_ac_opf(net, solver=opf_solver)
+        result, feasible = run_ac_opf(net, solver=opf_solver) # change here to run_ac_opf_pfdelta
         println("OPF SUCCESS: " * string(feasible))
 		
 		new_cert = false  # Default for iteration stat tracking
@@ -240,7 +240,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
                 set_network_load(net, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
-                result, feasible = run_ac_opf(net, solver=opf_solver)
+                result, feasible = run_ac_opf(net, solver=opf_solver) # change to our opf formulation
                 println("FNFP OPF SUCCESS: " * string(feasible))	
 			end
 		end

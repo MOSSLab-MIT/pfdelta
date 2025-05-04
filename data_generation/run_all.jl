@@ -1,3 +1,5 @@
+using Distributed
+
 using Pkg
 Pkg.activate(@__DIR__)
 
@@ -8,33 +10,48 @@ using Printf
 using JSON
 
 # Define the cases
-K = 10_000
 timestamp = Dates.format(Dates.now(), "yyyy-mm-dd_HH-MM-SS")
 base_save_path = joinpath("my_results", timestamp)
 mkpath(base_save_path)
 
 cases = [
     (
-        name = "case14",
-        file = "pglib_opf_case14_ieee.m",
-        K = K,
-        net_path = "pglib",
-        save_path = joinpath(base_save_path, "case14")
-    ),
-    (
+        K = 56_000,
         name = "case57",
         file = "pglib_opf_case57_ieee.m",
-        K = K,
         net_path = "pglib",
-        save_path = joinpath(base_save_path, "case57")
+        save_path = joinpath(base_save_path, "case57_n"),
+        perturb_topology_method = "none"
     ),
     (
-        name = "case118",
-        file = "pglib_opf_case118_ieee.m",
-        K = K,
+        K = 29_000,
+        name = "case57",
+        file = "pglib_opf_case57_ieee.m",
         net_path = "pglib",
-        save_path = joinpath(base_save_path, "case118")
-    )#,
+        save_path = joinpath(base_save_path, "case57_n_minus_1"),
+        perturb_topology_method = "n-1"
+    ), 
+    (
+        K = 20_000,
+        name = "case57",
+        file = "pglib_opf_case57_ieee.m",
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case57_n_minus_2"),
+        perturb_topology_method = "n-2"
+    )
+    #     name = "case57",
+    #     file = "pglib_opf_case57_ieee.m",
+    #     K = K,
+    #     net_path = "pglib",
+    #     save_path = joinpath(base_save_path, "case57")
+    # ),
+    # (
+    #     name = "case118",
+    #     file = "pglib_opf_case118_ieee.m",
+    #     K = K,
+    #     net_path = "pglib",
+    #     save_path = joinpath(base_save_path, "case118")
+    #)#,
     # (
     #     name = "case2000",
     #     file = "pglib_opf_case2000_goc.m",
@@ -61,7 +78,7 @@ for case in cases
             save_path   = case.save_path,
             save_while  = true,
             print_level = 1, 
-            perturb_topology_method = "n-1", 
+            perturb_topology_method = case.perturb_topology_method, 
             perturb_costs_method = "shuffle"
         )
     catch e
