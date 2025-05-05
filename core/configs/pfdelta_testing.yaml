@@ -1,0 +1,52 @@
+config_type: experiment
+model:
+  name: canos_pf
+  dataset: _include_
+  hidden_dim: 64
+  include_sent_messages: True
+  k_steps: 5
+dataset:
+  datasets:
+  - name: pfdeltaCANOS
+    root_dir: data/pfdelta_data
+    case_name: case14_seeds
+    split: train
+    model: CANOS
+    task: 1.3
+    add_bus_type: True
+  - name: pfdeltaCANOS
+    root_dir: data/pfdelta_data
+    case_name: case14_seeds
+    split: val
+    model: CANOS
+    task: 1.3
+    add_bus_type: True
+optim:
+  optimizer:
+    name: "Adam"
+    lr: 0.001
+    weight_decay: 0.
+  lr_scheduler:
+    name: SequentialLR
+    milestones:
+    - 5000 # SCALE THIS
+    schedulers:
+    - name: LinearLR
+      start_factor: 0.01
+      end_factor: 1
+    - name: StepLR
+      gamma: 0.9
+      step_size: 4000 # SCALE THIS
+  train_params:
+    # epochs: 5
+    train_steps: 150000 # SCALE THIS
+    batch_size: 64
+    train_loss:
+    - name: pf_constraint_violation
+  val_params:
+    report_every: 8438 # 8438 # SCALE THIS
+    batch_size: 64
+    val_loss:
+    - name: pf_constraint_violation
+functional:
+  trainer_name: gnn_trainer
