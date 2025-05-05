@@ -279,7 +279,8 @@ class PFDeltaDataset(InMemoryDataset):
         }.items():
             edge_tensor = torch.stack(edges, dim=1) 
             data[link_name].edge_index = edge_tensor
-            data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
+            if link_name != ('bus', 'branch', 'bus'):
+                data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
             if link_name == ('bus', 'branch', 'bus'): 
                 data[link_name].edge_attr = torch.stack(edge_attr) 
                 data[link_name].edge_label = torch.stack(edge_label) 
