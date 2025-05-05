@@ -10,6 +10,7 @@ from torch_geometric.data import InMemoryDataset, HeteroData
 from core.utils.registry import registry
 
 # properties to maintain robust inmemorydataset
+# TODO: make sure to implement the logic for all the "nose" cases too
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
     def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
@@ -321,7 +322,7 @@ class PFDeltaDataset(InMemoryDataset):
                         data_list.append(data)
 
                     data, slices = self.collate(data_list)
-                    processed_path = os.path.join(self.root, f"{grid_type}/processed/task_{task}_{model}")
+                    processed_path = os.path.join(self.root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
                     torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
 
 
@@ -329,9 +330,9 @@ class PFDeltaDataset(InMemoryDataset):
         task = self.task
 
         if task in [3.1, 3.2, 3.3]:
-            roots = [os.path.join(self.root_dir, case) for case in self.all_case_names] 
+            roots = [os.path.join(self.root, case) for case in self.all_case_names] 
         else:
-            roots = [os.path.join(self.root_dir, self.case_name)]
+            roots = [os.path.join(self.root, self.case_name)]
 
         for root in roots:
             print(f"Processing task: {task}")
@@ -339,7 +340,8 @@ class PFDeltaDataset(InMemoryDataset):
     
 
     def load(self):
-        task = self.task
+        task, model = self.task, self.model
+        task_config = self.task_config[task]
 
         if task == 3.1: 
             # only load the casename in self.casename for train 
@@ -350,7 +352,26 @@ class PFDeltaDataset(InMemoryDataset):
         elif task == 3.3: 
             pass 
         else:
-            # load the casename train, val, test across perturbations and concatenate
+            path = os.path.join(self.root, self.case_name)
+            processed_paths = [
+                os.path.join(path, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                for grid_type in ["none", "n-1", "n-2"]
+                for feasibility in task_config.keys()
+            ]
+
+            train_data = []
+            val_data = [] 
+            test_data = []
+
+            for p in processed_paths:
+                train_path = os.path.join(p, "train.pt")
+                val_path = os.path.join(p, "val.pt")
+                test_path = os.path.join(p, "test.pt")
+                train_data.extend(torch.load(train_path))
+                val_data.extend(torch.load(val_path))
+                test_data.extend(torch.load(test_path))
+        
+        return train_data, val_data, test_data
 
 
 @registry.register_dataset("pfdeltaGNS")
