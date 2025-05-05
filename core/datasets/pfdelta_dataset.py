@@ -12,11 +12,6 @@ from torch_geometric.data.collate import collate
 
 from core.utils.registry import registry
 
-def to_list(value: Any) -> Sequence:
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return value
-    else:
-        return [value]
 
 # TODO: make sure to implement the logic for all the "nose" cases too
 @registry.register_dataset("pfdeltadata")
@@ -361,7 +356,6 @@ class PFDeltaDataset(InMemoryDataset):
         
         return all_data_lists
 
-
     def process(self):
         task, model = self.task, self.model
         casename = None
@@ -389,9 +383,6 @@ class PFDeltaDataset(InMemoryDataset):
             for split in combined_data_lists.keys():
                 combined_data_lists[split].extend(task_data_lists[split])
         
-        # # For task-level combined data, save in the main root directory
-        # main_root = self.root
-        
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
                 print(f"Collating combined {split} data with {len(data_list)} samples")
@@ -407,7 +398,6 @@ class PFDeltaDataset(InMemoryDataset):
                     
                 torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
                 print(f"Saved combined {split} data with {len(data_list)} samples")
-
 
     def load(self, split):
         """Loads dataset for the specified split.

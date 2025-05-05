@@ -1,5 +1,5 @@
 # Trainer for GNNs
-
+import copy
 from tqdm import tqdm
 
 import torch
@@ -20,6 +20,9 @@ class GNNTrainer(BaseTrainer):
         losses = [0.]*len(self.train_loss)
         message = f"Epoch {self.epoch + 1} \U0001F3CB"
         for data in tqdm(train_dataloader, desc=message):
+            # Copy data in case models overwrite inputs
+            data = copy.deepcopy(data)
+
             # Move data to device
             data = data.to(self.device)
 

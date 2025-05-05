@@ -25,7 +25,7 @@ class GraphNeuralSolver(nn.Module):
         )
         self.power_balance = GNSPowerBalanceLoss()
 
-    def forward(self, data):  
+    def forward(self, data, return_data=False):  
         """ """
         device = data['bus'].x.device 
 
@@ -46,7 +46,14 @@ class GraphNeuralSolver(nn.Module):
             # Apply the neural network update block 
             self.apply_nn_update(data, k)
         
-        return data, total_layer_loss
+        last_loss = self.local_power_imbalance(data, layer_loss=True)
+        total_layer_loss += last_loss * (self.gamma ** 0)
+        out_dict = {
+            "last_loss": last_loss,
+            "total_layer_loss": total_layer_loss,
+            "data": data
+        }
+        return out_dict
 
 
     def global_active_compensation(self, data):
@@ -206,7 +213,7 @@ class GraphNeuralSolver(nn.Module):
 
         # Compute messages along edges
         edge_input = torch.cat([m_src, line_ij], dim=1) 
-        messages = self.phi(edge_input)  
+        messages = self.phi(edge_input)
 
         # Aggregate messages to each destination node
         num_nodes = data['bus'].x.size(0)
