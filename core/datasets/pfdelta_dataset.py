@@ -4,10 +4,19 @@ import torch
 import random
 from tqdm import tqdm
 import numpy as np
+from typing import Callable, Sequence, Any
+from collections import defaultdict
 
 from torch_geometric.data import InMemoryDataset, HeteroData
+from torch_geometric.data.collate import collate
 
 from core.utils.registry import registry
+
+def to_list(value: Any) -> Sequence:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return value
+    else:
+        return [value]
 
 # properties to maintain robust inmemorydataset
 # TODO: make sure to implement the logic for all the "nose" cases too
@@ -21,14 +30,15 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
-        self.load(self.processed_paths[self._split_to_idx()]) 
+        self._custom_processed_dir = os.path.join(self.root, case_name, "none", f"processed/task_{task}_feasible_{model}")
+        # self.load(self.processed_paths[self._split_to_idx()]) 
 
         self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
             1.2: {"feasible":{"none": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}}, # FEASIBILITY FOR TEST NOT INCLUDED
             2.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.2: {"feasible":{"none": 12000, "n-1": 12000, "n-2": 12000}},
             2.3: {"feasible":{"none": 6000,  "n-1": 6000,  "n-2": 6000}},
@@ -59,12 +69,19 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
+        super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
+        self.load(self.split)
+
     def _split_to_idx(self):
         return {'train': 0, 'val': 1, 'test': 2}[self.split]
 
     @property
     def raw_file_names(self):
         return sorted([f for f in os.listdir(self.raw_dir) if f.endswith('.json')])
+    
+    @property
+    def processed_dir(self):
+        return self._custom_processed_dir
 
     @property
     def processed_file_names(self):
@@ -282,7 +299,95 @@ class PFDeltaDataset(InMemoryDataset):
                 data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
 
         return data
-    
+
+
+    def data_merger(self, all_data, all_slices):
+        merged_data = HeteroData()
+        merged_slices = {}
+
+        # Track cumulative node counts per node type for edge index offsetting
+        node_type_cumsum = {}
+
+        for data, slices in zip(all_data, all_slices):
+            for node_type in data.node_types:
+                for attr in data[node_type].keys():
+                    tensor = data[node_type][attr]
+                    slice_ = slices[node_type][attr]
+
+                    # Offset tensor if needed
+                    if attr not in merged_data[node_type]:
+                        merged_data[node_type][attr] = tensor
+                        offset = 0 
+                    else:
+                        offset = merged_data[node_type][attr].size(0)
+                        merged_data[node_type][attr] = torch.cat(
+                            [merged_data[node_type][attr], tensor], dim=0
+                        )
+
+                    # Slice adjustments
+                    new_slice = slice_ + offset
+                    if node_type not in merged_slices:
+                        merged_slices[node_type] = {}
+                    if attr not in merged_slices[node_type]:
+                        merged_slices[node_type][attr] = torch.tensor([]).to(new_slice.dtype)
+                    if len(merged_slices[node_type][attr]) == 0:
+                        merged_slices[node_type][attr] = torch.cat([
+                            merged_slices[node_type][attr],
+                            new_slice
+                        ])
+                    else:
+                        merged_slices[node_type][attr] = torch.cat([
+                            merged_slices[node_type][attr],
+                            new_slice[1:]
+                        ])
+
+                if node_type not in node_type_cumsum:
+                    node_type_cumsum[node_type] = 0
+                # Track node offset for this type
+            # TODO: fix the merging for edge types
+            for edge_type in data.edge_types:
+                for attr in data[edge_type].keys():
+                    tensor = data[edge_type][attr]
+                    slice_ = slices[edge_type][attr]
+
+                    # Offset edge_index by source node count
+                    if attr == "edge_index":
+                        src_type, _, dst_type = edge_type
+                        tensor[0] = tensor[0] + node_type_cumsum[src_type]
+                        tensor[1] = tensor[1] + node_type_cumsum[dst_type]
+
+                    if attr not in merged_data[edge_type]:
+                        merged_data[edge_type][attr] = tensor
+                        offset = 0
+                    else:
+                        offset = merged_data[edge_type][attr].size(0)
+                        merged_data[edge_type][attr] = torch.cat(
+                            [merged_data[edge_type][attr], tensor], dim=1 if attr == "edge_index" else 0
+                        )
+
+                    # Slice adjustments
+                    new_slice = slice_ + offset
+                    if edge_type not in merged_slices:
+                        merged_slices[edge_type] = {}
+                    if attr not in merged_slices[edge_type]:
+                        merged_slices[edge_type][attr] = torch.tensor([]).to(new_slice.dtype)
+                    if len(merged_slices[edge_type][attr]) == 0:
+                        merged_slices[edge_type][attr] = torch.cat([
+                            merged_slices[edge_type][attr],
+                            new_slice
+                        ])
+                    else:
+                        merged_slices[edge_type][attr] = torch.cat([
+                            merged_slices[edge_type][attr],
+                            new_slice[1:]
+                        ])
+
+            for node_type in data.node_types:
+                node_type_cumsum[node_type] += data[node_type].num_nodes
+
+        return merged_data, merged_slices
+
+
     def shuffle_split_and_save_data(self, root): 
 
         task, model = self.task, self.model 
@@ -309,20 +414,26 @@ class PFDeltaDataset(InMemoryDataset):
                 split_dict = {
                         'train': fnames_shuffled[:int(0.9 * train_size)],
                         'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
-                        'test': fnames_shuffled[:-int(test_size)],
+                        'test': fnames_shuffled[-int(test_size):],
                     }
-                
+
                 for split, files in split_dict.items():
                     data_list = []
-                    print(f"Processing split: {model} {task} {split} ({len(files)} files)")
+                    print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
                     for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(os.path.join(raw_path, fname)) as f:
+                        with open(fname, "r") as f:
                             pm_case = json.load(f)
                         data = self.build_heterodata(pm_case)
                         data_list.append(data)
 
                     data, slices = self.collate(data_list)
-                    processed_path = os.path.join(self.root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                    processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                    
+                    if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
+                        os.mkdir(os.path.join(root, f"{grid_type}/processed"))
+                    if not os.path.exists(processed_path):
+                        os.mkdir(processed_path)
+
                     torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
 
 
@@ -330,7 +441,7 @@ class PFDeltaDataset(InMemoryDataset):
         task = self.task
 
         if task in [3.1, 3.2, 3.3]:
-            roots = [os.path.join(self.root, case) for case in self.all_case_names] 
+            roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names] 
         else:
             roots = [os.path.join(self.root, self.case_name)]
 
@@ -339,7 +450,7 @@ class PFDeltaDataset(InMemoryDataset):
             self.shuffle_split_and_save_data(root)
     
 
-    def load(self):
+    def load(self, split):
         task, model = self.task, self.model
         task_config = self.task_config[task]
 
@@ -359,25 +470,21 @@ class PFDeltaDataset(InMemoryDataset):
                 for feasibility in task_config.keys()
             ]
 
-            train_data = []
-            val_data = [] 
-            test_data = []
+            split_data, split_slices = [], []
 
             for p in processed_paths:
-                train_path = os.path.join(p, "train.pt")
-                val_path = os.path.join(p, "val.pt")
-                test_path = os.path.join(p, "test.pt")
-                train_data.extend(torch.load(train_path))
-                val_data.extend(torch.load(val_path))
-                test_data.extend(torch.load(test_path))
-        
-        return train_data, val_data, test_data
+                split_path = os.path.join(p, f"{split}.pt")
+                data, slices = torch.load(split_path)
+                split_data.append(data)
+                split_slices.append(slices)
+
+            self.data, self.slices = self.data_merger(split_data, split_slices)
 
 
 @registry.register_dataset("pfdeltaGNS")
 class PFDeltaGNS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="GNS", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
@@ -452,8 +559,8 @@ class PFDeltaGNS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
@@ -476,8 +583,8 @@ class PFDeltaCANOS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
