@@ -18,7 +18,6 @@ def to_list(value: Any) -> Sequence:
     else:
         return [value]
 
-# properties to maintain robust inmemorydataset
 # TODO: make sure to implement the logic for all the "nose" cases too
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
@@ -30,8 +29,10 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        self._custom_processed_dir = os.path.join(self.root, case_name, "none", f"processed/task_{task}_feasible_{model}")
-        # self.load(self.processed_paths[self._split_to_idx()]) 
+        if task in [3.2, 3.3]: # TODO: add a flag to specify the specific processed dir!
+            self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_")
+        else: 
+            self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}")
 
         self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
 
@@ -300,98 +301,18 @@ class PFDeltaDataset(InMemoryDataset):
 
         return data
 
-
-    def data_merger(self, all_data, all_slices):
-        merged_data = HeteroData()
-        merged_slices = {}
-
-        # Track cumulative node counts per node type for edge index offsetting
-        node_type_cumsum = {}
-
-        for data, slices in zip(all_data, all_slices):
-            for node_type in data.node_types:
-                for attr in data[node_type].keys():
-                    tensor = data[node_type][attr]
-                    slice_ = slices[node_type][attr]
-
-                    # Offset tensor if needed
-                    if attr not in merged_data[node_type]:
-                        merged_data[node_type][attr] = tensor
-                        offset = 0 
-                    else:
-                        offset = merged_data[node_type][attr].size(0)
-                        merged_data[node_type][attr] = torch.cat(
-                            [merged_data[node_type][attr], tensor], dim=0
-                        )
-
-                    # Slice adjustments
-                    new_slice = slice_ + offset
-                    if node_type not in merged_slices:
-                        merged_slices[node_type] = {}
-                    if attr not in merged_slices[node_type]:
-                        merged_slices[node_type][attr] = torch.tensor([]).to(new_slice.dtype)
-                    if len(merged_slices[node_type][attr]) == 0:
-                        merged_slices[node_type][attr] = torch.cat([
-                            merged_slices[node_type][attr],
-                            new_slice
-                        ])
-                    else:
-                        merged_slices[node_type][attr] = torch.cat([
-                            merged_slices[node_type][attr],
-                            new_slice[1:]
-                        ])
-
-                if node_type not in node_type_cumsum:
-                    node_type_cumsum[node_type] = 0
-                # Track node offset for this type
-            # TODO: fix the merging for edge types
-            for edge_type in data.edge_types:
-                for attr in data[edge_type].keys():
-                    tensor = data[edge_type][attr]
-                    slice_ = slices[edge_type][attr]
-
-                    # Offset edge_index by source node count
-                    if attr == "edge_index":
-                        src_type, _, dst_type = edge_type
-                        tensor[0] = tensor[0] + node_type_cumsum[src_type]
-                        tensor[1] = tensor[1] + node_type_cumsum[dst_type]
-
-                    if attr not in merged_data[edge_type]:
-                        merged_data[edge_type][attr] = tensor
-                        offset = 0
-                    else:
-                        offset = merged_data[edge_type][attr].size(0)
-                        merged_data[edge_type][attr] = torch.cat(
-                            [merged_data[edge_type][attr], tensor], dim=1 if attr == "edge_index" else 0
-                        )
-
-                    # Slice adjustments
-                    new_slice = slice_ + offset
-                    if edge_type not in merged_slices:
-                        merged_slices[edge_type] = {}
-                    if attr not in merged_slices[edge_type]:
-                        merged_slices[edge_type][attr] = torch.tensor([]).to(new_slice.dtype)
-                    if len(merged_slices[edge_type][attr]) == 0:
-                        merged_slices[edge_type][attr] = torch.cat([
-                            merged_slices[edge_type][attr],
-                            new_slice
-                        ])
-                    else:
-                        merged_slices[edge_type][attr] = torch.cat([
-                            merged_slices[edge_type][attr],
-                            new_slice[1:]
-                        ])
-
-            for node_type in data.node_types:
-                node_type_cumsum[node_type] += data[node_type].num_nodes
-
-        return merged_data, merged_slices
-
-
     def shuffle_split_and_save_data(self, root): 
-
+        # TODO: implement logic for what train and test splits to save for a given task so that it gets saved correctly later
+        # when being combined
         task, model = self.task, self.model 
         task_config = self.task_config[task]
+
+        # create dicts to store all data lists per task for later concatenation
+        all_data_lists = {
+            'train': [],
+            'val': [],
+            'test': []
+        }
 
         for feasibility, train_cfg_dict in task_config.items():
             feasibility_config = self.feasibility_config[feasibility]
@@ -435,50 +356,67 @@ class PFDeltaDataset(InMemoryDataset):
                         os.mkdir(processed_path)
 
                     torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                    all_data_lists[split].extend(data_list)
+        
+        return all_data_lists
 
 
     def process(self):
-        task = self.task
+        task, model = self.task, self.model
+        casename = None
+        combined_data_lists = {
+            'train': [],
+            'val': [],
+            'test': []
+        }
 
+        # determine roots based on task
         if task in [3.1, 3.2, 3.3]:
-            roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names] 
+            roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names]
+            casename = self.case_name if task == 3.1 else ""
+            # for tasks with multiple case names, we need to aggregate data from all cases
         else:
             roots = [os.path.join(self.root, self.case_name)]
-
+            casename = self.case_name
+        
+        # First, process each root and collect all data
         for root in roots:
-            print(f"Processing task: {task}")
-            self.shuffle_split_and_save_data(root)
-    
+            print(f"Processing combined data for task {task}")
+            task_data_lists = self.shuffle_split_and_save_data(root)
+            
+            # Add data from this root to the combined lists
+            for split in combined_data_lists.keys():
+                combined_data_lists[split].extend(task_data_lists[split])
+        
+        # # For task-level combined data, save in the main root directory
+        # main_root = self.root
+        
+        for split, data_list in combined_data_lists.items():
+            if data_list:  # Only process if we have data
+                print(f"Collating combined {split} data with {len(data_list)} samples")
+                combined_data, combined_slices = self.collate(data_list)
+                
+                # Create a separate directory for the concatenated data
+                concat_path = os.path.join(self.root, f"processed/combined_task_{task}_{model}_{casename}")
+                
+                if not os.path.exists(os.path.join(self.root, "processed")):
+                    os.makedirs(os.path.join(self.root, "processed"))
+                if not os.path.exists(concat_path):
+                    os.makedirs(concat_path)
+                    
+                torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
+                print(f"Saved combined {split} data with {len(data_list)} samples")
+
 
     def load(self, split):
-        task, model = self.task, self.model
-        task_config = self.task_config[task]
-
-        if task == 3.1: 
-            # only load the casename in self.casename for train 
-            # load every casename for test 
-            pass 
-        elif task == 3.2: 
-            pass 
-        elif task == 3.3: 
-            pass 
-        else:
-            path = os.path.join(self.root, self.case_name)
-            processed_paths = [
-                os.path.join(path, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
-                for grid_type in ["none", "n-1", "n-2"]
-                for feasibility in task_config.keys()
-            ]
-
-            split_data, split_slices = [], []
-
-            for p in processed_paths:
-                split_path = os.path.join(p, f"{split}.pt")
-                data, slices = torch.load(split_path)
-                split_data.append(data)
-                split_slices.append(slices)
-
-            self.data, self.slices = self.data_merger(split_data, split_slices)
+        """Loads dataset for the specified split.
+        
+        Args:
+            split (str): The split to load ('train', 'val', or 'test')
+        """
+        processed_path = os.path.join(self.processed_dir, f"{split}.pt")
+        print(f"Loading {split} dataset from {processed_path}")
+        self.data, self.slices = torch.load(processed_path)
 
 
 @registry.register_dataset("pfdeltaGNS")
