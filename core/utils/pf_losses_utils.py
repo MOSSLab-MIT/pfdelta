@@ -78,6 +78,16 @@ def PowerBalanceLoss(predictions, data):
     return delta_PQ_magnitude, delta_P, delta_Q
 
 
+@registry.register_loss("gns_layer_loss")
+def GNS_layer_loss(out_dict, data):
+    return out_dict["total_layer_loss"]
+
+
+@registry.register_loss("gns_last_loss")
+def GNS_last_loss(out_dict, data):
+    return out_dict["last_loss"]
+
+
 @registry.register_loss("GNSPowerBalanceLoss")
 class GNSPowerBalanceLoss:
     """
