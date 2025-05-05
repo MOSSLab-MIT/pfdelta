@@ -118,11 +118,7 @@ function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::Strin
         )
     end
 
-    # Ensure the raw folder exists
-    raw_path = joinpath(save_path, "raw")
-    mkpath(raw_path)
-
-    filepath = joinpath(raw_path, "sample_$(k).json")
+    filepath = joinpath(save_path, "sample_$(k).json")
     open(filepath, "w") do io
         write(io, JSON.json(sample))
     end
@@ -148,6 +144,7 @@ function store_infeasible_sample_json(w, net, result, save_path)
 	w = w + 1
 	return w
 end
+
 
 """ 
 Checks if the given sample should be stored and gathers stat tracking info

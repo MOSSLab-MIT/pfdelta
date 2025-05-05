@@ -1,3 +1,5 @@
+using Debugger
+
 """
 Loads in PowerModels network data given the name of a network case file, 
 then starts creating samples
@@ -8,7 +10,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 						pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, save_certs=false, save_max_load=false,
 						print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 						model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
+						opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
 						perturb_topology_method="none", perturb_costs_method="none")
 	net, net_path = load_net(net, net_path, print_level)
 	
@@ -18,7 +20,7 @@ function create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T
 							  pd_max=pd_max, pd_min=pd_min, pf_min=pf_min, pf_lagging=pf_lagging, save_certs=save_certs,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while, 
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver,
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,
 							  perturb_topology_method=perturb_topology_method, perturb_costs_method=perturb_costs_method)
 end
 
@@ -76,8 +78,9 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 							pd_max=nothing, pd_min=nothing, pf_min=0.7071, pf_lagging=true, reset_level=0, save_certs=false, save_max_load=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							perturb_topology_method="none", perturb_costs_method="none") # arguments for additional perturbations from PFDelta
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
+							perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
+
 	now_str = Dates.format(Dates.now(), "dd-mm-yyy_HH.MM.SS")  # Get date & time for result file names
 	net_name = net["name"]
 	save_order = vcat(input_vars, output_vars, dual_vars)
@@ -103,30 +106,24 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	stat_track > 0 && (stats = results["stats"])
 	
 	# Set up sample processing while loop 
-	k = 0  # Count of feasible samples collected
+	k = starting_k  # Count of feasible samples collected
     i = 1  # Count of iterations
 	s = 0  # Count of samples since last saved (not discarded) sample
 	u = 0  # Count of samples since last unique active set found
 	v = 0  # Count of samples since last increase in variance seen
-	w = 0 # Count of infeasible samples collected
-
-	#### Added for benchmarking #######
-	tries_per_sample = Int[]
-	tries_to_feasible = 0
-	projection_feasible_counter = 0
-	###################################
-
 	start_time = time()  # Start time in seconds
 	m = size(A, 1)  # Number of polytope planes
-    while (k < K) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
+	w = 0
+    while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
 		  (i < max_iter) & ((time() - start_time) < T)
         iter_start_time = time()
 		
 		if print_level > 0
-			println("Samples: $(k) / $(K),\t Iter: $(i)")
+			println("Samples: $(k - starting_k) / $(K),\t Iter: $(i)")
 		elseif i % (max_iter / 10) == 0
 			println("Iter: $(i)")
 		end
+		flush(stdout)
 		
 		# Set stats to defaults
 		iter_stats = Dict(
@@ -141,7 +138,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		
         # Generate sample of load profile
         m_ = size(A, 1)
-        if m < m_  # New infeasibility certificate was added to the polytope			
+        if m < m_  # New infeasibility certificate was added to the polytope
 			center, radius = chebyshev_center(A, b)
 			if reset_level > 1
 				x = (base_load_feasible * 0.1 + x * 0.9) * 0.9 + center' * 0.1
@@ -155,9 +152,9 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		
         # Sample uniformly from the interior of the convex polytope space
 		x = sampler(A, b, x, 1; sampler_opts...)
-
-		# Set network loads to sampled values
-		set_network_load(net, x, scale_load=false)
+		
+        # Set network loads to sampled values
+		set_network_load!(net, x, scale_load=false)
 
 		######## ADDED FOR PFDELTA #############
 
@@ -173,30 +170,24 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		#######################################
 
         # Solve OPF for the load sample
-		tries_to_feasible = tries_to_feasible + 1
 		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
+		# result, feasible = run_ac_opf(net, print_level=print_level, solver=opf_solver)
 		print_level > 0 && println("OPF SUCCESS: " * string(feasible))
 		
         if feasible
-			push!(tries_per_sample, tries_to_feasible)
-			tries_to_feasible = 0
 			s, u, v, k, iter_stats = store_feasible_sample(s, u, v, k, i, K, iter_stats,
 										               AC_inputs, AC_outputs, duals, dual_vars,
 													   x, result, discard, variance, net_name, 
 													   now_str, save_path, save_while, save_order,
 													   print_level)
-			
-			store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path)
-			print_level > 0 && println("Samples: $(k) / $(K),\t Iter: $(i)")
+			store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
         else
 			save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 							save_while, net_name, now_str, save_order, dual_vars, save_path)
-
 			w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
-
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
-			
+
             r, pd, qd, solved = find_nearest_feasible(fnfp_model, px, qx, print_level=print_level)
 			r = sum((pd .- px).^2 + (qd .- qx).^2)
 			
@@ -233,12 +224,11 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 				
 				x_star = vcat(xp_, xq_)
                 x = x_star
-
-				############# MODIFIED FOR PFDELTA #############
-                set_network_load(net_perturbed, x, scale_load=false)
+                set_network_load!(net_perturbed, x, scale_load=false)
 
                 # Solve OPF for the relaxation feasible sample
 				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver) # modified net -> net_perturbed
+				# result, feasible = run_ac_opf(net, print_level=print_level, solver=opf_solver)
 				print_level > 0 && println("FNFP OPF SUCCESS: " * string(feasible))
 				
                 if feasible
@@ -247,17 +237,13 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 												  x, result, discard, variance, net_name, 
 												  now_str, save_path, save_while, save_order,
 												  print_level)
-
-					store_feasible_sample_json(k, net_perturbed, results_pfdelta, save_path)
+					store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 					println("Samples: $(k) / $(K),\t Iter: $(i)")
-					projection_feasible_counter = projection_feasible_counter + 1
                 else
 					save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								    save_while, net_name, now_str, save_order, dual_vars, save_path)
 					w = store_infeasible_sample_json(w, net_perturbed, results_pfdelta, save_path)
 				end
-
-				###############################################
 			end
 		end
 		iter_elapsed_time = time() - iter_start_time
@@ -270,11 +256,15 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		
         i = i + 1
 	end
+	
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
-	print("Number of samples resulting from projection: $(projection_feasible_counter)")
-    @bp
-	return results, projection_feasible_counter
+	if returnAnb
+		Anb = (A, b)
+	    return results, Anb
+	else
+		return results
+	end
 end
 
 

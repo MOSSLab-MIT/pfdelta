@@ -43,7 +43,7 @@ function run_ac_opf(network_data::Dict; print_level=0, from_py=false,
 		vm[bus_num] = res_bus[bus_idx]["vm"]
 		va[bus_num] = res_bus[bus_idx]["va"]
 	end
-	v = vm.*exp.(1im*(va))
+	v = vm.*exp.(1im*deg2rad.(va))
 	vmg = vm[gen_bus_nums]
 	
 	primals["vm_bus"] = Array(vm')
@@ -147,8 +147,8 @@ function run_ac_opf(network_data::Dict; print_level=0, from_py=false,
 				 "qfr_max" => Array(q_fr_max'),
 				 )
 	
-	results_opflearn = (primals, duals)
-	return results_opflearn, converged, results
+	results = (primals, duals)
+	return results, converged
 end
 
 
