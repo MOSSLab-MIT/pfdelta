@@ -4,12 +4,20 @@ import torch
 import random
 from tqdm import tqdm
 import numpy as np
+from typing import Callable, Sequence, Any
+from collections import defaultdict
 
 from torch_geometric.data import InMemoryDataset, HeteroData
+from torch_geometric.data.collate import collate
 
 from core.utils.registry import registry
 
-# properties to maintain robust inmemorydataset
+def to_list(value: Any) -> Sequence:
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return value
+    else:
+        return [value]
+
 # TODO: make sure to implement the logic for all the "nose" cases too
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
@@ -21,14 +29,17 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
-        self.load(self.processed_paths[self._split_to_idx()]) 
+        if task in [3.2, 3.3]: # TODO: add a flag to specify the specific processed dir!
+            self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_")
+        else: 
+            self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}")
 
         self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
             1.2: {"feasible":{"none": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
+            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}}, # FEASIBILITY FOR TEST NOT INCLUDED
             2.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.2: {"feasible":{"none": 12000, "n-1": 12000, "n-2": 12000}},
             2.3: {"feasible":{"none": 6000,  "n-1": 6000,  "n-2": 6000}},
@@ -59,12 +70,19 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
+        super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
+        self.load(self.split)
+
     def _split_to_idx(self):
         return {'train': 0, 'val': 1, 'test': 2}[self.split]
 
     @property
     def raw_file_names(self):
         return sorted([f for f in os.listdir(self.raw_dir) if f.endswith('.json')])
+    
+    @property
+    def processed_dir(self):
+        return self._custom_processed_dir
 
     @property
     def processed_file_names(self):
@@ -266,7 +284,8 @@ class PFDeltaDataset(InMemoryDataset):
         }.items():
             edge_tensor = torch.stack(edges, dim=1) 
             data[link_name].edge_index = edge_tensor
-            data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
+            if link_name != ('bus', 'branch', 'bus'):
+                data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
             if link_name == ('bus', 'branch', 'bus'): 
                 data[link_name].edge_attr = torch.stack(edge_attr) 
                 data[link_name].edge_label = torch.stack(edge_label) 
@@ -282,11 +301,19 @@ class PFDeltaDataset(InMemoryDataset):
                 data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
 
         return data
-    
-    def shuffle_split_and_save_data(self, root): 
 
+    def shuffle_split_and_save_data(self, root): 
+        # TODO: implement logic for what train and test splits to save for a given task so that it gets saved correctly later
+        # when being combined
         task, model = self.task, self.model 
         task_config = self.task_config[task]
+
+        # create dicts to store all data lists per task for later concatenation
+        all_data_lists = {
+            'train': [],
+            'val': [],
+            'test': []
+        }
 
         for feasibility, train_cfg_dict in task_config.items():
             feasibility_config = self.feasibility_config[feasibility]
@@ -309,75 +336,94 @@ class PFDeltaDataset(InMemoryDataset):
                 split_dict = {
                         'train': fnames_shuffled[:int(0.9 * train_size)],
                         'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
-                        'test': fnames_shuffled[:-int(test_size)],
+                        'test': fnames_shuffled[-int(test_size):],
                     }
-                
+
                 for split, files in split_dict.items():
                     data_list = []
-                    print(f"Processing split: {model} {task} {split} ({len(files)} files)")
+                    print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
                     for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(os.path.join(raw_path, fname)) as f:
+                        with open(fname, "r") as f:
                             pm_case = json.load(f)
                         data = self.build_heterodata(pm_case)
                         data_list.append(data)
 
                     data, slices = self.collate(data_list)
-                    processed_path = os.path.join(self.root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                    processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                    
+                    if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
+                        os.mkdir(os.path.join(root, f"{grid_type}/processed"))
+                    if not os.path.exists(processed_path):
+                        os.mkdir(processed_path)
+
                     torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                    all_data_lists[split].extend(data_list)
+        
+        return all_data_lists
 
 
     def process(self):
-        task = self.task
+        task, model = self.task, self.model
+        casename = None
+        combined_data_lists = {
+            'train': [],
+            'val': [],
+            'test': []
+        }
 
+        # determine roots based on task
         if task in [3.1, 3.2, 3.3]:
-            roots = [os.path.join(self.root, case) for case in self.all_case_names] 
+            roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names]
+            casename = self.case_name if task == 3.1 else ""
+            # for tasks with multiple case names, we need to aggregate data from all cases
         else:
             roots = [os.path.join(self.root, self.case_name)]
-
-        for root in roots:
-            print(f"Processing task: {task}")
-            self.shuffle_split_and_save_data(root)
-    
-
-    def load(self):
-        task, model = self.task, self.model
-        task_config = self.task_config[task]
-
-        if task == 3.1: 
-            # only load the casename in self.casename for train 
-            # load every casename for test 
-            pass 
-        elif task == 3.2: 
-            pass 
-        elif task == 3.3: 
-            pass 
-        else:
-            path = os.path.join(self.root, self.case_name)
-            processed_paths = [
-                os.path.join(path, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
-                for grid_type in ["none", "n-1", "n-2"]
-                for feasibility in task_config.keys()
-            ]
-
-            train_data = []
-            val_data = [] 
-            test_data = []
-
-            for p in processed_paths:
-                train_path = os.path.join(p, "train.pt")
-                val_path = os.path.join(p, "val.pt")
-                test_path = os.path.join(p, "test.pt")
-                train_data.extend(torch.load(train_path))
-                val_data.extend(torch.load(val_path))
-                test_data.extend(torch.load(test_path))
+            casename = self.case_name
         
-        return train_data, val_data, test_data
+        # First, process each root and collect all data
+        for root in roots:
+            print(f"Processing combined data for task {task}")
+            task_data_lists = self.shuffle_split_and_save_data(root)
+            
+            # Add data from this root to the combined lists
+            for split in combined_data_lists.keys():
+                combined_data_lists[split].extend(task_data_lists[split])
+        
+        # # For task-level combined data, save in the main root directory
+        # main_root = self.root
+        
+        for split, data_list in combined_data_lists.items():
+            if data_list:  # Only process if we have data
+                print(f"Collating combined {split} data with {len(data_list)} samples")
+                combined_data, combined_slices = self.collate(data_list)
+                
+                # Create a separate directory for the concatenated data
+                concat_path = os.path.join(self.root, f"processed/combined_task_{task}_{model}_{casename}")
+                
+                if not os.path.exists(os.path.join(self.root, "processed")):
+                    os.makedirs(os.path.join(self.root, "processed"))
+                if not os.path.exists(concat_path):
+                    os.makedirs(concat_path)
+                    
+                torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
+                print(f"Saved combined {split} data with {len(data_list)} samples")
+
+
+    def load(self, split):
+        """Loads dataset for the specified split.
+        
+        Args:
+            split (str): The split to load ('train', 'val', or 'test')
+        """
+        processed_path = os.path.join(self.processed_dir, f"{split}.pt")
+        print(f"Loading {split} dataset from {processed_path}")
+        self.data, self.slices = torch.load(processed_path)
 
 
 @registry.register_dataset("pfdeltaGNS")
 class PFDeltaGNS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="GNS", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split, model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
@@ -452,8 +498,8 @@ class PFDeltaGNS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version
@@ -476,8 +522,8 @@ class PFDeltaCANOS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
         # call base version

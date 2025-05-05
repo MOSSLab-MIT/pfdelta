@@ -41,7 +41,6 @@ class CANOS_PF(nn.Module):
         self.k_steps = k_steps
 
     def forward(self, data):
-
         # Encoding
         projected_nodes, projected_edges = self.encoder(data)
 
