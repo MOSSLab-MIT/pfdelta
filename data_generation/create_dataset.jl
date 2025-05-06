@@ -79,6 +79,7 @@ function create_dataset_seeds(
 	end
 	println("Currently trying radius: $max_radius")
 	counter = 0
+	dense = false
 	while true
 		flush(stdout)
 		# First, prune the graph slowly to make it tractable for MIS
@@ -91,8 +92,9 @@ function create_dataset_seeds(
 			while length(g_edges) > nv(g) * 10
 				println("Radius of $max_radius gave ", nv(g), " nodes and ", length(g_edges), " edges. ")
 				if max_radius * 0.9 < min_distance
+					dense = true
 					println("Radius cannot be reduced anymore without falling behind min! " *
-						"Fingers crossed...")
+						"Will approximate MIS instead...")
 					break
 				end
 				max_radius *= 0.9
@@ -114,7 +116,13 @@ function create_dataset_seeds(
 		end
 		while max_radius > min_distance
 			# Calculate if max_radius is good
-			candidate_seeds = find_maximum_independent_set(g)
+			if dense || ne(g) >= 8000
+				print("Approximating max MIS. ")
+				candidate_seeds = independent_set(g, DegreeIndependentSet)
+			else
+				print("Calculating max MIS. ")
+				candidate_seeds = find_maximum_independent_set(g)
+			end
 			if length(candidate_seeds) >= num_seeds
 				println(
 					"Success! $num_seeds good seeds produced!"
@@ -137,6 +145,7 @@ function create_dataset_seeds(
 			max_radius *= 0.9
 			println("Current radius gives small MIS of size $MIS_size. " *
 				"Now trying radius: $max_radius")
+
 			mask = distances .> max_radius # True => remove edge
 			distances = distances[.!mask] # keep these
 			bad_edges = g_edges[mask] # remove these
@@ -144,6 +153,8 @@ function create_dataset_seeds(
 			for (u, v) in Tuple.(bad_edges)
 				rem_edge!(g, u, v)
 			end
+			(ne(g) > nv(g) * 10) && (dense = true)
+			(ne(g) <= nv(g) * 10) && (dense = false)
 		end
 		num_seeds_produced = size(seeds, 1)
 		println("Current $num_seeds_produced" * 
