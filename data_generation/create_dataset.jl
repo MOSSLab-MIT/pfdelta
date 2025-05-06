@@ -230,12 +230,18 @@ function expand_dataset_seeds(
 	seed_origin_path = joinpath(folder_path, "seed_origin.json")
 	# Separate cases for parallel and sequential
 	if parallel
-		seed_origin_data = @distributed (vcat) for i in 1:num_seeds
-				origin_datum = expand_one_seed(i, raw_path, samples_per_seed, num_seeds, seed_expander,
-				sampling_radius, perturb_topology_method, perturb_costs_method, base_case
-			)
-			[origin_datum]
-		end
+		ids = 1:num_seeds
+		seed_origin_data = pmap(i -> expand_one_seed(
+			i,
+			raw_path,
+			samples_per_seed,
+			num_seeds,
+			seed_expander,
+			sampling_radius,
+			perturb_topology_method,
+			perturb_costs_method,
+			base_case
+		), ids)
 	else
 		# Keep track of seed origin data
 		seed_origin_data = []
