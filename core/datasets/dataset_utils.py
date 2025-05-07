@@ -110,6 +110,30 @@ def pfnet_data_mean0_var1(stats, data):
     return data
 
 
+def canos_pf_slack_mean0_var1(stats, data):
+    means = stats["mean"]
+    stds = stats["std"]
+
+    def exception_transform(x, mean, std):
+        r"""Transforms every value to mean 0, var 1 unless std is 0, in which
+        case the value is just transformed to 0."""
+        ones_std = std == 0.
+        std[ones_std] = 1.
+        x = mean0_var1(x, mean, std)
+        return x
+
+    values_to_change = [
+        ("slack", "y")
+    ]
+
+    for dtype, entry in values_to_change:
+        mean = means[dtype][entry]
+        std = stds[dtype][entry]
+        x = data[dtype][entry]
+        data[dtype][entry] = exception_transform(x, mean, std)
+
+    return data
+
 if __name__ == "__main__":
     # create_train_test_mapping_json("case14_seeds", seed=11, feasibility_setting="just feasible", root_dir="data/pfdelta_data/")
     create_train_test_mapping_json("case118_seeds", seed=11, feasibility_setting="feasible", root_dir="data/pfdelta_data/")

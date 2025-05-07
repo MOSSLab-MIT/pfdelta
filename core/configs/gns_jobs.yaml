@@ -7,9 +7,9 @@ job_parameters:
 default_values:
   model:
     name: graph_neural_solver
-    K: _manual_list(30, 15 | 30, 15)
-    hidden_dim: _manual_list(10, 20 | 10, 20)
-    gamma: _manual_list(0.1, 0.5 | 0.1, 0.5)
+    K: 30
+    hidden_dim: 20
+    gamma: 0.1
   dataset:
     datasets:
     - split: train
@@ -21,9 +21,9 @@ default_values:
     add_bus_type: False 
   optim:
     optimizer:
-      lr: _manual_list(0.0005 | 5e-4)
+      lr: _manual_list(0.0005, 0.0001, 0.0003 | 5e-4, 1e-4, 3e-4)
     train_params:
-      epochs: 30
+      epochs: 50
       batch_size: 64
       train_loss:
       - gns_layer_loss
@@ -40,8 +40,8 @@ default_values:
       - gns_last_loss
   functional:
     seed: 11
-    run_location: gns_hyperparam_tuning
-    run_name: gns_K%K_hd%hidden_dim_gamma%gamma_lr%lr
+    run_location: gns_task_1.3
+    run_name: gns_K30_hd20_gamma0.1_lr%lr
 
 jobs:
 - functional:
