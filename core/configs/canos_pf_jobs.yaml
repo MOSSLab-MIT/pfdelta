@@ -1,0 +1,73 @@
+config_type: simple_batch
+batch_name: canos_pf_jobs
+job_parameters:
+  time: "15:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate pfdelta\n__launch__"
+model:
+  name: canos_pf
+  dataset: _include_
+  hidden_dim: _manual_list(128, 256 | 128, 256)
+  include_sent_messages: True
+  k_steps: _manual_list(10, 15, 20 | 10, 15, 20)
+dataset:
+  datasets:
+  - name: pfdeltaCANOS
+    root_dir: data/pfdelta_data
+    case_name: case118_seeds
+    split: train
+    model: CANOS
+    task: 1.3
+    add_bus_type: True
+    pre_transform: canos_pf_data_mean0_var1
+  - name: pfdeltaCANOS
+    root_dir: data/pfdelta_data
+    case_name: case118_seeds
+    split: val
+    model: CANOS
+    task: 1.3
+    add_bus_type: True
+    pre_transform: canos_pf_data_mean0_var1
+optim:
+  optimizer:
+    name: "Adam"
+    lr: _manual_list(0.001 | 1e-3)
+    weight_decay: 0.
+  lr_scheduler:
+    name: SequentialLR
+    milestones:
+    - 5 # SCALE THIS
+    schedulers:
+    - name: LinearLR
+      start_factor: 0.01
+      end_factor: 1
+    - name: StepLR
+      gamma: 0.9
+      step_size: 4 # SCALE THIS
+  train_params:
+    epochs: 50
+    # train_steps: 150000 # SCALE THIS
+    batch_size: 64
+    train_loss:
+    - name: combined_loss
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      lamb: 0.1
+  val_params:
+    early_stop:
+      decrease_for: 10 # Needs to be a divisor of report_every
+      decrease_by: 0.01
+      needs_best_every: 15
+    report_every: 2 # 8438 # SCALE THIS
+    batch_size: 64
+    val_loss:
+    - name: combined_loss
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      lamb: 0.1
+functional:
+  trainer_name: gnn_trainer
+  seed: 11
+  run_location: canos_pf_hyperparam_tuning
+  run_name: canos_pf_hd%hidden_dim_depth%k_steps_lr%lr
