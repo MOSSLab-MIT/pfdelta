@@ -263,6 +263,5 @@ class DecoderPF(nn.Module):
         bus_vm[slack_idx] = slack_va_vm[:, 1]
 
         output_dict["bus"] = torch.stack([bus_va, bus_vm], dim=-1)
-        # UNNORMALIZE VALUES HERE?
 
         return output_dict

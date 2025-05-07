@@ -6,7 +6,7 @@ from torch.nn.functional import mse_loss
 
 from core.utils.registry import registry
 from core.datasets.dataset_utils import canos_pf_data_mean0_var1
-from core.datasets.data_stats import pfdata_stats
+from core.datasets.data_stats import canos_pfdelta_stats
 
 
 def PowerBalanceLoss(predictions, data):
@@ -178,28 +178,42 @@ class constraint_violations_loss_pf:
         self.bus_reactive_mismatch = None
         
     def __call__(self, output_dict, data):
-        mean = pfdata_stats[output_dict["casename"]]["mean"]
-        std = pfdata_stats[output_dict["casename"]]["std"]
         device = data["bus"].x.device
+        casename = output_dict["casename"]
         # Get the predictions and edge features
         bus_pred = output_dict["bus"]
+        PV_pred = output_dict["PV"]
+        slack_pred = output_dict["slack"]
+        slack_demand = data["slack"].demand
+        PV_generation = data['PV'].generation
+        PV_demand = data['PV'].demand
         edge_pred = output_dict["edge_preds"]
         edge_indices = data["bus", "branch", "bus"].edge_index
         va, vm = bus_pred.T
-        complex_voltage = vm * torch.exp(1j* va)
+
+        # Unnormalize slack predictions 
+        mean = canos_pfdelta_stats[casename]["mean"]["slack"]["y"].to(device)
+        std = canos_pfdelta_stats[casename]["std"]["slack"]["y"].to(device)
+        unnormalized_slack_pred = (slack_pred * std) + mean
 
         # Get the branch flows from the edge predictions
         n = data["bus"].x.shape[0]
         sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
-        flows_rev = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
-        flows_fwd = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        flows_rev = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        flows_fwd = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
         sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
         sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
 
         # Generator flows (already aggregated per bus)
-        bus_gen = data["bus"].bus_gen.to(device) # TODO: does this use the slack gen? DATA LEAKAGE? 
-        # slack y is pg - pd -- we need to add pd to those values before doing the constraints
-        # unnormalize right before we use here
+        bus_gen = data["bus"].bus_gen.to(device)
+        slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+        pv_idx = data["PV", "PV_link", "bus"].edge_index[1]
+        slack_pg = unnormalized_slack_pred[:, 0] + slack_demand[:, 0]
+        slack_qg = unnormalized_slack_pred[:, 1] +  slack_demand[:, 1]
+        pv_pg = PV_generation[:, 0]
+        pv_qg = PV_pred[:, 0] + PV_demand[:, 1]
+        bus_gen[slack_idx] = torch.stack([slack_pg, slack_qg], dim=1)
+        bus_gen[pv_idx] = torch.stack([pv_pg, pv_qg], dim=1)
         gen_flows = bus_gen[:, 0] + 1j * bus_gen[:, 1]
 
         # Demand flows (already aggregated per bus)

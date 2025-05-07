@@ -1,7 +1,7 @@
 import torch
 
 
-pfdata_stats = {
+canos_pfdelta_stats = {
     "case118_seeds": {
         "mean":{
             "bus": {

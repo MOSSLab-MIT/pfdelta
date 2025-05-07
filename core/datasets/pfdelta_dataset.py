@@ -11,12 +11,13 @@ from functools import partial
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
-from core.datasets.dataset_utils import canos_pf_data_mean0_var1
-from core.datasets.data_stats import pfdata_stats
+from core.datasets.dataset_utils import canos_pf_data_mean0_var1, canos_pf_slack_mean0_var1
+from core.datasets.data_stats import canos_pfdelta_stats
 from core.utils.registry import registry
 
 
 # TODO: make sure to implement the logic for all the "nose" cases too
+# TODO: logic for loading the test cases too (specific splits)
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
     def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
@@ -497,8 +498,14 @@ class PFDeltaCANOS(PFDeltaDataset):
     def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         if pre_transform is not None: 
             if pre_transform == "canos_pf_data_mean0_var1": 
-                stats = pfdata_stats[case_name]
+                stats = canos_pfdelta_stats[case_name]
                 pre_transform = partial(canos_pf_data_mean0_var1, stats)
+        
+        if transform is not None: 
+            if transform == "canos_pf_slack_mean0_var1": 
+                stats = canos_pfdelta_stats[case_name]
+                transform = partial(canos_pf_slack_mean0_var1, stats)
+
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):

@@ -1,49 +1,58 @@
 config_type: experiment
+batch_name: canos_pf_single_no_transform
+job_parameters:
+  time: "5:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate pfdelta\n__launch__"
 model:
   name: canos_pf
   dataset: _include_
-  hidden_dim: 64
+  hidden_dim: 128
   include_sent_messages: True
-  k_steps: 5
+  k_steps: 10
 dataset:
   datasets:
   - name: pfdeltaCANOS
     root_dir: data/pfdelta_data
-    case_name: case14_seeds
+    case_name: case118_seeds
     split: train
     model: CANOS
     task: 1.3
     add_bus_type: True
+    transform: canos_pf_slack_mean0_var1
     # pre_transform: canos_pf_data_mean0_var1
   - name: pfdeltaCANOS
     root_dir: data/pfdelta_data
-    case_name: case14_seeds
+    case_name: case118_seeds
     split: val
     model: CANOS
     task: 1.3
     add_bus_type: True
+    transform: canos_pf_slack_mean0_var1
     # pre_transform: canos_pf_data_mean0_var1
 optim:
   optimizer:
     name: "Adam"
     lr: 0.001
     weight_decay: 0.
-  lr_scheduler:
-    name: SequentialLR
-    milestones:
-    - 5 # SCALE THIS
-    schedulers:
-    - name: LinearLR
-      start_factor: 0.01
-      end_factor: 1
-    - name: StepLR
-      gamma: 0.9
-      step_size: 4 # SCALE THIS
+  # lr_scheduler:
+  #   name: SequentialLR
+  #   milestones:
+  #   - 5 # SCALE THIS
+  #   schedulers:
+  #   - name: LinearLR
+  #     start_factor: 0.01
+  #     end_factor: 1
+  #   - name: StepLR
+  #     gamma: 0.9
+  #     step_size: 4 # SCALE THIS
   train_params:
-    epochs: 50
+    epochs: 10
     # train_steps: 150000 # SCALE THIS
     batch_size: 64
     train_loss:
+    - name: canos_pf_mse
     - name: combined_loss
       loss1: canos_pf_mse
       loss2: pf_constraint_violation
