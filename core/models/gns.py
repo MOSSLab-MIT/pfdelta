@@ -146,8 +146,11 @@ class GraphNeuralSolver(nn.Module):
         pg_max_slack = pg_max_vals[is_slack][:, 1]
         pg_min_slack = pg_min_vals[is_slack][:, 0]
 
-        graph_ids = is_slack.cumsum(dim=0) - 1
-        num_graphs = graph_ids.max().item() + 1
+        gen_idx = torch.arange(pg_setpoints.size(0), device=pg_setpoints.device)
+        graph_ids = torch.bucketize(gen_idx, data["gen"].ptr[1:])  # gives [num_gen_nodes] → [num_graphs]
+
+        # Initialize output tensors
+        num_graphs = data["gen"].ptr.size(0) - 1
         
         pg_setpoint_slack = pg_setpoints[is_slack]
         pg_setpoints_non_slack = pg_setpoints.clone()

@@ -57,7 +57,34 @@ def create_train_test_mapping_json(case_name, seed=11, feasibility_setting="just
         mappings = {int(i): int(j) for i, j in enumerate(indices)}
         with open(shuffle_path, "w") as f:
             json.dump(mappings, f, indent=3)
-        
+
+
+def canos_pf_data_mean0_var1(stats, data):
+    means = stats["mean"]
+    stds = stats["std"]
+
+    def exception_transform(x, mean, std):
+        r"""Transforms every value to mean 0, var 1 unless std is 0, in which
+        case the value is just transformed to 0."""
+        ones_std = std == 0.
+        std[ones_std] = 1.
+        x = mean0_var1(x, mean, std)
+        return x
+
+    values_to_change = [
+        ("bus", "x"),
+        ("PV", "x"),
+        ("PQ", "x"),
+        ("slack", "x")
+    ]
+
+    for dtype, entry in values_to_change:
+        mean = means[dtype][entry]
+        std = stds[dtype][entry]
+        x = data[dtype][entry]
+        data[dtype][entry] = exception_transform(x, mean, std)
+
+    return data
 
 if __name__ == "__main__":
     create_train_test_mapping_json("case14_seeds", seed=11, feasibility_setting="just feasible", root_dir="data/pfdelta_data/")

@@ -14,6 +14,7 @@ class CANOS_PF(nn.Module):
         edge_feat_dim = node_feat_dim = hidden_dim
 
         # Define the encoder to get projected nodes and edges
+        self.case_name = dataset.case_name
         self.encoder = Encoder(data=dataset, hidden_size=hidden_dim)
 
         # Interaction network layers for message passing
@@ -54,7 +55,8 @@ class CANOS_PF(nn.Module):
 
         # Deriving branch flows
         p_fr, q_fr, p_to, q_to = self.derive_branch_flows(output_dict, data)
-        output_dict["edge_preds"] = torch.stack([p_to, q_to, p_fr, q_fr], dim=-1) 
+        output_dict["edge_preds"] = torch.stack([p_fr, q_fr, p_to, q_to], dim=-1) 
+        output_dict["casename"] = self.case_name
 
         return output_dict
 

@@ -1,9 +1,12 @@
 import os
 import pickle
-
 import torch
 
+from torch.nn.functional import mse_loss
+
 from core.utils.registry import registry
+from core.datasets.dataset_utils import canos_pf_data_mean0_var1
+from core.datasets.data_stats import pfdata_stats
 
 
 def PowerBalanceLoss(predictions, data):
@@ -175,12 +178,13 @@ class constraint_violations_loss_pf:
         self.bus_reactive_mismatch = None
         
     def __call__(self, output_dict, data):
+        mean = pfdata_stats[output_dict["casename"]]["mean"]
+        std = pfdata_stats[output_dict["casename"]]["std"]
         device = data["bus"].x.device
         # Get the predictions and edge features
         bus_pred = output_dict["bus"]
         edge_pred = output_dict["edge_preds"]
         edge_indices = data["bus", "branch", "bus"].edge_index
-        edge_features = data["bus", "branch", "bus"].edge_attr
         va, vm = bus_pred.T
         complex_voltage = vm * torch.exp(1j* va)
 
@@ -193,7 +197,9 @@ class constraint_violations_loss_pf:
         sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
 
         # Generator flows (already aggregated per bus)
-        bus_gen = data["bus"].bus_gen.to(device) 
+        bus_gen = data["bus"].bus_gen.to(device) # TODO: does this use the slack gen? DATA LEAKAGE? 
+        # slack y is pg - pd -- we need to add pd to those values before doing the constraints
+        # unnormalize right before we use here
         gen_flows = bus_gen[:, 0] + 1j * bus_gen[:, 1]
 
         # Demand flows (already aggregated per bus)
@@ -233,4 +239,29 @@ class constraint_violations_loss_pf:
         self.imag_flow_mismatch_violation = violation_degree_imag_flow_mismatch
 
         return loss_c
+
+
+@registry.register_loss("canos_pf_mse")
+class CANOS_PF_MSE:
+    def __init__(self, ):
+        self.loss = None
+    
+    def __call__(self, output_dict, data):
+        PV_pred, PQ_pred, slack_pred = output_dict["PV"], output_dict["PQ"], output_dict["slack"]
+        edge_preds = output_dict["edge_preds"]
+
+        # gather targets
+        PV_target, PQ_target, slack_target = data["PV"].y, data["PQ"].y, data["slack"].y
+        branch_target = data["bus", "branch", "bus"].edge_label
+
+        # calculate L2 loss
+        pv_loss = mse_loss(PV_pred, PV_target)
+        pq_loss = mse_loss(PQ_pred, PQ_target)
+        slack_loss = mse_loss(slack_pred, slack_target)
+        edge_loss = mse_loss(edge_preds, branch_target)
+
+        total_loss = pv_loss + pq_loss + slack_loss + edge_loss
+        self.loss = total_loss
+
+        return total_loss
 

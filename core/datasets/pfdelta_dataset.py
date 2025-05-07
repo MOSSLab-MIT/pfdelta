@@ -6,10 +6,13 @@ from tqdm import tqdm
 import numpy as np
 from typing import Callable, Sequence, Any
 from collections import defaultdict
+from functools import partial
 
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
+from core.datasets.dataset_utils import canos_pf_data_mean0_var1
+from core.datasets.data_stats import pfdata_stats
 from core.utils.registry import registry
 
 
@@ -294,6 +297,9 @@ class PFDeltaDataset(InMemoryDataset):
                 edge_tensor = torch.stack(edges, dim=1) 
                 data[link_name].edge_index = edge_tensor
                 data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
+        
+        if self.pre_transform: 
+            data = self.pre_transform(data)
 
         return data
 
@@ -489,6 +495,10 @@ class PFDeltaGNS(PFDeltaDataset):
 @registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        if pre_transform is not None: 
+            if pre_transform == "canos_pf_data_mean0_var1": 
+                stats = pfdata_stats[case_name]
+                pre_transform = partial(canos_pf_data_mean0_var1, stats)
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
