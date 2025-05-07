@@ -116,9 +116,9 @@ function create_dataset_seeds(
 		end
 		while max_radius > min_distance
 			# Calculate if max_radius is good
-			if dense || ne(g) >= 8000
+			if dense || ne(g) >= 50000
 				print("Approximating max MIS. ")
-				candidate_seeds = independent_set(g, DegreeIndependentSet)
+				candidate_seeds = independent_set(g, DegreeIndependentSet())
 			else
 				print("Calculating max MIS. ")
 				candidate_seeds = find_maximum_independent_set(g)
