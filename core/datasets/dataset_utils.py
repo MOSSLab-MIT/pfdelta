@@ -86,6 +86,30 @@ def canos_pf_data_mean0_var1(stats, data):
 
     return data
 
+
+def pfnet_data_mean0_var1(stats, data):
+    means = stats["mean"]
+    stds = stats["std"]
+    eps = 1e-7
+
+    x_mean = means["bus"]["x"] # shape [6]
+    x_std = stds["bus"]["x"] + eps # shape [6]
+    x_cont = data["bus"]["x"][:, 4:10]
+    data["bus"]["x"][:, 4:10] = (x_cont - x_mean) / x_std
+
+    y_mean = means["bus"]["y"] # shape [6]
+    y_std = stds["bus"]["y"] + eps # shape [6]
+    y_cont = data["bus"]["y"]
+    data["bus"]["y"] = (y_cont - y_mean) / y_std
+
+    edge_mean = means[("bus", "branch", "bus")]["edge_attr"]
+    edge_std = stds[("bus", "branch", "bus")]["edge_attr"] + eps
+    edge_attr = data[("bus", "branch", "bus")]["edge_attr"]
+    data[("bus", "branch", "bus")].edge_attr = (edge_attr - edge_mean) / edge_std
+
+    return data
+
+
 if __name__ == "__main__":
-    create_train_test_mapping_json("case14_seeds", seed=11, feasibility_setting="just feasible", root_dir="data/pfdelta_data/")
-    create_train_test_mapping_json("case118_seeds", seed=11, feasibility_setting="just feasible", root_dir="data/pfdelta_data/")
+    # create_train_test_mapping_json("case14_seeds", seed=11, feasibility_setting="just feasible", root_dir="data/pfdelta_data/")
+    create_train_test_mapping_json("case118_seeds", seed=11, feasibility_setting="feasible", root_dir="data/pfdelta_data/")

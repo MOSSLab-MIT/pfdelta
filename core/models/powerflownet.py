@@ -217,13 +217,10 @@ class PowerFlowNet(nn.Module):
         Hetero graphs, while the original powerflownet uses Homogeneous graphs.
         """
         if isinstance(data, HeteroData):
-            x = data["bus"].x # (N, 4)
-            # bus_type = data["bus"].bus_type
-            # batch = data["bus"].batch
-            # indicating which features to predict (==1)
-            mask = data["bus"].pred_mask
-            edge_index = data["bus", "bi", "bus"].edge_index
-            edge_features = data["bus", "bi", "bus"].edge_attr
+            x = data["bus"].x[:, 4:4+self.nfeature_dim] # (N, 16)
+            mask = data["bus"].x[:, -self.nfeature_dim:]
+            edge_index = data["bus", "branch", "bus"].edge_index
+            edge_features = data["bus", "branch", "bus"].edge_attr
         elif isinstance(data, Data):
             assert data.x.shape[-1] == self.nfeature_dim * 2 + 4
             x = data.x[:, 4:4+self.nfeature_dim]

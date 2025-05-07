@@ -1,6 +1,29 @@
 import torch
 
 
+pfnet_pfdata_stats = {
+    "case118_seeds": {
+        "mean": {
+            "bus": {
+                "x": torch.tensor([4.7404e-01, 2.9353e-20, 3.3068e-01, 1.1051e-01, 0.0000e+00, 7.4576e-03]),
+                "y": torch.tensor([ 1.0290, -0.6396,  0.5116,  0.2985,  0.0000,  0.0075])
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0274, 0.1068, 0.0000, 0.9978, 0.0000])
+            }
+        },
+        "std": {
+            "bus": {
+                "x": torch.tensor([5.2078e-01, 7.0293e-17, 1.4630e+00, 1.6992e-01, 0.0000e+00, 6.1039e-02]),
+                "y": torch.tensor([0.0352, 0.3231, 2.4836, 0.8082, 0.0000, 0.0610])
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0210, 0.0756, 0.0000, 0.0107, 0.0000])
+            }
+        }
+    }
+}
+
 pfdata_stats = {
     "case118_seeds": {
         "mean":{

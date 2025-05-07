@@ -1,18 +1,18 @@
 import json
 import os
-import torch
 import random
 from tqdm import tqdm
-import numpy as np
 from typing import Callable, Sequence, Any
 from collections import defaultdict
 from functools import partial
 
+import torch
+import numpy as np
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
-from core.datasets.dataset_utils import canos_pf_data_mean0_var1
-from core.datasets.data_stats import pfdata_stats
+from core.datasets.dataset_utils import canos_pf_data_mean0_var1, pfnet_data_mean0_var1
+from core.datasets.data_stats import pfdata_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
 
@@ -297,9 +297,6 @@ class PFDeltaDataset(InMemoryDataset):
                 edge_tensor = torch.stack(edges, dim=1) 
                 data[link_name].edge_index = edge_tensor
                 data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
-        
-        if self.pre_transform: 
-            data = self.pre_transform(data)
 
         return data
 
@@ -489,6 +486,9 @@ class PFDeltaGNS(PFDeltaDataset):
         data['gen'].num_nodes = num_gens
         data['load'].num_nodes = num_loads
 
+        if self.pre_transform:
+            data = self.pre_transform(data)
+
         return data
 
 
@@ -517,12 +517,19 @@ class PFDeltaCANOS(PFDeltaDataset):
             if src not in keep_nodes or dst not in keep_nodes:
                 del data[edge_type]
 
+        if self.pre_transform:
+            data = self.pre_transform(data)
+
         return data
 
 
 @registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        if pre_transform:
+            if pre_transform == "pfnet_data_mean0_var1":
+                stats = pfnet_pfdata_stats[case_name]
+                pre_transform = partial(pfnet_data_mean0_var1, stats)
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
@@ -580,28 +587,8 @@ class PFDeltaPFNet(PFDeltaDataset):
         x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
         y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
 
-        if self.split == 'train':
-            # Strip one-hot and pred_mask
-            x_cont = x_pfnet[:, 4:10]  # shape [N, 6]
-            y_cont = y_pfnet           # shape [N, 6]
-
-            xy = torch.cat([x_cont, y_cont], dim=0)
-            mean = xy.mean(dim=0, keepdim=True)
-            std = xy.std(dim=0, keepdim=True) + 1e-7
-
-            self.norm_mean = mean
-            self.norm_std = std
-
-            x_cont_norm = (x_cont - mean) / std
-            y_norm = (y_cont - mean) / std
-
-            x_normalized = torch.cat([x_pfnet[:, :4], x_cont_norm, x_pfnet[:, 10:]], dim=1)
-
-            data['bus'].x = x_normalized
-            data['bus'].y = y_norm
-        else:
-            data['bus'].x = x_pfnet
-            data['bus'].y = y_pfnet
+        data['bus'].x = x_pfnet
+        data['bus'].y = y_pfnet
 
         data['gen'].num_nodes = num_gens
         data['load'].num_nodes = num_loads
@@ -614,5 +601,8 @@ class PFDeltaPFNet(PFDeltaDataset):
             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
 
         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+
+        if self.pre_transform:
+            data = self.pre_transform(data)
 
         return data
