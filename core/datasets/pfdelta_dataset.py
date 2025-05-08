@@ -11,7 +11,11 @@ import numpy as np
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
-from core.datasets.dataset_utils import canos_pf_data_mean0_var1, canos_pf_slack_mean0_var1
+from core.datasets.dataset_utils import (
+    canos_pf_data_mean0_var1,
+    canos_pf_slack_mean0_var1,
+    pfnet_data_mean0_var1
+)
 from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
@@ -347,6 +351,9 @@ class PFDeltaDataset(InMemoryDataset):
                         data = self.build_heterodata(pm_case)
                         data_list.append(data)
 
+                    # For tasks that don't load from every folder
+                    if len(data_list) == 0:
+                        break
                     data, slices = self.collate(data_list)
                     processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
                     
