@@ -454,7 +454,7 @@ class PFDeltaGNS(PFDeltaDataset):
 
             if bus_type == 1:  # PQ bus
                 # Flat start for PQ bus
-                x_gns[bus_idx] = torch.tensor([1.0, 0.0])
+                x_gns[bus_idx] = torch.tensor([0.0, 1.0])
                 pd = pf_x[0]
                 qd = pf_x[1]
                 pg = bus_gen[0]
@@ -462,7 +462,7 @@ class PFDeltaGNS(PFDeltaDataset):
             elif bus_type == 2:  # PV bus
                 v = pf_x[1]
                 theta = torch.tensor(0.0)
-                x_gns[bus_idx] = torch.stack([v, theta])
+                x_gns[bus_idx] = torch.stack([theta, v])
                 pd = bus_demand[0]
                 qd = bus_demand[1]
                 pg = bus_gen[0]
@@ -474,8 +474,8 @@ class PFDeltaGNS(PFDeltaDataset):
                 pg = bus_gen[0]
                 qg = bus_gen[1]
 
-            v_buses[bus_idx] = x_gns[bus_idx][0]
-            theta_buses[bus_idx] = x_gns[bus_idx][1]
+            v_buses[bus_idx] = x_gns[bus_idx][1]
+            theta_buses[bus_idx] = x_gns[bus_idx][0]
             pd_buses[bus_idx] = pd
             qd_buses[bus_idx] = qd
             pg_buses[bus_idx] = pg
