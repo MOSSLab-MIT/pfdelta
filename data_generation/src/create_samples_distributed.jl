@@ -1,3 +1,4 @@
+using Distributed
 """
 Loads in PowerModels network data given the name of a network case file, 
 then starts creating samples with distributed processing
@@ -78,17 +79,19 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 								perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
 	# Create channels for transfering data between processes
 	isnothing(nproc) && (nproc = Distributed.nprocs())
-	@assert nproc > 3 "Not enough processors available, nprocs:$(nproc). Need 4+ CPUs for improved runtimes."
+	@assert nproc > 4 "Not enough processors available, nprocs:$(nproc). Need 5+ CPUs for improved runtimes."
 	@assert nproc <= Distributed.nprocs() "Number of distributed processors added, $(Distributed.nprocs()), must be greater than specified nproc, $(nproc)"
 	pid = Distributed.myid()
-	sample_chnl = Distributed.Channel{Any}(4 * nproc) 
-	polytope_chnl = Distributed.Channel{Any}(4 * nproc)  
-	result_chnl = Distributed.Channel{Any}(4 * nproc)
+	sample_chnl = Distributed.Channel{Any}(8 * nproc)
+	polytope_chnl = Distributed.Channel{Any}(8 * nproc)
+	result_chnl = Distributed.Channel{Any}(8 * nproc)
 	final_chnl = Distributed.Channel{Any}(1)
+	save_chnl = Distributed.Channel{Any}(8 * nproc)
 	sample_ch = Distributed.RemoteChannel(()->sample_chnl, pid)
 	polytope_ch = Distributed.RemoteChannel(()->polytope_chnl, pid)
 	result_ch = Distributed.RemoteChannel(()->result_chnl, pid)
 	final_ch = Distributed.RemoteChannel(()->final_chnl, pid)
+	procs = Distributed.workers()
 	
 	num_procs = nproc - 2  #TASK: Determine why the producer gets stuck running on the main proc
 
@@ -96,6 +99,30 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	save_order = vcat(input_vars, output_vars, dual_vars)
     if net_path == ""  # Set net path to save path if not specified for saving network max loads
 		net_path = save_path
+	end
+
+	saver_proc = procs[1]
+	producer_proc = procs[2]
+	processor_procs = procs[3:end]
+
+	# save_chnl = Distributed.Channel{Any}(8 * nproc)
+	save_ch = Distributed.RemoteChannel(()->Distributed.Channel{Any}(8 * nproc), saver_proc)
+	println("ABOUT TO START SAVER PROC TASK")
+	@spawnat saver_proc begin
+		println("SAVER PROC STARTED")
+		while true
+			if isready(save_ch)
+				println("Save channel ready")
+				item = take!(save_ch)
+				println("Took from save channel!")
+				k, net_perturbed, results_pfdelta, path = item
+				store_feasible_sample_json(k, net_perturbed, results_pfdelta, path)
+			elseif isready(final_ch) && isempty(save_ch)
+				break
+			else
+				sleep(0.01)
+			end
+		end
 	end
 
 	# Gather network information used during processing
@@ -108,13 +135,12 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 																		 reset_level, print_level)
 	
 	(print_level > 0) && println("Starting sampling...")
-	procs = Distributed.workers()
-	producer = Distributed.remotecall(sample_producer, procs[1], 
+	producer = Distributed.remotecall(sample_producer, producer_proc,
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k,)
-	for proc in procs[2:end]
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k, save_ch)
+	for proc in processor_procs
 		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver,
 							   sample_ch, final_ch, polytope_ch, result_ch, perturb_topology_method, 
 							   perturb_costs_method, print_level, model_type)
@@ -124,6 +150,14 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
 	Anb = (A, b)
+	while true
+		if isready(final_ch) && !isready(save_ch)
+			break
+		else
+			sleep(0.01)
+		end
+	end
+
 	return results, Anb
 end
 

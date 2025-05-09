@@ -17,7 +17,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 discard, variance, reset_level, save_while, save_infeasible,
 						 stat_track, save_certs, net_name, dual_vars, save_order,
 						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
-						 final_ch, print_level, starting_k,)
+						 final_ch, print_level, starting_k, save_ch)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	
 	AC_inputs = results["inputs"]
@@ -127,8 +127,9 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 											  x, result, discard, variance, net_name, 
 											  now_str, save_path, save_while, save_order,
 											  print_level)
-				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
-				
+				println("put in save channel")
+				# store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
+				put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
 			elseif !isnothing(result)  # Infeasible
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
@@ -147,7 +148,23 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 		
 		if num_new_samples > 0
-			new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+			retries = 0
+			while retries < 100
+				try
+					new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+					break
+				catch e
+					println("ERROR in sample_producer on $(Distributed.myid()): ", e)
+					println("STACKTRACE:")
+					for (i, frame) in enumerate(stacktrace(catch_backtrace()))
+						println("[$i] $frame")
+					end
+					flush(stdout)
+					println("failed to sample, try again")
+					retries += 1
+				end
+			end
+			(retries >= 100) && error("Sampler kept erroring :(")
 			for sample in eachcol(new_samples)
 				put!(sample_ch, sample)
 			end

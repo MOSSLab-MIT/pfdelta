@@ -104,14 +104,42 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 		# Make folder
 		mkpath(folder_path)
 		mkpath(joinpath(folder_path, "allseeds"))
-		# Create samples
-		results = point_generator(network, dataset_size; save_path=folder_path, perturb_costs_method="shuffle",
-			perturb_topology_method=topology_perturb, net_path=folder_path, save_max_load=true,)
+		if topology_perturb == "none"
+			with_checkpoint = true
+		else
+			with_checkpoint = true
+		end
+		if !with_checkpoint
+			# Create samples
+			results = point_generator(network, dataset_size; save_path=folder_path, perturb_costs_method="shuffle",
+				perturb_topology_method=topology_perturb, net_path=folder_path, save_max_load=true,)
+			# Results file name
+			file_name = joinpath(folder_path, "results.json")
+			open(file_name, "w") do io
+				JSON.print(io, results)
+			end
+			return
+		end
+		results1, Anb = point_generator(network, Int(dataset_size/2); returnAnb=true, save_path=folder_path, 
+			perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
+			net_path=folder_path, save_max_load=true,)
 		# Results file name
 		file_name = joinpath(folder_path, "results.json")
 		open(file_name, "w") do io
+			JSON.print(io, results1)
+		end
+		A, b = Anb
+		results2 = point_generator(network, Int(dataset_size/2); save_path=folder_path, 
+			perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
+			starting_k=Int(dataset_size/2), net_path=folder_path, save_max_load=true, A=A, b=b)
+		results = Dict(
+			"results1" => results1,
+			"results2" => results2
+		)
+		open(file_name, "w") do io
 			JSON.print(io, results)
 		end
+
 		mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
 		println("DONE")
 	else
