@@ -48,41 +48,9 @@ cases = Dict(
 println("Cases loaded!")
 
 if length(ARGS) == 0
-	println("No argument!")
-elseif ARGS[1] == "case14"
-	results, time = OPFLearn.create_samples(case14, 10000)
-	open("time14.json", "w") do io
-	    JSON.print(io, time)
-	end
-	open("case14.json", "w") do io
-	    JSON.print(io, results)
-	end
-elseif ARGS[1] == "case30"
-	results, time = OPFLearn.create_samples(case30, 5000)
-	open("time30.json", "w") do io
-	    JSON.print(io, time)
-	end
-	open("results30.json", "w") do io
-	    JSON.print(io, results)
-	end
-elseif ARGS[1] == "case57"
-	results, time = OPFLearn.create_samples(case57, 5600)
-	open("time57.json", "w") do io
-	    JSON.print(io, time)
-	end
-	open("results57.json", "w") do io
-	    JSON.print(io, results)
-	end
-elseif ARGS[1] == "case118"
-	results, time = OPFLearn.create_samples(case118, 50)
-	open("time118.json", "w") do io
-	    JSON.print(io, time)
-	end
-	open("results118.json", "w") do io
-	    JSON.print(io, results)
-	end
+	println("No arguments provided!")
 else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
-	comp_method = ARGS[1]
+	data_method, comp_method = split(ARGS[1], "_")
 	network_name = ARGS[2]
 	topology_perturb = ARGS[3]
 	if comp_method == "linear"
@@ -100,33 +68,53 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	else
 		dataset_size = 20000
 	end
-	seeds_needed = trunc(Int, dataset_size * 0.03)
-	samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
-	folder_path = joinpath("$(network_name)_seeds", topology_perturb)
-	if network_name == "case57"
-		portion_of_new_seeds = 0.3
+	if data_method == "seeds"
+		folder_path = joinpath("$(network_name)_seeds", topology_perturb)
+		seeds_needed = trunc(Int, dataset_size * 0.03)
+		samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
+		if network_name in ["case57", "case2000"]
+			portion_of_new_seeds = 0.3
+		else
+			portion_of_new_seeds = 0.1
+		end
+		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
+		if length(ARGS) == 4 && ARGS[4] == "just_expansion"
+			expand_dataset_seeds(
+				joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
+				cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
+				perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+				parallel=parallel
+			)
+		else
+			allseeds = create_dataset_seeds(
+				network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+				min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds,
+				point_generator=point_generator)
+			println("\n\n\n#########################\n\n\n")
+			expand_dataset_seeds(
+				joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
+				cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
+				perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
+				parallel=parallel
+			)
+		end
+	elseif data_method == "uniform"
+		folder_path = joinpath("$(network_name)_unif", topology_perturb)
+		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
+		# Make folder
+		mkpath(folder_path)
+		mkpath(joinpath(folder_path, "allseeds"))
+		# Create samples
+		results = point_generator(network, dataset_size; save_path=folder_path, perturb_costs_method="shuffle",
+			perturb_topology_method=topology_perturb, net_path=folder_path, save_max_load=true,)
+		# Results file name
+		file_name = joinpath(folder_path, "results.json")
+		open(file_name, "w") do io
+			JSON.print(io, results)
+		end
+		mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
+		println("DONE")
 	else
-		portion_of_new_seeds = 0.1
-	end
-	println("Doing case: $network_name, perturbation: $topology_perturb, and comp method: $comp_method")
-	if length(ARGS) == 4 && ARGS[4] == "just_expansion"
-		expand_dataset_seeds(
-			joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
-			cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-			perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-			parallel=parallel
-		)
-	else
-		allseeds = create_dataset_seeds(
-			network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-			min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds,
-			point_generator=point_generator)
-		println("\n\n\n#########################\n\n\n")
-		expand_dataset_seeds(
-			joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
-			cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-			perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-			parallel=parallel
-		)
+		println("Data method not recognized!")
 	end
 end
