@@ -104,6 +104,8 @@ function gt_eps(l, eps_val=EPS)  # Determine what value to use for eps?
 end
 
 function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String; seed_id=-1)
+	# Create directory if it doesn't exist
+	isdir(save_path) || mkpath(save_path)
     if seed_id==-1
         sample = Dict(
             "network" => net, 

@@ -3,6 +3,8 @@
 *.pyc
 *.pyo
 *.mat
+*.json
+*.ipynb
 
 .ipynb_checkpoints
 tutorial.ipynb
@@ -13,3 +15,7 @@ data_generation/my_results
 data_generation/old_pfdelta
 data_generation/opfdata
 data_generation/opflearn
+data_generation/my_results
+data_generation/final_data_no_exp
+data_generation/seed_exp_data
+data_generation/pglib

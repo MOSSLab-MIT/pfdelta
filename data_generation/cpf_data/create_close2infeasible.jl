@@ -1,40 +1,54 @@
-function create_close2infeasible(solved_cases_path, k, 
-                                n_nose, n_around_nose)
-
-    shuffled_idx = JSON.parsefile(joinpath(solved_cases_path, "raw_shuffle.json"))
-    sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx))))
-
-    train_test_idx = Dict(
-        "train" => [shuffled_idx[string(k)] for k in sorted_keys[1:1800]],
-        "test"  => [shuffled_idx[string(k)] for k in sorted_keys[end-199:end]]
-    )
+function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split; save_all=false)
     
-    @assert length(train_test_idx["train"]) == 1800 "Expected 1800 values in first_values"
-    @assert length(train_test_idx["test"]) == 200 "Expected 200 values in last_values"
+    raw_shuffle_path = joinpath(solved_cases_path, "raw_shuffle.json")
+    if isfile(raw_shuffle_path)
+        shuffled_idx = JSON.parsefile(raw_shuffle_path)
+        sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx))))
 
-    for split in keys(train_test_idx)
-        
-        close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
-        mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
-        mkpath(close2inf_path)
-        mkpath(mpc_save_path)
-
-        raw_hard_save_path = joinpath(close2inf_path, "raw")
-        mkpath(raw_hard_save_path)
-
-        empty_folder(mpc_save_path)
-        empty_folder(raw_hard_save_path)
-        empty_folder(joinpath(close2inf_path, "around_nose"))
-        empty_folder(joinpath(close2inf_path, "nose"))
-
-        create_matpower_files(solved_cases_path, mpc_save_path, train_test_idx[split])
-
-        mat"""
-        generate_close2inf($mpc_save_path, $k, $raw_hard_save_path);
-        """
-
-        split_files(close2inf_path, n_around_nose)
+        if split == "train"
+            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[1:n_nose]]
+        elseif split == "test"
+            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-n_nose+1:end]]
+        end
+    else
+        println("raw_shuffle.json not found, using all samples in debug mode.")
+        split = "debug"
+    
+        raw_dir = joinpath(solved_cases_path, "raw")
+        json_files = Glob.glob("*.json", raw_dir)
+        selected_cases_idx = collect(1:length(json_files))
     end
+
+    close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
+    mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
+    mkpath(close2inf_path)
+    mkpath(mpc_save_path)
+
+    raw_hard_save_path = joinpath(close2inf_path, "raw")
+    mkpath(raw_hard_save_path)
+
+    # to avoid more files during re runs
+    empty_folder(mpc_save_path) 
+    empty_folder(raw_hard_save_path)
+    empty_folder(joinpath(close2inf_path, "nose"))
+    empty_folder(joinpath(close2inf_path, "around_nose"))
+
+    create_matpower_files(solved_cases_path, mpc_save_path, selected_cases_idx)
+    
+    mat"""
+    generate_close2inf($mpc_save_path, $raw_hard_save_path);
+    """
+
+    split_files(close2inf_path, n_around_nose, split; save_all=save_all)
+
+    if split === "train"
+        files_around = Glob.glob("sample_*.json", joinpath(close2inf_path, "around_nose"))
+        @assert length(files_around) == n_nose * n_around_nose "Got $(length(files_around)) instead of $(n_nose * n_around_nose)"
+    end
+
+    files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose"))
+    @assert length(files_nose) == n_nose "Got $(length(files_nose)) instead of $(n_nose)"
+    
 end
 
 function create_matpower_files(solved_cases_path, save_path, selected_cases_idx)
@@ -44,11 +58,13 @@ function create_matpower_files(solved_cases_path, save_path, selected_cases_idx)
         net = sample["network"]
         solution = sample["solution"]["solution"]
         PM.update_data!(net, solution)
+        update_vg!(net, solution)
+        fix_branch_flows!(net)
         PM.export_matpower(joinpath(save_path, "sample_$(idx).m"), net)
     end
 end
 
-function split_files(close2inf_path, n_around_nose)
+function split_files(close2inf_path, n_around_nose, split; save_all=false)
     nose_dir = joinpath(close2inf_path, "nose")
     around_nose_dir = joinpath(close2inf_path, "around_nose")
     mkpath(nose_dir)
@@ -61,34 +77,36 @@ function split_files(close2inf_path, n_around_nose)
     for file in files
         base = basename(file)
         if endswith(base, "_nose.m")
-            target_path = joinpath(nose_dir, base)
-            cp(file, target_path, force=true)
-            solved_net = PM.parse_file(target_path)
-            filepath = joinpath((nose_dir, replace(base, ".m" => ".json")))
-            open(filepath, "w") do io
-                write(io, JSON.json(solved_net))
+            solved_net = PM.parse_file(file)
+            json_path = joinpath(nose_dir, replace(base, ".m" => ".json"))
+            json_dict  = Dict("lambda" => nothing, "solved_net" => solved_net)
+            open(json_path, "w") do io
+                write(io, JSON.json(json_dict))
             end
         else
             m = match(r"sample_(\d+)_lam_(\d+p\d+)\.m", base)
             if m !== nothing
                 idx = m.captures[1]
                 lam = parse(Float64, replace(m.captures[2], "p" => "."))
-                push!(get!(file_dict, idx, []), (file, lam))
+                push!(get!(file_dict, idx, Tuple{String, Float64}[]), (file, lam))
             end
         end
     end
 
-    for (_, file_lams) in file_dict
-        sorted = sort(file_lams; by=x -> x[2], rev=true)
-        selected = sorted[2:n_around_nose + 1]
-        for (file, _) in selected
-            base = basename(file)
-            target_path = joinpath(around_nose_dir, base)
-            cp(file, target_path; force=true)
-            solved_net = PM.parse_file(target_path)
-            filepath = joinpath((around_nose_dir, replace(base, ".m" => ".json")))
-            open(filepath, "w") do io
-                write(io, JSON.json(solved_net))
+    # For each nose file (based on index), get around-the-nose samples
+    if split == "train"
+        for (idx, file_tuples) in file_dict
+            sorted = sort(file_tuples, by = x -> abs(x[2]), rev=true)
+            selected = save_all ? sorted : Iterators.take(Iterators.drop(sorted, 1), n_around_nose) # get rid of the nose.
+
+            for (file, lam) in selected
+                base = basename(file)
+                solved_net = PM.parse_file(file)
+                json_dict = Dict("lambda" => lam, "solved_net" => solved_net)
+                filepath = joinpath(around_nose_dir, replace(base, ".m" => ".json"))
+                open(filepath, "w") do io
+                    write(io, JSON.json(json_dict))
+                end
             end
         end
     end
@@ -99,5 +117,34 @@ function empty_folder(path::String)
     for file in readdir(path; join=true)
         isfile(file) && rm(file; force=true)
         isdir(file) && rm(file; force=true, recursive=true)
+    end
+end
+
+function update_vg!(net, solution)
+    gen_data = net["gen"]
+    bus_solution = solution["bus"]
+
+    for (gen_id, gen) in gen_data
+        if gen["gen_status"] == 1
+            bus_id = string(gen["gen_bus"])
+            if haskey(bus_solution, bus_id)
+                gen["vg"] = bus_solution[bus_id]["vm"]
+            else
+                @warn "No bus voltage solution found for gen_bus = $bus_id"
+            end
+        end
+    end
+end
+
+function fix_branch_flows!(net)
+    branch_data = net["branch"]
+    for (branch_id, branch) in branch_data
+        if branch["br_status"] == 0
+            for key in ["pt", "pf", "qt", "qf"]
+                if !haskey(branch, key)
+                    branch[key] = 0
+                end
+            end
+        end
     end
 end

@@ -36,7 +36,7 @@ function [res, suc] = ...
 %           cpf - CPF output struct whose content depends on any
 %                   user callback functions, where default contains fields:
 %               done_msg - string with message describing cause of
-%                       continuation termination
+%                       continuatioin termination
 %               iterations - number of continuation steps performed
 %               lam - (nsteps+1) row vector of lambda values from
 %                       correction steps
@@ -488,12 +488,12 @@ if ~done.flag
         [nx.V, success, i, nx.lam] = cpf_corrector(Ybus, cb_data.Sbusb, nx.V_hat, cb_data.ref, cb_data.pv, cb_data.pq, ...
                     nx.lam_hat, cb_data.Sbust, cx.V, cx.lam, cx.z, cx.step, cx.parm, mpopt_pf);
         
-        %%%%%%%% saving intermediate power flow %%%%%%%%%%%%
+        %% %%%%%%%% saving intermediate power flow %%%%%%%%%%%%
         mpc_solved = cpf_current_mpc(cb_data.mpc_base, cb_data.mpc_target, ...
             Ybus, Yf, Yt, cb_data.ref, cb_data.pv, cb_data.pq, nx.V, nx.lam, mpopt);
 
         intermediate_results = int2ext(mpc_solved);
-        %% zero out result fields of out-of-service gens & branches
+        % zero out result fields of out-of-service gens & branches
         if ~isempty(intermediate_results.order.gen.status.off)
         intermediate_results.gen(intermediate_results.order.gen.status.off, [PG QG]) = 0;
         end
@@ -511,7 +511,7 @@ if ~done.flag
         [~, base_name, ~] = fileparts(current_net_path);
         filename = fullfile(save_path, sprintf('%s_lam_%s.m', base_name, lam_str));
         savecase(filename, intermediate_results);
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
         if ~success     %% corrector failed
             done.flag = 1;
@@ -759,7 +759,7 @@ end
 printpf(results, 1, mpopt);
 
 %% save solved case
-if ~isempty(solvedcase)
+if ~isempty(solvedcase) && results.success == 1
     if size(results.gen, 2) < 21
         results.gen(:, end+1:21) = NaN;
     end

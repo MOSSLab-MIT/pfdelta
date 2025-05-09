@@ -1,6 +1,10 @@
-solved_cases_path = fullfile('..', 'my_results', '2025-04-28_11-28-43', 'case14_n');
-mpc_save_path = fullfile(solved_cases_path, 'close2inf/generated_mpcs'); 
-k = 2.5;
-raw_hard_save_path = fullfile(solved_cases_path, 'close2inf/raw'); 
+% solved_cases_path = fullfile('..', 'case14_seeds', 'none');
+% mpc_save_path = fullfile(solved_cases_path, 'close2inf_train/generated_mpcs'); 
+% raw_hard_save_path = fullfile(solved_cases_path, 'close2inf_train/raw_test'); 
+% generate_close2inf(mpc_save_path, raw_hard_save_path);
+% 
+% 
+% 
 
-generate_close2inf(mpc_save_path, k, raw_hard_save_path);
+mpc = loadcase("sample_9989.m");
+result = runpf(mpc)
