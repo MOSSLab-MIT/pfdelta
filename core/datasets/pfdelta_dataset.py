@@ -544,6 +544,12 @@ class PFDeltaPFNet(PFDeltaDataset):
             if pre_transform == "pfnet_data_mean0_var1":
                 stats = pfnet_pfdata_stats[case_name]
                 pre_transform = partial(pfnet_data_mean0_var1, stats)
+        
+        if transform is not None: 
+            if transform == "pfnet_data_mean0_var1": 
+                stats = pfnet_pfdata_stats[case_name]
+                transform = partial(pfnet_data_mean0_var1, stats)
+
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
     def build_heterodata(self, pm_case):
@@ -610,7 +616,7 @@ class PFDeltaPFNet(PFDeltaDataset):
         edge_attrs = []
         for attr in data['bus', 'branch', 'bus'].edge_attr:
             r, x = attr[0], attr[1]
-            b = attr[2] + attr[4]
+            b = attr[3] + attr[5]
             tau, angle = attr[6], attr[7]
             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
 

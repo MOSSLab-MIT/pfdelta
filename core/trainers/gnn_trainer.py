@@ -22,7 +22,6 @@ class GNNTrainer(BaseTrainer):
         for data in tqdm(train_dataloader, desc=message):
             # Copy data in case models overwrite inputs
             data = copy.deepcopy(data)
-
             # Move data to device
             data = data.to(self.device)
 

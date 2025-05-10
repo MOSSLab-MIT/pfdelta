@@ -22,7 +22,7 @@ class Encoder(nn.Module):
     def forward(self, data):
         device = data["bus"].x.device
         projected_nodes = {
-            node_type: self.node_projections[node_type](data[node_type].x)
+            node_type: self.node_projections[node_type](data[node_type].x) 
             for node_type in data.num_node_features.keys()
         }
 
@@ -100,7 +100,6 @@ class InteractionNetwork(nn.Module):
         for node_type, node_feats in nodes.items():
             updated_nodes = self.node_update(node_feats, sent_received_node_type[node_type], node_type)
             updated_nodes_dict[node_type] = updated_nodes + node_feats
-
         return updated_nodes_dict, updated_edges_dict
 
 

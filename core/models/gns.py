@@ -4,7 +4,6 @@ import torch.nn as nn
 from core.utils.pf_losses_utils import GNSPowerBalanceLoss
 from core.utils.registry import registry
 
-
 @registry.register_model("graph_neural_solver")
 class GraphNeuralSolver(nn.Module):
     def __init__(self, K, hidden_dim, gamma):
@@ -97,12 +96,12 @@ class GraphNeuralSolver(nn.Module):
         theta_j = data['bus'].theta[dst]
 
         # Compute p_global
-        term1 = v_i * v_j * y_ij / tau_ij * (
-            torch.sin(theta_i - theta_j - delta_ij - shift_ij) +  
-            torch.sin(theta_j - theta_i - delta_ij + shift_ij))
+        term1 = -v_i * v_j * y_ij / tau_ij * (
+            torch.cos(theta_i - theta_j - delta_ij - shift_ij) +  
+            torch.cos(theta_j - theta_i - delta_ij + shift_ij))
 
-        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.sin(delta_ij)
-        term3 = v_j ** 2 * y_ij * torch.sin(delta_ij)
+        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.cos(delta_ij)
+        term3 = v_j ** 2 * y_ij * torch.cos(delta_ij)
         p_joule_edge = torch.abs(term1 + term2 + term3)
         
         # Map to individual graphs

@@ -56,6 +56,11 @@ class CANOS_PF(nn.Module):
         # Deriving branch flows
         p_fr, q_fr, p_to, q_to = self.derive_branch_flows(output_dict, data)
         output_dict["edge_preds"] = torch.stack([p_fr, q_fr, p_to, q_to], dim=-1) 
+
+        # Deriving slack generation
+        p_slack_net, q_slack_net = self.derive_slack_output(output_dict, data)
+        output_dict["slack"] = torch.stack([p_slack_net, q_slack_net], dim=-1)
+
         output_dict["casename"] = self.case_name
 
         return output_dict
@@ -103,3 +108,26 @@ class CANOS_PF(nn.Module):
         p_to, q_to = S_to.real, S_to.imag
 
         return p_fr, q_fr, p_to, q_to
+
+    def derive_slack_output(self, output_dict, data):
+
+        device = data["bus"].x.device
+        n = data["bus"].x.shape[0]
+        bus_shunts = data["bus"].shunt.to(device)  
+        slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+        edge_pred = output_dict["edge_preds"]
+        edge_indices = data["bus", "branch", "bus"].edge_index
+        flows_rev = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        flows_fwd = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
+        sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
+        sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
+        sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
+        bus_pred = output_dict["bus"]
+        va, vm = bus_pred.T
+
+        shunt_flows = (torch.abs(vm) ** 2) * (bus_shunts[:, 1] + 1j * bus_shunts[:, 0])  # (b_shunt + j*g_shunt)
+        slack_net_generation = sum_branch_flows[slack_idx] + shunt_flows[slack_idx]
+        p_slack_net = torch.real(slack_net_generation)
+        q_slack_net = torch.imag(slack_net_generation)
+
+        return p_slack_net, q_slack_net
