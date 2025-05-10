@@ -3,6 +3,7 @@ import torch
 
 pfnet_pfdata_stats = {
     "case118_seeds": {
+        "casename": "case118_seeds", 
         "mean": {
             "bus": {
                 "x": torch.tensor([4.7212e-01, 6.6688e-27, 2.8586e-01, 9.0312e-02, 0.0000e+00, 7.4576e-03]),

@@ -107,6 +107,7 @@ def pfnet_data_mean0_var1(stats, data):
     edge_attr = data[("bus", "branch", "bus")]["edge_attr"]
     data[("bus", "branch", "bus")].edge_attr = (edge_attr - edge_mean) / edge_std
 
+    data["case_name"] = stats["casename"]
     return data
 
 

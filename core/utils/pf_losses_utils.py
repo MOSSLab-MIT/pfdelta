@@ -6,7 +6,7 @@ from torch.nn.functional import mse_loss
 
 from core.utils.registry import registry
 from core.datasets.dataset_utils import canos_pf_data_mean0_var1
-from core.datasets.data_stats import canos_pfdelta_stats
+from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 
 @registry.register_loss("universal_power_balance")
 class PowerBalanceLoss:
@@ -143,9 +143,15 @@ class PowerBalanceLoss:
 
         elif model_name == "PFNet": 
             device = data["bus"].x.device
+            # Unnormalize predictions
+            casename = data.case_name[0]
+            mean = pfnet_pfdata_stats[casename]["mean"]["bus"]["y"].to(device)
+            std = pfnet_pfdata_stats[casename]["std"]["bus"]["y"].to(device)
+            output = (output * std) + mean
+
             num_buses = data["bus"].num_nodes
-            theta_pred = output[:, 1] 
-            V_pred = output[:, 0] 
+            theta_pred = output[:, 1]
+            V_pred = output[:, 0]
             Pnet = torch.zeros(num_buses, device=device)
             Qnet = torch.zeros(num_buses, device=device)
 
