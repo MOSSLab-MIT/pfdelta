@@ -20,6 +20,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 final_ch, print_level, starting_k, save_ch)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	
+	println("SAMPLE PRODUCER PROC STARTED")
 	AC_inputs = results["inputs"]
     AC_outputs = results["outputs"]
     duals = results["duals"]
@@ -127,7 +128,6 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 											  x, result, discard, variance, net_name, 
 											  now_str, save_path, save_while, save_order,
 											  print_level)
-				println("put in save channel")
 				# store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
 				put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
 			elseif !isnothing(result)  # Infeasible
@@ -205,6 +205,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 						  perturb_topology_method, perturb_costs_method,
 						  print_level=0, model_type=PM.QCLSPowerModel)
 
+	println("SAMPLE PROCESSOR PROC STARTED")
 	(print_level > 0) && println("Create FNFP Model...")
 	pm = PowerModels.instantiate_model(net_r, model_type, build_opf_var_load)
 	fnfp_model = find_nearest_feasible_model(pm, print_level=print_level, solver=r_solver)

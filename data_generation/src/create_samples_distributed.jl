@@ -107,14 +107,11 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 
 	# save_chnl = Distributed.Channel{Any}(8 * nproc)
 	save_ch = Distributed.RemoteChannel(()->Distributed.Channel{Any}(8 * nproc), saver_proc)
-	println("ABOUT TO START SAVER PROC TASK")
 	@spawnat saver_proc begin
 		println("SAVER PROC STARTED")
 		while true
 			if isready(save_ch)
-				println("Save channel ready")
 				item = take!(save_ch)
-				println("Took from save channel!")
 				k, net_perturbed, results_pfdelta, path = item
 				store_feasible_sample_json(k, net_perturbed, results_pfdelta, path)
 			elseif isready(final_ch) && isempty(save_ch)

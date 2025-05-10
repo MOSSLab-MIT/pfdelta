@@ -47,6 +47,58 @@ cases = Dict(
 )
 println("Cases loaded!")
 
+function uniform_creator(
+		folder_path,
+		dataset_size,
+		point_generator,
+		topology_perturb,
+)
+	progress_results = joinpath(folder_path, "results.json")
+	num_parts = 10
+	fragment = Int(dataset_size/num_parts)
+	A = nothing
+	b = nothing
+	if ispath(progress_results)
+		println("PREVIOUS PROGRESS FOUND!")
+		results = JSON.parsefile(progress_results)
+	else
+		results = Dict()
+	end
+	for i in 1:num_parts
+		if string(i) in keys(results)
+			part_results = results[string(i)]
+			A = hcat(part_results["A"]...)
+			b = reshape(part_results["b"][1], :, 1)
+			println("Part $i/$num_parts already done!")
+		else
+			initial_k = (i-1) * fragment
+			if A !== nothing
+				println("b reloaded: ", b)
+				part_results, Anb = point_generator(network, fragment; save_path=folder_path,
+					perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
+					starting_k=initial_k, net_path=folder_path, save_max_load=true, A=A, b=b, returnAnb=true)
+			else
+				part_results, Anb = point_generator(network, fragment; save_path=folder_path,
+					perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
+					starting_k=initial_k, net_path=folder_path, save_max_load=true, returnAnb=true)
+			end
+			A, b = Anb
+			part_results["A"] = A
+			part_results["b"] = b
+			results[string(i)] = part_results
+			open(progress_results, "w") do io
+				JSON.print(io, results)
+			end
+			println("\n\n\n##################################################")
+			println("##\t\t\t\t\t\t\t\t##")
+			println("##\t\tCREATED PART $i/$(num_parts)!\t\t\t##")
+			println("##\t\t\t\t\t\t\t\t##")
+			println("##################################################\n\n\n")
+		end
+	end
+end
+
+
 if length(ARGS) == 0
 	println("No arguments provided!")
 else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
@@ -119,30 +171,16 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 				JSON.print(io, results)
 			end
 			return
+		else
+			uniform_creator(
+				folder_path,
+				dataset_size,
+				point_generator,
+				topology_perturb,
+			)
 		end
-		results1, Anb = point_generator(network, Int(dataset_size/2); returnAnb=true, save_path=folder_path, 
-			perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
-			net_path=folder_path, save_max_load=true,)
-		# Results file name
-		file_name = joinpath(folder_path, "results.json")
-		open(file_name, "w") do io
-			JSON.print(io, results1)
-		end
-		A, b = Anb
-		results2 = point_generator(network, Int(dataset_size/2); save_path=folder_path, 
-			perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
-			starting_k=Int(dataset_size/2), net_path=folder_path, save_max_load=true, A=A, b=b)
-		results = Dict(
-			"results1" => results1,
-			"results2" => results2
-		)
-		open(file_name, "w") do io
-			JSON.print(io, results)
-		end
-
 		mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
 		println("DONE")
-	else
-		println("Data method not recognized!")
+
 	end
 end
