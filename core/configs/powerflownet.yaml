@@ -1,33 +1,37 @@
 config_type: experiment
-# job_parameters:
-#   time: "04:00:00"
-#   p: "cpu-gpu-v100"
-#   gpus: 1
-#   body: "source ~/.bashrc\nconda activate power\n__launch__"
 model:
   name: powerflownet
   nfeature_dim: 6
   efeature_dim: 5
   output_dim: 6
-  hidden_dim: 128
+  hidden_dim: 256
   n_gnn_layers: 4
   K: 3
   dropout_rate: 0.2
 dataset:
   datasets:
-  - split: train
-  - split: val
-  name: pfdeltaPFNet
-  root_dir: data/pfdelta_data
-  case_name: case118_seeds
-  task: 1.3
-  pre_transform: pfnet_data_mean0_var1
-  # force_reload: true
+  - name: pfdeltaPFNet
+    root_dir: data/pfdelta_data
+    case_name: case118_seeds
+    split: train
+    model: PFNet
+    task: 1.3
+    add_bus_type: False
+    transform: pfnet_data_mean0_var1 
+  - name: pfdeltaPFNet
+    root_dir: data/pfdelta_data
+    case_name: case118_seeds
+    split: val
+    model: PFNet
+    task: 1.3
+    add_bus_type: False
+    transform: pfnet_data_mean0_var1
 optim:
   optimizer:
     lr: 0.001
   train_params:
-    epochs: 1000
+    batch_size: 64
+    epochs: 100
     train_loss:
     - name: GNNTorchLoss
       torch_nn_name: MSELoss
@@ -36,11 +40,23 @@ optim:
       regularize: False
     - name: pfn_masked_mse
       regularize: True
+    - name: universal_power_balance
+      model: PFNet
+    - name: recycle_loss
+      recycled_parameter: power_balance_max
+      loss_name: "PBL Max"
+      keyword: pbl_pf
+    - name: recycle_loss
+      recycled_parameter: power_balance_l2
+      loss_name: "PBL L2"
+      keyword: pbl_pf
   val_params:
     early_stop:
       decrease_for: 10 # Needs to be a divisor of report_every
       decrease_by: 0.01
       needs_best_every: 15
+    report_every: 5
+    batch_size: 64
     report_every: 5
     val_loss:
     - name: pfn_masked_mse
@@ -50,8 +66,18 @@ optim:
     - name: GNNTorchLoss
       torch_nn_name: MSELoss
       output_name: "bus__y"
+    - name: universal_power_balance
+      model: PFNet
+    - name: recycle_loss
+      recycled_parameter: power_balance_max
+      loss_name: "PBL Max"
+      keyword: pbl_pf
+    - name: recycle_loss
+      recycled_parameter: power_balance_l2
+      loss_name: "PBL L2"
+      keyword: pbl_pf
 functional:
   trainer_name: gnn_trainer
-  seed: 1234
-  run_location: powerflow_reimplementation
-  run_name: pfn_%case
+  seed: 11
+  run_location: pfnet_hyperparam_tuning
+  run_name: pfnet_hd256_lr1e-3_layers_4_K_3

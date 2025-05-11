@@ -3,6 +3,7 @@ import pickle
 import torch
 
 from torch.nn.functional import mse_loss
+from torch_geometric.nn import global_add_pool, global_max_pool
 
 from core.utils.registry import registry
 from core.datasets.dataset_utils import canos_pf_data_mean0_var1
@@ -28,7 +29,9 @@ class PowerBalanceLoss:
     def __init__(self, model): 
         self.power_balance_mean = None 
         self.power_balance_max = None
+        self.power_balance_l2 = None
         self.model = model
+        self.loss_name = "PBL Mean"
 
     def __call__(self, outputs, data):
         power_balance_model_preds = self.collect_model_predictions(self.model, data, outputs)
@@ -83,15 +86,25 @@ class PowerBalanceLoss:
         delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b 
 
         # Compute the loss as the sum of squared mismatches
-        delta_PQ_magnitude = torch.sqrt(delta_P**2 + delta_Q**2)
+        delta_PQ_2 = delta_P**2 + delta_Q**2
 
-        # Keep track of losses
+        # Calculate PBL Mean
+        delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
         self.power_balance_mean = delta_PQ_magnitude.mean()
-        new_max = delta_PQ_magnitude.max()
-        if self.power_balance_max is None:
-            self.power_balance_max = new_max
-        else:
-            self.power_balance_max = delta_PQ_magnitude.max() # TODO: fix this
+
+        # Calculate PBL L2
+        batch_idx = data["bus"].batch
+        batched_power_balance_l2 = torch.sqrt(global_add_pool(delta_PQ_2, batch_idx))
+        self.power_balance_l2 = batched_power_balance_l2.mean()
+
+        # Calculate PBL Max
+        self.power_balance_max = global_max_pool(delta_PQ_magnitude, batch_idx).mean()
+
+        # new_max = delta_PQ_magnitude.max()
+        # if self.power_balance_max is None:
+        #     self.power_balance_max = new_max
+        # else:
+        #     self.power_balance_max = delta_PQ_magnitude.max() # TODO: fix this
 
         return self.power_balance_mean
 
@@ -176,8 +189,13 @@ class PowerBalanceLoss:
             Pnet[slack_idx] = slack_outputs[:, 2]
             Qnet[slack_idx] = slack_outputs[:, 3]
 
-            # Collect edge attributes 
+            # Unnormalize edge attributes
+            mean = pfnet_pfdata_stats[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            std = pfnet_pfdata_stats[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
             edge_attr = data["bus", "branch","bus"].edge_attr
+            edge_attr = (edge_attr * std) + mean
+
+            # Collect edge attributes
             r = edge_attr[:, 0]
             x = edge_attr[:, 1]
             bs = edge_attr[:, 2]

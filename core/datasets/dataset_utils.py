@@ -92,10 +92,10 @@ def pfnet_data_mean0_var1(stats, data):
     stds = stats["std"]
     eps = 1e-7
 
-    x_mean = means["bus"]["x"] # shape [6]
-    x_std = stds["bus"]["x"] + eps # shape [6]
-    x_cont = data["bus"]["x"][:, 4:10]
-    data["bus"]["x"][:, 4:10] = (x_cont - x_mean) / x_std
+    # x_mean = means["bus"]["x"] # shape [6]
+    # x_std = stds["bus"]["x"] + eps # shape [6]
+    # x_cont = data["bus"]["x"][:, 4:10]
+    # data["bus"]["x"][:, 4:10] = (x_cont - x_mean) / x_std
 
     y_mean = means["bus"]["y"] # shape [6]
     y_std = stds["bus"]["y"] + eps # shape [6]
@@ -108,6 +108,7 @@ def pfnet_data_mean0_var1(stats, data):
     data[("bus", "branch", "bus")].edge_attr = (edge_attr - edge_mean) / edge_std
 
     data["case_name"] = stats["casename"]
+
     return data
 
 

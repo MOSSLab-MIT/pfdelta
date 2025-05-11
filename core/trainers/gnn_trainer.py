@@ -80,6 +80,17 @@ class GNNTrainer(BaseTrainer):
                     raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
                 loss.source = source
 
+        if "universal_power_balance" in names:
+            universal_pbl_id = names.index("universal_power_balance")
+            for i, loss in enumerate(self.train_loss):
+                if not isinstance(loss, recycle_class):
+                    continue
+                if loss.keyword == "pbl_pf":
+                    source = self.train_loss[universal_pbl_id]
+                else:
+                    raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
+                loss.source = source
+
         # Add source to check if recycled is used in val
         losses = self.config["optim"]["val_params"]["val_loss"]
         names = [name if isinstance(name, str) else name["name"] for name in losses]
@@ -92,6 +103,19 @@ class GNNTrainer(BaseTrainer):
                     source = self.val_loss[combined_loss_id].loss1
                 elif loss.keyword == "constraint_violation":
                     source = self.val_loss[combined_loss_id].loss2
+                else:
+                    raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
+                loss.source = source
+
+        losses = self.config["optim"]["val_params"]["val_loss"]
+        names = [name if isinstance(name, str) else name["name"] for name in losses]
+        if "universal_power_balance" in names:
+            universal_pbl_id = names.index("universal_power_balance")
+            for i, loss in enumerate(self.val_loss):
+                if not isinstance(loss, recycle_class):
+                    continue
+                if loss.keyword == "pbl_pf":
+                    source = self.val_loss[universal_pbl_id]
                 else:
                     raise ValueError(f"Recycled keyword {loss.keyword} not recognized!")
                 loss.source = source
