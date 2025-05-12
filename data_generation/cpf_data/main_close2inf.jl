@@ -9,7 +9,7 @@ using Debugger
 using FilePathsBase, FileIO
 PM.silence()
 
-include("create_close2infeasible.jl")
+include("create_cpf_samples.jl")
 
 # Setup MATLAB call  
 ENV["MATLAB_HOME"] = "/Applications/MATLAB_R2024b.app" # add your MATLAB path here (only intel MATLAB works for mac)
@@ -31,7 +31,7 @@ n_samples_around_nose_train = 4 # 4 around the nose per nose
 n_samples_nose_test = 200
 
 # solved_cases_path = joinpath("..", "final_data_no_exp", case_name, topology_perturb)
-solved_cases_path = joinpath("..", "my_results/2025-05-08_22-45-38", case_name, topology_perturb)
+solved_cases_path = joinpath("..", "final_data_no_exp", case_name, topology_perturb)
 
 # Create training data
 split = "train"

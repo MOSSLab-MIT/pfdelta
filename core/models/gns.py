@@ -25,7 +25,7 @@ class GraphNeuralSolver(nn.Module):
         )
         self.power_balance = GNSPowerBalanceLoss()
 
-    def forward(self, data):  
+    def forward(self, data, return_data=False):  
         """ """
         device = data['bus'].x.device 
 
@@ -46,7 +46,14 @@ class GraphNeuralSolver(nn.Module):
             # Apply the neural network update block 
             self.apply_nn_update(data, k)
         
-        return data, total_layer_loss
+        last_loss = self.local_power_imbalance(data, layer_loss=True)
+        total_layer_loss += last_loss * (self.gamma ** 0)
+        out_dict = {
+            "last_loss": last_loss,
+            "total_layer_loss": total_layer_loss,
+            "data": data
+        }
+        return out_dict
 
 
     def global_active_compensation(self, data):
@@ -90,12 +97,12 @@ class GraphNeuralSolver(nn.Module):
         theta_j = data['bus'].theta[dst]
 
         # Compute p_global
-        term1 = v_i * v_j * y_ij / tau_ij * (
-            torch.sin(theta_i - theta_j - delta_ij - shift_ij) +  
-            torch.sin(theta_j - theta_i - delta_ij + shift_ij))
+        term1 = -v_i * v_j * y_ij / tau_ij * (
+            torch.cos(theta_i - theta_j - delta_ij - shift_ij) +  
+            torch.cos(theta_j - theta_i - delta_ij + shift_ij))
 
-        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.sin(delta_ij)
-        term3 = v_j ** 2 * y_ij * torch.sin(delta_ij)
+        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.cos(delta_ij)
+        term3 = v_j ** 2 * y_ij * torch.cos(delta_ij)
         p_joule_edge = torch.abs(term1 + term2 + term3)
         
         # Map to individual graphs
@@ -139,8 +146,11 @@ class GraphNeuralSolver(nn.Module):
         pg_max_slack = pg_max_vals[is_slack][:, 1]
         pg_min_slack = pg_min_vals[is_slack][:, 0]
 
-        graph_ids = is_slack.cumsum(dim=0) - 1
-        num_graphs = graph_ids.max().item() + 1
+        gen_idx = torch.arange(pg_setpoints.size(0), device=pg_setpoints.device)
+        graph_ids = torch.bucketize(gen_idx, data["gen"].ptr[1:])  # gives [num_gen_nodes] → [num_graphs]
+
+        # Initialize output tensors
+        num_graphs = data["gen"].ptr.size(0) - 1
         
         pg_setpoint_slack = pg_setpoints[is_slack]
         pg_setpoints_non_slack = pg_setpoints.clone()
@@ -206,7 +216,7 @@ class GraphNeuralSolver(nn.Module):
 
         # Compute messages along edges
         edge_input = torch.cat([m_src, line_ij], dim=1) 
-        messages = self.phi(edge_input)  
+        messages = self.phi(edge_input)
 
         # Aggregate messages to each destination node
         num_nodes = data['bus'].x.size(0)

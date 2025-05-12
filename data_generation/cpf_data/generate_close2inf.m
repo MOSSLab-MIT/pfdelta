@@ -34,7 +34,8 @@ function generate_close2inf(nose_point_cases_path, save_path)
         % Run CPF
         [results, success] = my_runcpf(mpc_b, mpc_t, mpopt, [], solvedcase, current_net_path, save_path);
         if ~success
-           non_converging{end+1} = current_net_path;  % append path
+            disp([results.cpf.done_msg, ' for sample ', current_net_path])
+            non_converging{end+1} = current_net_path;  % append path
         end
         
         if success 

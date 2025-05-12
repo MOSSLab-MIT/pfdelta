@@ -1,28 +1,31 @@
 import json
 import os
-import torch
 import random
 from tqdm import tqdm
-import numpy as np
 from typing import Callable, Sequence, Any
 from collections import defaultdict
+from functools import partial
 
+import torch
+import numpy as np
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
-from core.utils.registry import registry
+# from core.datasets.dataset_utils import (
+#     canos_pf_data_mean0_var1,
+#     canos_pf_slack_mean0_var1,
+#     pfnet_data_mean0_var1
+# )
+# from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
+# from core.utils.registry import registry
 
-def to_list(value: Any) -> Sequence:
-    if isinstance(value, Sequence) and not isinstance(value, str):
-        return value
-    else:
-        return [value]
 
 # TODO: make sure to implement the logic for all the "nose" cases too
-@registry.register_dataset("pfdeltadata")
+# TODO: logic for loading the test cases too (specific splits)
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False, max_samples=None):
         self.split = split
+        self.max_samples = max_samples
         self.case_name = case_name
         self.force_reload = force_reload
         self.add_bus_type = add_bus_type
@@ -302,7 +305,7 @@ class PFDeltaDataset(InMemoryDataset):
 
         return data
 
-    def shuffle_split_and_save_data(self, root): 
+    def shuffle_split_and_save_data(self, root, max_samples_per_split=None): 
         # TODO: implement logic for what train and test splits to save for a given task so that it gets saved correctly later
         # when being combined
         task, model = self.task, self.model 
@@ -340,6 +343,10 @@ class PFDeltaDataset(InMemoryDataset):
                     }
 
                 for split, files in split_dict.items():
+
+                    if max_samples_per_split is not None:
+                        files = files[:max_samples_per_split]
+
                     data_list = []
                     print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
                     for fname in tqdm(files, desc=f"Building {split} data"):
@@ -348,19 +355,18 @@ class PFDeltaDataset(InMemoryDataset):
                         data = self.build_heterodata(pm_case)
                         data_list.append(data)
 
+                    # For tasks that don't load from every folder
+                    if len(data_list) == 0:
+                        break
                     data, slices = self.collate(data_list)
                     processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
-                    
-                    if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
-                        os.mkdir(os.path.join(root, f"{grid_type}/processed"))
-                    if not os.path.exists(processed_path):
-                        os.mkdir(processed_path)
+
+                    os.makedirs(processed_path, exist_ok=True)
 
                     torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
                     all_data_lists[split].extend(data_list)
         
         return all_data_lists
-
 
     def process(self):
         task, model = self.task, self.model
@@ -383,14 +389,11 @@ class PFDeltaDataset(InMemoryDataset):
         # First, process each root and collect all data
         for root in roots:
             print(f"Processing combined data for task {task}")
-            task_data_lists = self.shuffle_split_and_save_data(root)
+            task_data_lists = self.shuffle_split_and_save_data(root, max_samples_per_split=self.max_samples)
             
             # Add data from this root to the combined lists
             for split in combined_data_lists.keys():
                 combined_data_lists[split].extend(task_data_lists[split])
-        
-        # # For task-level combined data, save in the main root directory
-        # main_root = self.root
         
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
@@ -408,7 +411,6 @@ class PFDeltaDataset(InMemoryDataset):
                 torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
                 print(f"Saved combined {split} data with {len(data_list)} samples")
 
-
     def load(self, split):
         """Loads dataset for the specified split.
         
@@ -417,13 +419,13 @@ class PFDeltaDataset(InMemoryDataset):
         """
         processed_path = os.path.join(self.processed_dir, f"{split}.pt")
         print(f"Loading {split} dataset from {processed_path}")
-        self.data, self.slices = torch.load(processed_path)
+        self.data, self.slices = torch.load(processed_path, weights_only=False)
 
 
-@registry.register_dataset("pfdeltaGNS")
+# @registry.register_dataset("pfdeltaGNS")
 class PFDeltaGNS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', model="GNS", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split, model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+    def __init__(self, root_dir='data', case_name='', split='train', model="GNS", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False, max_samples=None):
+        super().__init__(root_dir, case_name, split, model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload, max_samples)
 
     def build_heterodata(self, pm_case):
         # call base version
@@ -442,18 +444,22 @@ class PFDeltaGNS(PFDeltaDataset):
 
         # Read bus types
         bus_types = data['bus'].bus_type 
+        bus_voltages = data['bus'].bus_voltages
         x_gns = torch.zeros((num_buses, 2))
 
         for bus_idx in range(num_buses):
             bus_type = bus_types[bus_idx].item()
             pf_x = data['bus'].x[bus_idx]
-            pf_y = data['bus'].x[bus_idx]
+            pf_y = data['bus'].y[bus_idx]
             bus_demand = data['bus'].bus_demand[bus_idx]
             bus_gen = data['bus'].bus_gen[bus_idx]
 
             if bus_type == 1:  # PQ bus
                 # Flat start for PQ bus
-                x_gns[bus_idx] = torch.tensor([1.0, 0.0])
+                x_gns[bus_idx] = torch.tensor([0.0, 1.0])
+                
+                # x_gns[bus_idx] = bus_voltages[bus_idx]
+
                 pd = pf_x[0]
                 qd = pf_x[1]
                 pg = bus_gen[0]
@@ -461,20 +467,24 @@ class PFDeltaGNS(PFDeltaDataset):
             elif bus_type == 2:  # PV bus
                 v = pf_x[1]
                 theta = torch.tensor(0.0)
-                x_gns[bus_idx] = torch.stack([v, theta])
+                x_gns[bus_idx] = torch.stack([theta, v])
+
+                # x_gns[bus_idx] = bus_voltages[bus_idx]
+
                 pd = bus_demand[0]
                 qd = bus_demand[1]
                 pg = bus_gen[0]
                 qg = bus_gen[1]
             elif bus_type == 3:  # Slack bus
                 x_gns[bus_idx] = pf_x
+                # x_gns[bus_idx] = bus_voltages[bus_idx]
                 pd = bus_demand[0]
                 qd = bus_demand[1]
                 pg = bus_gen[0]
                 qg = bus_gen[1]
 
-            v_buses[bus_idx] = x_gns[bus_idx][0]
-            theta_buses[bus_idx] = x_gns[bus_idx][1]
+            v_buses[bus_idx] = x_gns[bus_idx][1]
+            theta_buses[bus_idx] = x_gns[bus_idx][0]
             pd_buses[bus_idx] = pd
             qd_buses[bus_idx] = qd
             pg_buses[bus_idx] = pg
@@ -493,126 +503,129 @@ class PFDeltaGNS(PFDeltaDataset):
         data['gen'].num_nodes = num_gens
         data['load'].num_nodes = num_loads
 
-        return data
-
-
-@registry.register_dataset("pfdeltaCANOS")
-class PFDeltaCANOS(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
-
-    def build_heterodata(self, pm_case):
-        # call base version
-        data = super().build_heterodata(pm_case)
-
-        # Now prune the data to only keep bus, PV, PQ, slack
-        keep_nodes = {"bus", "PV", "PQ", "slack"}
-
-        for node_type in list(data.node_types):
-            if node_type not in keep_nodes:
-                del data[node_type]
-
-        for edge_type in list(data.edge_types):
-            src, _, dst = edge_type
-            if src not in keep_nodes or dst not in keep_nodes:
-                del data[edge_type]
+        if self.pre_transform:
+            data = self.pre_transform(data)
 
         return data
 
 
-@registry.register_dataset("pfdeltaPFNet")
-class PFDeltaPFNet(PFDeltaDataset): 
-    def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+# # @registry.register_dataset("pfdeltaCANOS")
+# class PFDeltaCANOS(PFDeltaDataset): 
+#     def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+#         if pre_transform is not None: 
+#             if pre_transform == "canos_pf_data_mean0_var1": 
+#                 stats = canos_pfdelta_stats[case_name]
+#                 pre_transform = partial(canos_pf_data_mean0_var1, stats)
+        
+#         if transform is not None: 
+#             if transform == "canos_pf_slack_mean0_var1": 
+#                 stats = canos_pfdelta_stats[case_name]
+#                 transform = partial(canos_pf_slack_mean0_var1, stats)
 
-    def build_heterodata(self, pm_case):
-        # call base version
-        data = super().build_heterodata(pm_case)
+#         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
-        num_buses = data['bus'].x.size(0)
-        bus_types = data['bus'].bus_type
-        pf_x = data['bus'].x
-        pf_y = data['bus'].y
-        shunts = data['bus'].shunt
-        num_gens = data['gen'].generation.size(0)
-        num_loads = data['load'].demand.size(0)
+#     def build_heterodata(self, pm_case):
+#         # call base version
+#         data = super().build_heterodata(pm_case)
 
-        # New node features for PFNet
-        x_pfnet = []
-        y_pfnet = []
-        for i in range(num_buses):
-            bus_type = int(bus_types[i].item())
+#         # Now prune the data to only keep bus, PV, PQ, slack
+#         keep_nodes = {"bus", "PV", "PQ", "slack"}
 
-            # One-hot encode bus type
-            one_hot = torch.zeros(4) 
-            one_hot[bus_type - 1] = 1  
-            gs, bs = shunts[i]
+#         for node_type in list(data.node_types):
+#             if node_type not in keep_nodes:
+#                 del data[node_type]
 
-            # Prediction mask
-            if bus_type == 1:   # PQ
-                pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
-                va, vm =  pf_y[i] 
-                pd, qd = pf_x[i]
-                input_mask = (1 - pred_mask).float()
-                input_feats = torch.tensor([vm, va, pd, qd, gs, bs]) * input_mask
-                features = torch.cat([one_hot, input_feats])
-                y = torch.tensor([vm, va, pd, qd, gs, bs])
-            elif bus_type == 2: # PV
-                pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
-                pg_pd, vm =  pf_x[i]
-                qg_qd, va = pf_y[i]
-                input_mask = (1 - pred_mask).float()
-                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
-                features = torch.cat([one_hot, input_feats])
-                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
-            elif bus_type == 3: # Slack
-                pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
-                va, vm =  pf_x[i]
-                pg_pd, qg_qd = pf_y[i]
-                input_mask = (1 - pred_mask).float()
-                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
-                features = torch.cat([one_hot, input_feats])
-                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+#         for edge_type in list(data.edge_types):
+#             src, _, dst = edge_type
+#             if src not in keep_nodes or dst not in keep_nodes:
+#                 del data[edge_type]
 
-            x_pfnet.append(torch.cat([features, pred_mask]))
-            y_pfnet.append(y)
+#         if self.pre_transform:
+#             data = self.pre_transform(data)
 
-        x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
-        y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
+#         return data
 
-        if self.split == 'train':
-            # Strip one-hot and pred_mask
-            x_cont = x_pfnet[:, 4:10]  # shape [N, 6]
-            y_cont = y_pfnet           # shape [N, 6]
 
-            xy = torch.cat([x_cont, y_cont], dim=0)
-            mean = xy.mean(dim=0, keepdim=True)
-            std = xy.std(dim=0, keepdim=True) + 1e-7
+# @registry.register_dataset("pfdeltaPFNet")
+# class PFDeltaPFNet(PFDeltaDataset): 
+#     def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+#         if pre_transform:
+#             if pre_transform == "pfnet_data_mean0_var1":
+#                 stats = pfnet_pfdata_stats[case_name]
+#                 pre_transform = partial(pfnet_data_mean0_var1, stats)
+#         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
-            self.norm_mean = mean
-            self.norm_std = std
+#     def build_heterodata(self, pm_case):
+#         # call base version
+#         data = super().build_heterodata(pm_case)
 
-            x_cont_norm = (x_cont - mean) / std
-            y_norm = (y_cont - mean) / std
+#         num_buses = data['bus'].x.size(0)
+#         bus_types = data['bus'].bus_type
+#         pf_x = data['bus'].x
+#         pf_y = data['bus'].y
+#         shunts = data['bus'].shunt
+#         num_gens = data['gen'].generation.size(0)
+#         num_loads = data['load'].demand.size(0)
 
-            x_normalized = torch.cat([x_pfnet[:, :4], x_cont_norm, x_pfnet[:, 10:]], dim=1)
+#         # New node features for PFNet
+#         x_pfnet = []
+#         y_pfnet = []
+#         for i in range(num_buses):
+#             bus_type = int(bus_types[i].item())
 
-            data['bus'].x = x_normalized
-            data['bus'].y = y_norm
-        else:
-            data['bus'].x = x_pfnet
-            data['bus'].y = y_pfnet
+#             # One-hot encode bus type
+#             one_hot = torch.zeros(4) 
+#             one_hot[bus_type - 1] = 1  
+#             gs, bs = shunts[i]
 
-        data['gen'].num_nodes = num_gens
-        data['load'].num_nodes = num_loads
+#             # Prediction mask
+#             if bus_type == 1:   # PQ
+#                 pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
+#                 va, vm =  pf_y[i] 
+#                 pd, qd = pf_x[i]
+#                 input_mask = (1 - pred_mask).float()
+#                 input_feats = torch.tensor([vm, va, pd, qd, gs, bs]) * input_mask
+#                 features = torch.cat([one_hot, input_feats])
+#                 y = torch.tensor([vm, va, pd, qd, gs, bs])
+#             elif bus_type == 2: # PV
+#                 pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
+#                 pg_pd, vm =  pf_x[i]
+#                 qg_qd, va = pf_y[i]
+#                 input_mask = (1 - pred_mask).float()
+#                 input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+#                 features = torch.cat([one_hot, input_feats])
+#                 y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+#             elif bus_type == 3: # Slack
+#                 pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
+#                 va, vm =  pf_x[i]
+#                 pg_pd, qg_qd = pf_y[i]
+#                 input_mask = (1 - pred_mask).float()
+#                 input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+#                 features = torch.cat([one_hot, input_feats])
+#                 y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
 
-        edge_attrs = []
-        for attr in data['bus', 'branch', 'bus'].edge_attr:
-            r, x = attr[0], attr[1]
-            b = attr[2] + attr[4]
-            tau, angle = attr[6], attr[7]
-            edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
+#             x_pfnet.append(torch.cat([features, pred_mask]))
+#             y_pfnet.append(y)
 
-        data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+#         x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
+#         y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
 
-        return data
+#         data['bus'].x = x_pfnet
+#         data['bus'].y = y_pfnet
+
+#         data['gen'].num_nodes = num_gens
+#         data['load'].num_nodes = num_loads
+
+#         edge_attrs = []
+#         for attr in data['bus', 'branch', 'bus'].edge_attr:
+#             r, x = attr[0], attr[1]
+#             b = attr[2] + attr[4]
+#             tau, angle = attr[6], attr[7]
+#             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
+
+#         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+
+#         if self.pre_transform:
+#             data = self.pre_transform(data)
+
+#         return data

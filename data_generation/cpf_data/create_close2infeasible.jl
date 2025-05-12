@@ -6,9 +6,9 @@ function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx))))
 
         if split == "train"
-            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[1:n_nose]]
+            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[1:n_nose+10]] # the 10 is to have some 10 extra files in case we don't get enough around the nose points
         elseif split == "test"
-            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-n_nose+1:end]]
+            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-n_nose-10+1:end]]
         end
     else
         println("raw_shuffle.json not found, using all samples in debug mode.")
@@ -39,16 +39,16 @@ function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split
     generate_close2inf($mpc_save_path, $raw_hard_save_path);
     """
 
-    split_files(close2inf_path, n_around_nose, split; save_all=save_all)
+    split_files(close2inf_path, n_nose, n_around_nose, split; save_all=save_all)
 
+    files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose"))
+    @assert length(files_nose) == n_nose "Got $(length(files_nose)) instead of $(n_nose)"
+    
     if split === "train"
         files_around = Glob.glob("sample_*.json", joinpath(close2inf_path, "around_nose"))
         @assert length(files_around) == n_nose * n_around_nose "Got $(length(files_around)) instead of $(n_nose * n_around_nose)"
     end
 
-    files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose"))
-    @assert length(files_nose) == n_nose "Got $(length(files_nose)) instead of $(n_nose)"
-    
 end
 
 function create_matpower_files(solved_cases_path, save_path, selected_cases_idx)
@@ -64,7 +64,7 @@ function create_matpower_files(solved_cases_path, save_path, selected_cases_idx)
     end
 end
 
-function split_files(close2inf_path, n_around_nose, split; save_all=false)
+function split_files(close2inf_path, n_nose, n_around_nose, split; save_all=false)
     nose_dir = joinpath(close2inf_path, "nose")
     around_nose_dir = joinpath(close2inf_path, "around_nose")
     mkpath(nose_dir)
@@ -77,12 +77,7 @@ function split_files(close2inf_path, n_around_nose, split; save_all=false)
     for file in files
         base = basename(file)
         if endswith(base, "_nose.m")
-            solved_net = PM.parse_file(file)
-            json_path = joinpath(nose_dir, replace(base, ".m" => ".json"))
-            json_dict  = Dict("lambda" => nothing, "solved_net" => solved_net)
-            open(json_path, "w") do io
-                write(io, JSON.json(json_dict))
-            end
+            continue
         else
             m = match(r"sample_(\d+)_lam_(\d+p\d+)\.m", base)
             if m !== nothing
@@ -93,11 +88,32 @@ function split_files(close2inf_path, n_around_nose, split; save_all=false)
         end
     end
 
-    # For each nose file (based on index), get around-the-nose samples
+
+    filtered_dict = Dict{String, Vector{Tuple{String, Float64}}}()
     if split == "train"
         for (idx, file_tuples) in file_dict
+            if save_all || (length(file_tuples) - 1 >= n_around_nose)
+                filtered_dict[idx] = file_tuples
+            else
+                @warn "Skipping index $(idx): not enough around-the-nose samples (have $(length(file_tuples) - 1), need $(n_around_nose))"
+            end
+        end
+    elseif split == "test"
+        filtered_dict = file_dict
+    end
+
+    selected_idxs = sort(collect(keys(filtered_dict))) 
+    if length(selected_idxs) < n_nose
+        error("Only $(length(selected_idxs)) valid nose points available, but requested $n_nose.")
+    end
+    selected_idxs = selected_idxs[1:n_nose]
+
+    # For each nose file (based on index), get around-the-nose samples
+    for idx in selected_idxs
+        if split == "train"
+            file_tuples = filtered_dict[idx]
             sorted = sort(file_tuples, by = x -> abs(x[2]), rev=true)
-            selected = save_all ? sorted : Iterators.take(Iterators.drop(sorted, 1), n_around_nose) # get rid of the nose.
+            selected = save_all ? sorted : Iterators.take(Iterators.drop(sorted, 1), n_around_nose)
 
             for (file, lam) in selected
                 base = basename(file)
@@ -108,6 +124,19 @@ function split_files(close2inf_path, n_around_nose, split; save_all=false)
                     write(io, JSON.json(json_dict))
                 end
             end
+        end
+
+        # Also save the corresponding nose file now
+        nose_file = joinpath(close2inf_path, "raw", "sample_$(idx)_nose.m")
+        if isfile(nose_file)
+            solved_net = PM.parse_file(nose_file)
+            json_path = joinpath(nose_dir, "sample_$(idx)_nose.json")
+            json_dict = Dict("lambda" => nothing, "solved_net" => solved_net)
+            open(json_path, "w") do io
+                write(io, JSON.json(json_dict))
+            end
+        else
+            @warn "Nose file not found for index $idx. Skipping."
         end
     end
 end

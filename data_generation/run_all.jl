@@ -15,12 +15,20 @@ base_save_path = joinpath("my_results", timestamp)
 mkpath(base_save_path)
 
 cases = [
+        (
+        K = 1000,
+        name = "case2000",
+        file = "pglib_opf_case2000_goc.m",
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case2000/none"),
+        perturb_topology_method = "none"
+    )
     # (
     #     K = 56_000,
     #     name = "case57",
     #     file = "pglib_opf_case57_ieee.m",
     #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57_n"),
+    #     save_path = joinpath(base_save_path, "case57/none"),
     #     perturb_topology_method = "none"
     # ),
     # (
@@ -28,7 +36,7 @@ cases = [
     #     name = "case57",
     #     file = "pglib_opf_case57_ieee.m",
     #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57_n_minus_1"),
+    #     save_path = joinpath(base_save_path, "case57/n-1"),
     #     perturb_topology_method = "n-1"
     # ), 
     # (
@@ -36,33 +44,33 @@ cases = [
     #     name = "case57",
     #     file = "pglib_opf_case57_ieee.m",
     #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57_n_minus_2"),
+    #     save_path = joinpath(base_save_path, "case57/n-2"),
     #     perturb_topology_method = "n-2"
     # ),
-    (
-        K = 50,
-        name = "case14",
-        file = "pglib_opf_case14_ieee.m",
-        net_path = "pglib",
-        save_path = joinpath(base_save_path, "case14/none"),
-        perturb_topology_method = "none"
-    ),
-    (
-        K = 50,
-        name = "case14",
-        file = "pglib_opf_case14_ieee.m",
-        net_path = "pglib",
-        save_path = joinpath(base_save_path, "case14/n-1"),
-        perturb_topology_method = "n-1"
-    ), 
-    (
-        K = 50,
-        name = "case14",
-        file = "pglib_opf_case14_ieee.m",
-        net_path = "pglib",
-        save_path = joinpath(base_save_path, "case14/n-2"),
-        perturb_topology_method = "n-2"
-    )
+    # (
+    #     K = 56_000,
+    #     name = "case14",
+    #     file = "pglib_opf_case14_ieee.m",
+    #     net_path = "pglib",
+    #     save_path = joinpath(base_save_path, "case14/none"),
+    #     perturb_topology_method = "none"
+    # ),
+    # (
+    #     K = 29_000,
+    #     name = "case14",
+    #     file = "pglib_opf_case14_ieee.m",
+    #     net_path = "pglib",
+    #     save_path = joinpath(base_save_path, "case14/n-1"),
+    #     perturb_topology_method = "n-1"
+    # ), 
+    # (
+    #     K = 20_000,
+    #     name = "case14",
+    #     file = "pglib_opf_case14_ieee.m",
+    #     net_path = "pglib",
+    #     save_path = joinpath(base_save_path, "case14/n-2"),
+    #     perturb_topology_method = "n-2"
+    # )
 ]
 
 # Storage for results

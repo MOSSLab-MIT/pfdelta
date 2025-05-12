@@ -75,7 +75,7 @@ def PowerBalanceLoss(predictions, data):
 
     # Compute the loss as the sum of squared mismatches
     delta_PQ_magnitude = torch.sqrt(delta_P**2 + delta_Q**2)
-    return delta_PQ_magnitude, delta_P, delta_Q
+    return delta_PQ_magnitude, delta_P, delta_Q, flows
 
 
 @registry.register_loss("GNSPowerBalanceLoss")
@@ -139,6 +139,8 @@ class GNSPowerBalanceLoss:
             + ((v_j) ** 2) * (y_ij * torch.sin(delta_ij) - b_ij / 2)
         ) 
 
+        flows = (P_flow_src, P_flow_dst, Q_flow_src, Q_flow_dst)
+
         # Aggregate contributions for all nodes
         Pbus_pred = torch.zeros_like(v).scatter_add_(0, src, P_flow_src)
         Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
@@ -151,7 +153,7 @@ class GNSPowerBalanceLoss:
             delta_s = (delta_p ** 2 + delta_q ** 2).mean()
             if training: 
                 self.power_balance_loss = delta_s
-            return delta_p, delta_q, delta_s
+            return delta_p, delta_q, delta_s, flows
         else: 
             qg = qd - b_s * v**2 - Qbus_pred
             return qg

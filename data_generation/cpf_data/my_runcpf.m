@@ -1,4 +1,4 @@
-function [res, suc] = ...
+function [res, suc, step_error] = ...
     my_runcpf(basecasedata, targetcasedata, mpopt, fname, solvedcase, current_net_path, save_path)
 %RUNCPF  Runs a full AC continuation power flow
 %   [RESULTS, SUCCESS] = RUNCPF(BASECASEDATA, TARGETCASEDATA, ...
@@ -172,6 +172,7 @@ if nargin < 5
     end
 end
 
+step_error = false;
 %% options
 step        = mpopt.cpf.step;              %% continuation step length
 parm        = mpopt.cpf.parameterization;  %% parameterization
@@ -487,7 +488,17 @@ if ~done.flag
         %% correction
         [nx.V, success, i, nx.lam] = cpf_corrector(Ybus, cb_data.Sbusb, nx.V_hat, cb_data.ref, cb_data.pv, cb_data.pq, ...
                     nx.lam_hat, cb_data.Sbust, cx.V, cx.lam, cx.z, cx.step, cx.parm, mpopt_pf);
-        
+
+        if ~success     %% corrector failed
+            done.flag = 1;
+            done.msg = sprintf('Corrector did not converge in %d iterations.', i);
+            if mpopt.verbose
+                fprintf('step %3d  : stepsize = %-9.3g lambda = %6.3f  corrector did not converge in %d iterations\n', cont_steps, cx.step, nx.lam, i);
+            end
+            cont_steps = max(cont_steps - 1, 1);    %% go back to last step, but not to 0
+            break;
+        end
+
         %% %%%%%%%% saving intermediate power flow %%%%%%%%%%%%
         mpc_solved = cpf_current_mpc(cb_data.mpc_base, cb_data.mpc_target, ...
             Ybus, Yf, Yt, cb_data.ref, cb_data.pv, cb_data.pq, nx.V, nx.lam, mpopt);
@@ -512,16 +523,6 @@ if ~done.flag
         filename = fullfile(save_path, sprintf('%s_lam_%s.m', base_name, lam_str));
         savecase(filename, intermediate_results);
         %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-        if ~success     %% corrector failed
-            done.flag = 1;
-            done.msg = sprintf('Corrector did not converge in %d iterations.', i);
-            if mpopt.verbose
-                fprintf('step %3d  : stepsize = %-9.3g lambda = %6.3f  corrector did not converge in %d iterations\n', cont_steps, cx.step, nx.lam, i);
-            end
-            cont_steps = max(cont_steps - 1, 1);    %% go back to last step, but not to 0
-            break;
-        end
 
         %% compute new tangent direction, based on a previous state: tx
         if nx.step == 0     %% if this is a re-do step, cx and nx are the same
@@ -694,6 +695,15 @@ if ~done.flag
             cx.step = cx.this_step;
             cx.this_step = [];      %% disable for next time
         end
+
+        %% %%%%% - added to avoid step size being too small during rollback %%%%
+        if cx.step < 1e-6
+            done.flag = 1;
+            step_error = true;
+            done.msg = sprintf('Terminating: stepsize %.1e below threshold', cx.step);
+        end
+        %% %%%%%%%%%%%%%%%%%
+    
         if isempty(cx.this_parm)
             cx.parm = cx.default_parm;
         else
