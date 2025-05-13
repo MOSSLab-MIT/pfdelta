@@ -75,12 +75,13 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
 		sleep(1)
-		println("Worker $(myid()): ", Sys.free_memory() / 1e9, " GB free RAM")
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Worker $(myid()): ", Sys.free_memory() / 1e9, " GB free RAM")
 		println("Results: ", Base.summarysize(results) / 1e6, " MB")
 		println("A: ", Base.summarysize(A) / 1e6, " MB")
 		println("b: ", Base.summarysize(b) / 1e6, " MB")
 		n_certs = length(b)
 		while isready(polytope_ch)
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Modifying polytope")
 			(print_level > 0) && println("ADDING SLICE")
 			x_star, x = take!(polytope_ch)
 			
@@ -91,9 +92,11 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			end
 			
 			x0 = x_star  #TASK: Should work since x_star always r-AC-OPF feasible
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Polytope modified")
 		end
 		
 		if length(b) > n_certs
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Updating polytope center")
 			# Fully replace values in sample_chnl
 			center, radius = chebyshev_center(A, b)
 			if reset_level > 1
@@ -103,7 +106,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			else
 				x0 = center'
 			end
-			
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Center updated")
 			# Replace values in sample queue
 			#TEST: Sometimes this seems to block and make the process halt
 			if replace_samples
@@ -161,6 +164,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 				results_pfdelta = nothing
 				# put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
 			elseif !isnothing(result)  # Infeasible
+				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "This should never run")
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
 			end
@@ -183,6 +187,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 
 		if num_new_samples > 0
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Time to sample again")
 			while true
 				if num_new_samples <= 40
 					new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
