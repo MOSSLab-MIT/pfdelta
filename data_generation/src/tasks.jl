@@ -2,7 +2,7 @@
 
 # Imports for distributed processors
 #using OPFLearn
-
+using Distributed
 
 """ 
 Produces samples from the given polytope and stores them in the sample channel.
@@ -17,7 +17,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 discard, variance, reset_level, save_while, save_infeasible,
 						 stat_track, save_certs, net_name, dual_vars, save_order,
 						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
-						 final_ch, print_level, starting_k, save_ch)
+						 final_ch, print_level, starting_k) #, save_ch)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	
 	println("SAMPLE PRODUCER PROC STARTED")
@@ -37,10 +37,22 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	x0 = base_load_feasible * 0.9 + center' * 0.1
 	
 	# Initialize load sample, x, containing [PG; QG]
-    new_samples = sampler(A, b, x0, 4*num_procs; sampler_opts...)
-	for sample in eachcol(new_samples)
-		put!(sample_ch, sample)
+	for _ in 1:4
+		new_samples = sampler(A, b, x0, num_procs; sampler_opts...)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
+		for sample in eachcol(new_samples)
+			put!(sample_ch, sample)
+		end
 	end
+	# sampler_workers = [myid(), myid() + 1]
+	# println("Sampler worker id: ", sampler_workers)
+	# futures = [
+	# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 2, num_procs, sampler_opts, sampler)
+	# 	for w in sampler_workers
+	# ]
+	# fetch.(futures)
+
+	new_samples = nothing
 	
 	k = starting_k  # Count of feasible samples collected
     i = 0  # Count of samples generated
@@ -51,6 +63,11 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	start_time = time()
 	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
+		sleep(1)
+		println("Worker $(myid()): ", Sys.free_memory() / 1e9, " GB free RAM")
+		println("Results: ", Base.summarysize(results) / 1e6, " MB")
+		println("A: ", Base.summarysize(A) / 1e6, " MB")
+		println("b: ", Base.summarysize(b) / 1e6, " MB")
 		n_certs = length(b)
 		while isready(polytope_ch)
 			(print_level > 0) && println("ADDING SLICE")
@@ -128,14 +145,16 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 											  x, result, discard, variance, net_name, 
 											  now_str, save_path, save_while, save_order,
 											  print_level)
-				# store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
-				put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
+				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
+				net_perturbed = nothing
+				results_pfdelta = nothing
+				# put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
 			elseif !isnothing(result)  # Infeasible
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
 			end
 
-			
+
 			if stat_track > 0
 				update_stats!(stats, duals, iter_stats, save_level=stat_track)
 				save_while && (save_stats(iter_stats, net_name*"_"*now_str*"_stats", dir=save_path))
@@ -148,29 +167,45 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 		
 		if num_new_samples > 0
-			retries = 0
-			while retries < 100
-				try
-					new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-					break
-				catch e
-					println("ERROR in sample_producer on $(Distributed.myid()): ", e)
-					println("STACKTRACE:")
-					for (i, frame) in enumerate(stacktrace(catch_backtrace()))
-						println("[$i] $frame")
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling again")
+			if num_new_samples > 50
+				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Dense sample, splitting")
+				while true
+					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "num new samples: ", num_new_samples)
+					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling a batch")
+					new_samples = sampler(A, b, x0, 50; sampler_opts...)
+					for sample in eachcol(new_samples)
+						put!(sample_ch, sample)
 					end
-					flush(stdout)
-					println("failed to sample, try again")
-					retries += 1
+					num_new_samples -= 50
+					# Last batch of samples
+					if num_new_samples <= 50
+						println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last new sample")
+						new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+						for sample in eachcol(new_samples)
+							put!(sample_ch, sample)
+						end
+						break
+					end
+				end
+			else
+				new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+				for sample in eachcol(new_samples)
+					put!(sample_ch, sample)
 				end
 			end
-			(retries >= 100) && error("Sampler kept erroring :(")
-			for sample in eachcol(new_samples)
-				put!(sample_ch, sample)
-			end
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done")
 			x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
+			# futures = [
+			# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 1, Int(1 + num_new_samples/2), sampler_opts, sampler)
+			# 	for w in sampler_workers
+			# ]
+			# fetch.(futures)
+			new_samples = nothing
 		end
+		GC.gc()
 	end
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
 	# Put results objects into the final channel pipeline to get returned
 	put!(final_ch, "DONE FLAG")
 	
@@ -207,8 +242,11 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
 	println("SAMPLE PROCESSOR PROC STARTED")
 	(print_level > 0) && println("Create FNFP Model...")
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Instantiating PM model")
 	pm = PowerModels.instantiate_model(net_r, model_type, build_opf_var_load)
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Model instantiated. Modifying model.")	
 	fnfp_model = find_nearest_feasible_model(pm, print_level=print_level, solver=r_solver)
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Model modified")
 	
 	(print_level > 0) && println("Starting sample processing...")
     i = 1  # Count of iterations
@@ -216,8 +254,10 @@ function sample_processor(net, net_r, r_solver, opf_solver,
         iter_start_time = time()
 		(print_level > 0) && println("Iter: $(i)") #TEST: Printing samples every iteration
 
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Waiting to take sample")
 		# Gather sample from sample channel
 		x = take!(sample_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Took sample!")
 
 		######## ADDED FOR PFDELTA #############
 		
@@ -235,6 +275,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
 		#######################################
 
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Topology perturbed!")
         # Solve OPF for the load sample
 		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
         # result, feasible = run_ac_opf(net, solver=opf_solver)
@@ -244,12 +285,15 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		new_cert = false  # Default for iteration stat tracking
 		
 		if !feasible
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Finding nearest feasible")
 			(print_level > 0) && println("FINDING NEAREST FEASIBLE")
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
 			
             r, pd, qd, solved = find_nearest_feasible(fnfp_model, px, qx, print_level=print_level)
-			
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Found nearest feasible")
+
+
 			r = sum((pd .- px).^2 + (qd .- qx).^2)
 			(print_level > 0) && println("R:", r)
 			
@@ -289,8 +333,12 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		end
 		# Puts OPF results to the results channel to be processed by main thread
 		iter_elapsed_time = time() - iter_start_time
-		
-		put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed))
+		if feasible
+			put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed))
+		end
+		results_pfdelta = nothing
+		result = nothing
+		net_perturbed = nothing
 		i = i + 1
 	end
 end

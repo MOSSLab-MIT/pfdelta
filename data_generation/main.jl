@@ -15,7 +15,7 @@ using Statistics
 using PowerModels
 
 include("src/OPFLearn.jl")
-include("create_dataset.jl")
+# include("create_dataset.jl")
 end
 
 function loadcase(casenum::String)
@@ -54,7 +54,7 @@ function uniform_creator(
 		topology_perturb,
 )
 	progress_results = joinpath(folder_path, "results.json")
-	num_parts = 10
+	num_parts = 50
 	fragment = Int(dataset_size/num_parts)
 	A = nothing
 	b = nothing
@@ -66,14 +66,12 @@ function uniform_creator(
 	end
 	for i in 1:num_parts
 		if string(i) in keys(results)
-			part_results = results[string(i)]
-			A = hcat(part_results["A"]...)
-			b = reshape(part_results["b"][1], :, 1)
+			A = hcat(results["A"]...)
+			b = reshape(results["b"][1], :, 1)
 			println("Part $i/$num_parts already done!")
 		else
 			initial_k = (i-1) * fragment
 			if A !== nothing
-				println("b reloaded: ", b)
 				part_results, Anb = point_generator(network, fragment; save_path=folder_path,
 					perturb_costs_method="shuffle", perturb_topology_method=topology_perturb,
 					starting_k=initial_k, net_path=folder_path, save_max_load=true, A=A, b=b, returnAnb=true)
@@ -85,7 +83,16 @@ function uniform_creator(
 			A, b = Anb
 			part_results["A"] = A
 			part_results["b"] = b
-			results[string(i)] = part_results
+			# Save the part metadata
+			part_path = joinpath(folder_path, "meta$i.json")
+			open(part_path, "w") do io
+				JSON.print(io, part_results)
+			end
+			part_results = nothing
+			# Save the data for the next part 
+			results["A"] = A
+			results["b"] = b
+			results[string(i)] = "finished"
 			open(progress_results, "w") do io
 				JSON.print(io, results)
 			end

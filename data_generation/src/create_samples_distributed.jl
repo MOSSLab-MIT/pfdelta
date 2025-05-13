@@ -82,11 +82,11 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	@assert nproc > 4 "Not enough processors available, nprocs:$(nproc). Need 5+ CPUs for improved runtimes."
 	@assert nproc <= Distributed.nprocs() "Number of distributed processors added, $(Distributed.nprocs()), must be greater than specified nproc, $(nproc)"
 	pid = Distributed.myid()
-	sample_chnl = Distributed.Channel{Any}(8 * nproc)
-	polytope_chnl = Distributed.Channel{Any}(8 * nproc)
-	result_chnl = Distributed.Channel{Any}(8 * nproc)
+	sample_chnl = Distributed.Channel{Any}(4 * nproc)
+	polytope_chnl = Distributed.Channel{Any}(4 * nproc)
+	result_chnl = Distributed.Channel{Any}(4 * nproc)
 	final_chnl = Distributed.Channel{Any}(1)
-	save_chnl = Distributed.Channel{Any}(8 * nproc)
+	save_chnl = Distributed.Channel{Any}(4 * nproc)
 	sample_ch = Distributed.RemoteChannel(()->sample_chnl, pid)
 	polytope_ch = Distributed.RemoteChannel(()->polytope_chnl, pid)
 	result_ch = Distributed.RemoteChannel(()->result_chnl, pid)
@@ -101,26 +101,23 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 		net_path = save_path
 	end
 
-	saver_proc = procs[1]
-	producer_proc = procs[2]
-	processor_procs = procs[3:end]
-
-	# save_chnl = Distributed.Channel{Any}(8 * nproc)
-	save_ch = Distributed.RemoteChannel(()->Distributed.Channel{Any}(8 * nproc), saver_proc)
-	@spawnat saver_proc begin
-		println("SAVER PROC STARTED")
-		while true
-			if isready(save_ch)
-				item = take!(save_ch)
-				k, net_perturbed, results_pfdelta, path = item
-				store_feasible_sample_json(k, net_perturbed, results_pfdelta, path)
-			elseif isready(final_ch) && isempty(save_ch)
-				break
-			else
-				sleep(0.01)
-			end
-		end
-	end
+	producer_proc = procs[1] # Proc 2 will also be used for sampling
+	processor_procs = procs[2:end]
+	println("Sampler worker id: ", [procs[1], procs[2]])
+	# for w in [procs[1], procs[2]]
+	# 	@spawnat w begin
+	# 		function sample_and_send!(A, b, x0, sample_ch, num_batches, num_samples_p_batch, sampler_opts, sampler)
+	# 			for _ in 1:num_batches
+	# 				new_samples = sampler(A, b, x0, num_samples_p_batch; sampler_opts...)
+	# 				println("$(Dates.format(Dates.now(), "HH:MM:SS")): Batch produced on worker $(myid())")
+	# 				for sample in eachcol(new_samples)
+	# 					put!(sample_ch, sample)
+	# 				end
+	# 			end
+	# 			return new_samples
+	# 		end
+	# 	end
+	# end
 
 	# Gather network information used during processing
 	A, b, x, results, fnfp_model, base_load_feasible, net_r = initialize(net, pf_min, pf_lagging, pd_max, pd_min,
@@ -136,7 +133,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k, save_ch)
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k) #, save_ch)
 	for proc in processor_procs
 		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver,
 							   sample_ch, final_ch, polytope_ch, result_ch, perturb_topology_method, 
@@ -144,16 +141,10 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	end
 
 	results = Distributed.fetch(producer)
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Results fetched!!")
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
 	Anb = (A, b)
-	while true
-		if isready(final_ch) && !isready(save_ch)
-			break
-		else
-			sleep(0.01)
-		end
-	end
 
 	return results, Anb
 end
