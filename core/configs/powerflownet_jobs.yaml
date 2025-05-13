@@ -1,5 +1,5 @@
 config_type: batch
-batch_name: pfnet_hyperparam_tuning
+batch_name: pfnet_task_seed_sweep
 job_parameters:
   time: "18:00:00"
   p: "cpu-gpu-v100"
@@ -8,22 +8,30 @@ job_parameters:
 default_values:
   config: powerflownet
   model:
-    hidden_dim: _manual_list(128, 256 | 128, 256)
-  optim:
-    optimizer:
-      lr: _manual_list(0.001, 0.0005 | 1e-3, 5e-4)
-  functional:
-    run_location: pfn_118
-
-jobs:
-- model:
+    hidden_dim: 256
     n_gnn_layers: 4
     K: 3
+  optim:
+    optimizer:
+      lr: 0.0005
   functional:
-    run_name: pfnet_hd%hd256_lr%lr1e-3_layers_4_K_3
+    seed: _manual_list(11, 22, 33 | 11, 22, 33)
 
-- model:
-    n_gnn_layers: 5
-    K: 4
-  functional:
-    run_name: pfnet_hd%hd256_lr%lr1e-3_layers_5_K_4
+jobs:
+- functional:
+    run_name: pfnet_hd256_lr5e-4_layers4_K3_seed%seed
+    run_location: pfn_exps/pfn_task1.1_seeds
+  dataset:
+    task: 1.1
+
+- functional:
+    run_name: pfnet_hd256_lr5e-4_layers4_K3_seed%seed
+    run_location: pfn_exps/pfn_task1.2_seeds
+  dataset:
+    task: 1.2
+
+- functional:
+    run_name: pfnet_hd256_lr5e-4_layers4_K3_seed%seed
+    run_location: pfn_exps/pfn_task1.3_seeds
+  dataset:
+    task: 1.3
