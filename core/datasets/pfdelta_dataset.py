@@ -50,10 +50,10 @@ class PFDeltaDataset(InMemoryDataset):
             3.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             4.1: {"feasible": {"none": 16200, "n-1": 16200, "n-2": 16200}, 
                   "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}, 
-            4.2: {"feasible": {"feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}, 
+            4.2: {"feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}, 
                                "approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200}, 
                                "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
-        }
+        
 
         self.feasibility_config = {
             "feasible": {
@@ -153,7 +153,10 @@ class PFDeltaDataset(InMemoryDataset):
                         pg += gen_sol['pg']
                         qg += gen_sol['qg']
                     else:
-                        assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                        if feasibility:
+                            assert gen['pg'] == 0 and gen['qg'] == 0, f"Expected gen {gen_id} to be off"
+                        else:
+                            assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             bus_gen.append(torch.tensor([pg, qg]))
 
@@ -211,7 +214,11 @@ class PFDeltaDataset(InMemoryDataset):
                                 )
                 slack_gen.append(is_slack)
             else:
-                assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                if feasibility:
+                    assert solution_data['gen'][gen_id]['pg'] == 0 and solution_data['gen'][gen_id]['qg'] == 0, f"Expected gen {gen_id} to be off"
+                else:
+                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+
 
         # Load nodes
         demand = []
@@ -237,7 +244,8 @@ class PFDeltaDataset(InMemoryDataset):
             ]))
 
             branch_sol = solution_data['branch'].get(branch_id_str)
-            assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
+            if feasibility==None:
+                assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
 
             if branch_sol:
                 edge_label.append(torch.tensor([
