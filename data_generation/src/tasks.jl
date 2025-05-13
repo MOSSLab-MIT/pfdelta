@@ -37,12 +37,23 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	x0 = base_load_feasible * 0.9 + center' * 0.1
 	
 	# Initialize load sample, x, containing [PG; QG]
-	for _ in 1:4
-		new_samples = sampler(A, b, x0, num_procs; sampler_opts...)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
+	num_new_samples = 4*num_procs
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample started!")
+	while true
+		if num_new_samples <= 40
+			new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+			for sample in eachcol(new_samples)
+				put!(sample_ch, sample)
+			end
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last initial batch produced")
+			break
+		end
+		new_samples = sampler(A, b, x0, 40; sampler_opts...)
 		for sample in eachcol(new_samples)
 			put!(sample_ch, sample)
 		end
+		num_new_samples -= 40
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
 	end
 	# sampler_workers = [myid(), myid() + 1]
 	# println("Sampler worker id: ", sampler_workers)
@@ -165,44 +176,68 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 				prev_k = k
 			end
 		end
-		
+
+		# If this is reached, then no need to sample even more
+		if k >= K + starting_k
+			break
+		end
+
 		if num_new_samples > 0
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling again")
-			if num_new_samples > 50
-				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Dense sample, splitting")
-				while true
-					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "num new samples: ", num_new_samples)
-					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling a batch")
-					new_samples = sampler(A, b, x0, 50; sampler_opts...)
+			while true
+				if num_new_samples <= 40
+					new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
 					for sample in eachcol(new_samples)
 						put!(sample_ch, sample)
 					end
-					num_new_samples -= 50
-					# Last batch of samples
-					if num_new_samples <= 50
-						println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last new sample")
-						new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-						for sample in eachcol(new_samples)
-							put!(sample_ch, sample)
-						end
-						break
-					end
+					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last initial batch produced")
+					break
 				end
-			else
-				new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+				new_samples = sampler(A, b, x0, 40; sampler_opts...)
+				x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
 				for sample in eachcol(new_samples)
 					put!(sample_ch, sample)
 				end
+				num_new_samples -= 40
+				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
 			end
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done")
-			x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
-			# futures = [
-			# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 1, Int(1 + num_new_samples/2), sampler_opts, sampler)
-			# 	for w in sampler_workers
-			# ]
-			# fetch.(futures)
-			new_samples = nothing
 		end
+		# if num_new_samples > 0
+		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling again")
+		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "num new samples: ", num_new_samples)
+		# 	if num_new_samples > 40
+		# 		while true
+		# 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling a batch")
+		# 			new_samples = sampler(A, b, x0, 40; sampler_opts...)
+		# 			for sample in eachcol(new_samples)
+		# 				put!(sample_ch, sample)
+		# 			end
+		# 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch sampled")
+		# 			num_new_samples -= 40
+		# 			# Last batch of samples
+		# 			if num_new_samples <= 40
+		# 				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last new sample")
+		# 				new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+		# 				for sample in eachcol(new_samples)
+		# 					put!(sample_ch, sample)
+		# 				end
+		# 				break
+		# 			end
+		# 		end
+		# 	else
+		# 		new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
+		# 		for sample in eachcol(new_samples)
+		# 			put!(sample_ch, sample)
+		# 		end
+		# # 	end
+		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done")
+		# 	x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
+		# 	# futures = [
+		# 	# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 1, Int(1 + num_new_samples/2), sampler_opts, sampler)
+		# 	# 	for w in sampler_workers
+		# 	# ]
+		# 	# fetch.(futures)
+		# 	new_samples = nothing
+		# end
 		GC.gc()
 	end
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
