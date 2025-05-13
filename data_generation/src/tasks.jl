@@ -19,7 +19,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
 						 final_ch, print_level, starting_k) #, save_ch)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
-	
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 	println("SAMPLE PRODUCER PROC STARTED")
 	AC_inputs = results["inputs"]
     AC_outputs = results["outputs"]
@@ -75,7 +75,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
 		sleep(1)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Worker $(myid()): ", Sys.free_memory() / 1e9, " GB free RAM")
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 		println("Results: ", Base.summarysize(results) / 1e6, " MB")
 		println("A: ", Base.summarysize(A) / 1e6, " MB")
 		println("b: ", Base.summarysize(b) / 1e6, " MB")
@@ -377,7 +377,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
                 # result, feasible = run_ac_opf(net, solver=opf_solver)
 				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
 				if feasible
-					println("Projection found point in feasible region!")
+					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Projection found point in feasible region!")
 				end
 			end
 		end
@@ -386,6 +386,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		if feasible
 			put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed))
 		end
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Put sample in result_ch")
 		results_pfdelta = nothing
 		result = nothing
 		net_perturbed = nothing
