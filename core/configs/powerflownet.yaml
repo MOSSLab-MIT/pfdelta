@@ -28,7 +28,7 @@ dataset:
     transform: pfnet_data_mean0_var1
 optim:
   optimizer:
-    lr: 0.001
+    lr: 0.001 
   train_params:
     batch_size: 64
     epochs: 100
