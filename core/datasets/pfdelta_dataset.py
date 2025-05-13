@@ -20,7 +20,6 @@ from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
 
-# TODO: make sure to implement the logic for all the "nose" cases too
 # TODO: logic for loading the test cases too (specific splits)
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
@@ -42,16 +41,20 @@ class PFDeltaDataset(InMemoryDataset):
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
             1.2: {"feasible":{"none": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}}, # FEASIBILITY FOR TEST NOT INCLUDED
+            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.2: {"feasible":{"none": 12000, "n-1": 12000, "n-2": 12000}},
             2.3: {"feasible":{"none": 6000,  "n-1": 6000,  "n-2": 6000}},
             3.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             3.2: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             3.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
-            4.1: {"feasible": {}, "near infeasible": {}}, 
-            4.2: {"feasible": {}, "approaching infeasible": {}, "near infeasible": {}},
-        } 
+            4.1: {"feasible": {"none": 16200, "n-1": 16200, "n-2": 16200}, 
+                  "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}, 
+            4.2: {"feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}, 
+                               "approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200}, 
+                               "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
+        
+
         self.feasibility_config = {
             "feasible": {
                 "none": 56000,
@@ -91,11 +94,15 @@ class PFDeltaDataset(InMemoryDataset):
     def processed_file_names(self):
         return ['train.pt', 'val.pt', 'test.pt']
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         data = HeteroData()
 
-        network_data = pm_case['network']
-        solution_data = pm_case['solution']['solution']
+        if feasibility: 
+            network_data = pm_case['solved_net']
+            solution_data = pm_case['solved_net']
+        else: 
+            network_data = pm_case['network']
+            solution_data = pm_case['solution']['solution']
 
         # Bus nodes
         pf_x, pf_y = [], []
@@ -146,7 +153,10 @@ class PFDeltaDataset(InMemoryDataset):
                         pg += gen_sol['pg']
                         qg += gen_sol['qg']
                     else:
-                        assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                        if feasibility:
+                            assert gen['pg'] == 0 and gen['qg'] == 0, f"Expected gen {gen_id} to be off"
+                        else:
+                            assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             bus_gen.append(torch.tensor([pg, qg]))
 
@@ -204,7 +214,11 @@ class PFDeltaDataset(InMemoryDataset):
                                 )
                 slack_gen.append(is_slack)
             else:
-                assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                if feasibility:
+                    assert solution_data['gen'][gen_id]['pg'] == 0 and solution_data['gen'][gen_id]['qg'] == 0, f"Expected gen {gen_id} to be off"
+                else:
+                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+
 
         # Load nodes
         demand = []
@@ -230,7 +244,8 @@ class PFDeltaDataset(InMemoryDataset):
             ]))
 
             branch_sol = solution_data['branch'].get(branch_id_str)
-            assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
+            if feasibility==None:
+                assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
 
             if branch_sol:
                 edge_label.append(torch.tensor([
@@ -326,44 +341,88 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
-                shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
-                with open(shuffle_path, "r") as f:
-                    shuffle_dict = json.load(f)
-                shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
+                if feasibility == "feasible": 
+                    shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
+                    with open(shuffle_path, "r") as f:
+                        shuffle_dict = json.load(f)
+                    shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
 
-                raw_path = os.path.join(root, grid_type, "raw")
-                raw_fnames = [os.path.join(raw_path, f"sample_{i+1}.json") for i in shuffle_map.keys()]
-                fnames_shuffled = [raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()]
+                    raw_path = os.path.join(root, grid_type, "raw")
+                    raw_fnames = [os.path.join(raw_path, f"sample_{i+1}.json") for i in shuffle_map.keys()]
+                    fnames_shuffled = [raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()]
 
-                # extend the lists instead of overwriting
-                split_dict = {
-                        'train': fnames_shuffled[:int(0.9 * train_size)],
-                        'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
-                        'test': fnames_shuffled[-int(test_size):],
+                    # extend the lists instead of overwriting
+                    split_dict = {
+                            'train': fnames_shuffled[:int(0.9 * train_size)],
+                            'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
+                            'test': fnames_shuffled[-int(test_size):],
+                        }
+
+                    for split, files in split_dict.items():
+                        data_list = []
+                        print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
+                        for fname in tqdm(files, desc=f"Building {split} data"):
+                            with open(fname, "r") as f:
+                                pm_case = json.load(f)
+                            data = self.build_heterodata(pm_case)
+                            data_list.append(data)
+
+                        # For tasks that don't load from every folder
+                        if len(data_list) == 0:
+                            break
+                        data, slices = self.collate(data_list)
+                        processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                        
+                        if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
+                            os.mkdir(os.path.join(root, f"{grid_type}/processed"))
+                        if not os.path.exists(processed_path):
+                            os.mkdir(processed_path)
+
+                        torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                        all_data_lists[split].extend(data_list)
+                else: 
+                    infeasibility_type = "around_nose" if feasibility == "approaching infeasible" else "nose"
+                    infeasible_train_path = os.path.join(root, grid_type, "close2inf_train", infeasibility_type)
+                    infeasible_test_path = os.path.join(root, grid_type, "close2inf_test", infeasibility_type)
+
+                    # Collect filenames
+                    train_files = sorted([
+                        os.path.join(infeasible_train_path, f) 
+                        for f in os.listdir(infeasible_train_path) if f.endswith(".json")
+                    ])
+                    test_files = sorted([
+                        os.path.join(infeasible_test_path, f) 
+                        for f in os.listdir(infeasible_test_path) if f.endswith(".json")
+                    ])
+
+                    # Create the split dictionary directly
+                    split_idx = int(0.9 * len(train_files))
+                    split_dict = {
+                        'train': train_files[:split_idx],
+                        'val': train_files[split_idx:],
+                        'test': test_files,
                     }
 
-                for split, files in split_dict.items():
-                    data_list = []
-                    print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
-                    for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(fname, "r") as f:
-                            pm_case = json.load(f)
-                        data = self.build_heterodata(pm_case)
-                        data_list.append(data)
+                    for split, files in split_dict.items():
+                        data_list = []
+                        if not files:
+                            continue
+                        print(f"Processing split: {model} {task} {grid_type} {feasibility} {split} ({len(files)} files)")
+                        for fname in tqdm(files, desc=f"Building {split} data"):
+                            with open(fname, "r") as f:
+                                pm_case = json.load(f)
+                            data = self.build_heterodata(pm_case, feasibility=feasibility)
+                            data_list.append(data)
 
-                    # For tasks that don't load from every folder
-                    if len(data_list) == 0:
-                        break
-                    data, slices = self.collate(data_list)
-                    processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
-                    
-                    if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
-                        os.mkdir(os.path.join(root, f"{grid_type}/processed"))
-                    if not os.path.exists(processed_path):
-                        os.mkdir(processed_path)
+                        if len(data_list) == 0:
+                            continue
 
-                    torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
-                    all_data_lists[split].extend(data_list)
+                        data, slices = self.collate(data_list)
+                        processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                        os.makedirs(processed_path, exist_ok=True)
+
+                        torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                        all_data_lists[split].extend(data_list)
         
         return all_data_lists
 
