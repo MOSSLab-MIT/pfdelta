@@ -248,6 +248,12 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
 	# Put results objects into the final channel pipeline to get returned
 	put!(final_ch, "DONE FLAG")
+	while isready(sample_ch)
+		take!(sample_ch)
+	end
+	for _ in 1:num_procs
+		put!(sample_ch, "DONE FLAG")
+	end
 	
 	return results
 end
@@ -299,6 +305,10 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		x = take!(sample_ch)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Took sample!")
 
+		if typeof(x) == String && x == "DONE FLAG"
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "DONE FLAG SENT THROUGH SAMPLE CH. Returning")
+			return
+		end
 		######## ADDED FOR PFDELTA #############
 		
 		# Create deepcopy the following perturbations are not carried over for the next samples
