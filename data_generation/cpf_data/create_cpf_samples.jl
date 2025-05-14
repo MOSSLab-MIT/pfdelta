@@ -54,9 +54,9 @@ function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split
                 for file in current_sample_files
                     base = basename(file)
                     if !endswith(base, "_nose.m")
-                        m = match(r"sample_(\d+)_lam_(\d+p\d+)\.m", base)
+                        m = match(r"sample_(\d+)_lam_(m?\d+p\d+)\.m", base)
                         if m !==nothing
-                            lam = parse(Float64, replace(m.captures[2], "p" => "."))
+                            lam = parse(Float64, replace(m.captures[2], "p" => ".", "m" => "-"))
                             if lam <= 0
                                 skip_sample = true
                                 break 

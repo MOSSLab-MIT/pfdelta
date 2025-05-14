@@ -173,6 +173,7 @@ if nargin < 5
 end
 
 step_error = false;
+
 %% options
 step        = mpopt.cpf.step;              %% continuation step length
 parm        = mpopt.cpf.parameterization;  %% parameterization
@@ -518,6 +519,7 @@ if ~done.flag
         
         lam_str = sprintf('%.5f', nx.lam);
         lam_str = strrep(lam_str, '.', 'p');
+        lam_str = strrep(lam_str, '-', 'm');     
 
         [~, base_name, ~] = fileparts(current_net_path);
         filename = fullfile(save_path, sprintf('%s_lam_%s.m', base_name, lam_str));

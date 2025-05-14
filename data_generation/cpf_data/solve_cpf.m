@@ -22,13 +22,15 @@ function cpf_success = solve_cpf(current_net_path, save_path)
         non_converging_reason = [results.cpf.done_msg, ' for sample ', current_net_path];
     elseif step_error
         non_converging_reason = 'step size too small';
-    elseif isempty(results.cpf.events)
+    elseif ~isfield(results.cpf, 'events') || isempty(results.cpf.events)
         non_converging_reason = 'something happened';
     elseif ~(results.cpf.events.name == 'NOSE') 
         non_converging_reason = 'nose event not triggered';
     end
 
-    if isempty(results.cpf.events)
+    if ~isfield(results.cpf, 'events')
+        cpf_success = false;
+    elseif isempty(results.cpf.events)
         cpf_success = false;
     else 
         cpf_success = success && strcmp(results.cpf.events.name, 'NOSE') && ~step_error;

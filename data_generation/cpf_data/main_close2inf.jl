@@ -32,6 +32,7 @@ n_samples_nose_test = 200
 
 # solved_cases_path = joinpath("..", "final_data_no_exp", case_name, topology_perturb)
 solved_cases_path = joinpath("..", "final_data_no_exp", case_name, topology_perturb)
+# solved_cases_path = joinpath("..", "my_results", "2025-05-08_23-42-35", case_name, topology_perturb)
 
 # Create training data
 split = "train"

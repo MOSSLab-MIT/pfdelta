@@ -1,5 +1,3 @@
-using Distributed
-
 using Pkg
 Pkg.activate(@__DIR__)
 
@@ -15,38 +13,30 @@ base_save_path = joinpath("my_results", timestamp)
 mkpath(base_save_path)
 
 cases = [
-        (
-        K = 1000,
-        name = "case2000",
-        file = "pglib_opf_case2000_goc.m",
+    (
+        K = 56_000,
+        name = "case30",
+        file = "pglib_opf_case30_ieee.m",
         net_path = "pglib",
-        save_path = joinpath(base_save_path, "case2000/none"),
+        save_path = joinpath(base_save_path, "case30/none"),
         perturb_topology_method = "none"
+    ),
+    (
+        K = 29_000,
+        name = "case30",
+        file = "pglib_opf_case30_ieee.m",
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case30/n-1"),
+        perturb_topology_method = "n-1"
+    ), 
+    (
+        K = 20_000,
+        name = "case30",
+        file = "pglib_opf_case30_ieee.m",
+        net_path = "pglib",
+        save_path = joinpath(base_save_path, "case30/n-2"),
+        perturb_topology_method = "n-2"
     )
-    # (
-    #     K = 56_000,
-    #     name = "case57",
-    #     file = "pglib_opf_case57_ieee.m",
-    #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57/none"),
-    #     perturb_topology_method = "none"
-    # ),
-    # (
-    #     K = 29_000,
-    #     name = "case57",
-    #     file = "pglib_opf_case57_ieee.m",
-    #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57/n-1"),
-    #     perturb_topology_method = "n-1"
-    # ), 
-    # (
-    #     K = 20_000,
-    #     name = "case57",
-    #     file = "pglib_opf_case57_ieee.m",
-    #     net_path = "pglib",
-    #     save_path = joinpath(base_save_path, "case57/n-2"),
-    #     perturb_topology_method = "n-2"
-    # ),
     # (
     #     K = 56_000,
     #     name = "case14",
@@ -91,8 +81,7 @@ for case in cases
             save_while  = true,
             print_level = 1, 
             perturb_topology_method = case.perturb_topology_method, 
-            perturb_costs_method = "shuffle"
-        )
+            perturb_costs_method = "shuffle")
     catch e
         println("❌ Error in $(case.name): $e")
         success = false
