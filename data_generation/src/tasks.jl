@@ -76,9 +76,6 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		  (i < max_iter) & ((time() - start_time) < T)
 		sleep(1)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
-		println("Results: ", Base.summarysize(results) / 1e6, " MB")
-		println("A: ", Base.summarysize(A) / 1e6, " MB")
-		println("b: ", Base.summarysize(b) / 1e6, " MB")
 		n_certs = length(b)
 		while isready(polytope_ch)
 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Modifying polytope")
@@ -248,12 +245,16 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
 	# Put results objects into the final channel pipeline to get returned
 	put!(final_ch, "DONE FLAG")
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Draining sample channel")
 	while isready(sample_ch)
 		take!(sample_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sample thrown")
 	end
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Flooding sample channel with done")
 	for _ in 1:num_procs
 		put!(sample_ch, "DONE FLAG")
 	end
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Flooded")
 	
 	return results
 end

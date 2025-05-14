@@ -77,6 +77,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 								model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
 								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
 								perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "STARTING WITH ", Sys.free_memory() / 1e9, " GB free RAM")
 	# Create channels for transfering data between processes
 	isnothing(nproc) && (nproc = Distributed.nprocs())
 	@assert nproc > 4 "Not enough processors available, nprocs:$(nproc). Need 5+ CPUs for improved runtimes."
@@ -92,7 +93,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	result_ch = Distributed.RemoteChannel(()->result_chnl, pid)
 	final_ch = Distributed.RemoteChannel(()->final_chnl, pid)
 	procs = Distributed.workers()
-	
+
 	num_procs = nproc - 2  #TASK: Determine why the producer gets stuck running on the main proc
 
 	net_name = net["name"]

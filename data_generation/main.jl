@@ -101,6 +101,7 @@ function uniform_creator(
 			println("##\t\tCREATED PART $i/$(num_parts)!\t\t\t##")
 			println("##\t\t\t\t\t\t\t\t##")
 			println("##################################################\n\n\n")
+			return
 		end
 	end
 end
