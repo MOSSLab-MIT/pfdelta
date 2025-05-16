@@ -187,7 +187,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 				topology_perturb,
 			)
 		end
-		mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
+		# mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
 		println("DONE")
 
 	end
