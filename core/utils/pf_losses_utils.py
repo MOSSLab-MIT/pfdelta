@@ -3,7 +3,7 @@ import pickle
 import torch
 
 from torch.nn.functional import mse_loss
-from torch_geometric.nn import global_add_pool, global_max_pool
+from torch_geometric.nn import global_add_pool
 
 from core.utils.registry import registry
 from core.datasets.dataset_utils import canos_pf_data_mean0_var1
@@ -98,7 +98,7 @@ class PowerBalanceLoss:
         self.power_balance_l2 = batched_power_balance_l2.mean()
 
         # Calculate PBL Max
-        self.power_balance_max = global_max_pool(delta_PQ_magnitude, batch_idx).mean()
+        self.power_balance_max = delta_PQ_magnitude.max()
 
         # new_max = delta_PQ_magnitude.max()
         # if self.power_balance_max is None:
