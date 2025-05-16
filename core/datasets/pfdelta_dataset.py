@@ -19,10 +19,9 @@ from core.datasets.dataset_utils import (
 from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
-
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -30,12 +29,12 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        if task in [3.2, 3.3]: # TODO: add a flag to specify the specific processed dir!
+        if task in [3.2, 3.3]:
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_")
         else: 
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}")
 
-        self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+        self.all_case_names = ["case14_seeds", "case30_seeds", "case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
 
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
@@ -51,9 +50,12 @@ class PFDeltaDataset(InMemoryDataset):
                   "feasible": {"none": 16200, "n-1": 16200, "n-2": 16200}}, 
             4.2: {"approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200}, 
                   "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}, 
-                  "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}}
-        
+                  "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}, 
+            4.3:{"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
 
+        if case_name == "case2000_seeds":
+            self.task_config = {1.3: {"feasible":{"none": 10000, "n-1": 10000, "n-2": 10000}}}
+        
         self.feasibility_config = {
             "feasible": {
                 "none": 56000,
@@ -339,6 +341,9 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
+                if train_size == 0 and test_size == 0:
+                    continue
+
                 if feasibility == "feasible": 
                     shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
                     with open(shuffle_path, "r") as f:
@@ -367,7 +372,7 @@ class PFDeltaDataset(InMemoryDataset):
 
                         # For tasks that don't load from every folder
                         if len(data_list) == 0:
-                            break
+                            continue
                         data, slices = self.collate(data_list)
                         processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
                         
