@@ -45,7 +45,7 @@ Example:
 
 Contents and Format:
 --------------------
-- All files are in `.json` format.
+All files are in `.json` format.
 
 1. raw.tar.gz
    - Contains just-feasible samples.
