@@ -1,13 +1,3 @@
-function flat_start_NR!(net)
-    for (_,bus) in net["bus"]
-        bus["va"] = 0.0
-        if bus["bus_type"] == 1
-            bus["vm"] = 1.0
-        end
-    end
-end
-
-
 function get_condition_num_and_NR(results, raw_path, sample_idx, pv_curve_data)
     pattern = "sample_$(sample_idx)_lam_*.m"
     matches = Glob.glob(pattern, raw_path)
@@ -31,11 +21,12 @@ function get_condition_num_and_NR(results, raw_path, sample_idx, pv_curve_data)
         net = PM.make_basic_network(net)
         J = PM.calc_basic_jacobian_matrix(net)
 
-        flat_start_NR!(net)
         pf_solution = PM.compute_ac_pf(net; flat_start=true)
         converged = pf_solution["termination_status"] == true
+        iterations = pf_solution["iterations"]
+        solve_time = pf_solution["solve_time"]
 
-        results[sample_idx][lam] = (cond(Array(J), 2), converged)
+        results[sample_idx][lam] = (cond(Array(J), 2), converged, iterations, solve_time)
     end
     
 end

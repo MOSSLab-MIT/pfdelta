@@ -6,12 +6,14 @@ from tqdm import tqdm
 from torch_geometric.data import InMemoryDataset, HeteroData
 
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', topo_perturb = 'none', split='all', feasibility = False, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
+        self.feasibility = feasibility
         self.case_name = case_name
+        self.topo_perturb = topo_perturb
         self.force_reload = force_reload
         self.add_bus_type = add_bus_type
-        root = os.path.join(root_dir, case_name)
+        root = os.path.join(root_dir, case_name, topo_perturb)
         super().__init__(root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.processed_paths[self._split_to_idx()]) 
 
@@ -24,13 +26,17 @@ class PFDeltaDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
-        return ['train.pt', 'val.pt', 'test.pt', 'all.pt']
+        return ['all.pt']
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         data = HeteroData()
 
-        network_data = pm_case['network']
-        solution_data = pm_case['solution']['solution']
+        if feasibility: 
+            network_data = pm_case
+            solution_data = pm_case
+        else: 
+            network_data = pm_case['network']
+            solution_data = pm_case['solution']['solution']
 
         # Bus nodes
         pf_x, pf_y = [], []
@@ -81,7 +87,11 @@ class PFDeltaDataset(InMemoryDataset):
                         pg += gen_sol['pg']
                         qg += gen_sol['qg']
                     else:
-                        assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                        if feasibility:
+                            pass
+                            # assert gen['pg'] == 0 and gen['qg'] == 0, f"Expected gen {gen_id} to be off"
+                        else:
+                            assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             bus_gen.append(torch.tensor([pg, qg]))
 
@@ -139,7 +149,12 @@ class PFDeltaDataset(InMemoryDataset):
                                 )
                 slack_gen.append(is_slack)
             else:
-                assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                if feasibility:
+                    pass
+                    # assert solution_data['gen'][gen_id]['pg'] == 0 and solution_data['gen'][gen_id]['qg'] == 0, f"Expected gen {gen_id} to be off"
+                else:
+                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+
 
         # Load nodes
         demand = []
@@ -148,7 +163,6 @@ class PFDeltaDataset(InMemoryDataset):
             demand.append(torch.tensor([pd, qd]))
 
         # Edges
-
         # bus to bus edges
         edge_index, edge_attr, edge_label = [], [], []
         for branch_id_str, branch in sorted(network_data['branch'].items(), key=lambda x: int(x[0])):
@@ -166,13 +180,17 @@ class PFDeltaDataset(InMemoryDataset):
             ]))
 
             branch_sol = solution_data['branch'].get(branch_id_str)
-            assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
+            if feasibility==None:
+                assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
 
             if branch_sol:
-                edge_label.append(torch.tensor([
-                    branch_sol['pf'], branch_sol['qf'],
-                    branch_sol['pt'], branch_sol['qt']
-                ]))
+                try:
+                    edge_label.append(torch.tensor([
+                        branch_sol['pf'], branch_sol['qf'],
+                        branch_sol['pt'], branch_sol['qt']
+                    ]))
+                except Exception:
+                    edge_label.append(torch.tensor([0.0, 0.0, 0.0, 0.0]))
 
         # bus to gen edges
         gen_to_bus_index = []
@@ -202,19 +220,19 @@ class PFDeltaDataset(InMemoryDataset):
 
         data['load'].demand = torch.stack(demand)
 
-        if self.add_bus_type:
-            data['PQ'].x = torch.stack(PQ_bus_x) 
-            data['PQ'].y = torch.stack(PQ_bus_y)
+        # if self.add_bus_type:
+        #     data['PQ'].x = torch.stack(PQ_bus_x) 
+        #     data['PQ'].y = torch.stack(PQ_bus_y)
 
-            data['PV'].x = torch.stack(PV_bus_x) 
-            data['PV'].y = torch.stack(PV_bus_y) 
-            data['PV'].generation = torch.stack(PV_generation) 
-            data['PV'].demand = torch.stack(PV_demand) 
+        #     data['PV'].x = torch.stack(PV_bus_x) 
+        #     data['PV'].y = torch.stack(PV_bus_y) 
+        #     data['PV'].generation = torch.stack(PV_generation) 
+        #     data['PV'].demand = torch.stack(PV_demand) 
 
-            data['slack'].x = torch.stack(slack_x) 
-            data['slack'].y = torch.stack(slack_y)
-            data['slack'].generation = torch.stack(slack_generation) 
-            data['slack'].demand = torch.stack(slack_demand)         
+        #     data['slack'].x = torch.stack(slack_x) 
+        #     data['slack'].y = torch.stack(slack_y)
+        #     data['slack'].generation = torch.stack(slack_generation) 
+        #     data['slack'].demand = torch.stack(slack_demand)         
 
         for link_name, edges in {
             ('bus', 'branch', 'bus'): edge_index,
@@ -228,39 +246,106 @@ class PFDeltaDataset(InMemoryDataset):
             if link_name == ('bus', 'branch', 'bus'): 
                 data[link_name].edge_attr = torch.stack(edge_attr) 
                 data[link_name].edge_label = torch.stack(edge_label) 
-
-        if self.add_bus_type:
-            for link_name, edges in {
-                ('PV', 'PV_link', 'bus'): PV_to_bus,
-                ('PQ', 'PQ_link', 'bus'): PQ_to_bus,
-                ('slack', 'slack_link', 'bus'): slack_to_bus
-            }.items():
-                edge_tensor = torch.stack(edges, dim=1) 
-                data[link_name].edge_index = edge_tensor
-                data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
+        
+        # if self.add_bus_type:
+        #     for link_name, edges in {
+        #         ('PV', 'PV_link', 'bus'): PV_to_bus,
+        #         ('PQ', 'PQ_link', 'bus'): PQ_to_bus,
+        #         ('slack', 'slack_link', 'bus'): slack_to_bus
+        #     }.items():
+        #         edge_tensor = torch.stack(edges, dim=1) 
+        #         data[link_name].edge_index = edge_tensor
+        #         data[(link_name[2], link_name[1], link_name[0])].edge_index = edge_tensor.flip(0)
 
         return data
 
     def process(self):
         fnames = self.raw_file_names
-        random.shuffle(fnames)
-        n = len(fnames)
+        data_list = []
 
-        split_dict = {
-            'train': fnames[:int(0.8 * n)],
-            'val': fnames[int(0.8 * n): int(0.9 * n)],
-            'test': fnames[int(0.9 * n):],
-            'all': fnames  # 👈 this uses all samples
-        }
+        print(f"Processing {len(fnames)} files in {self.raw_dir}")
+        for fname in tqdm(fnames, desc="Building full dataset"):
+            with open(os.path.join(self.raw_dir, fname)) as f:
+                pm_case = json.load(f)
+            data = self.build_heterodata(pm_case, self.feasibility)
+            data_list.append(data)
 
-        for split, files in split_dict.items():
-            data_list = []
-            print(f"Processing split: {split} ({len(files)} files)")
-            for fname in tqdm(files, desc=f"Building {split} data"):
-                with open(os.path.join(self.raw_dir, fname)) as f:
-                    pm_case = json.load(f)
-                data = self.build_heterodata(pm_case)
-                data_list.append(data)
+        data, slices = self.collate(data_list)
+        torch.save((data, slices), os.path.join(self.processed_dir, 'all.pt'))
 
-            data, slices = self.collate(data_list)
-            torch.save((data, slices), os.path.join(self.processed_dir, f'{split}.pt'))
+
+class PowerBalanceLoss:
+    def __init__(self):
+        self.power_balance_mean = None 
+        self.power_balance_max = None
+        self.power_balance_l2 = None
+        self.loss_name = "PBL Mean"
+
+    def __call__(self, data):
+        # Physical quantities from ground truth
+        V = data["bus"].bus_voltages[:, 1]  # vm
+        theta = data["bus"].bus_voltages[:, 0]  # va
+        Pnet = data["bus"].bus_gen[:, 0] - data["bus"].bus_demand[:, 0]
+        Qnet = data["bus"].bus_gen[:, 1] - data["bus"].bus_demand[:, 1]
+
+        shunt_g = data["bus"].shunt[:, 0]
+        shunt_b = data["bus"].shunt[:, 1]
+
+        edge_index = data["bus", "branch", "bus"].edge_index
+        edge_attr = data["bus", "branch", "bus"].edge_attr
+
+        r = edge_attr[:, 0]
+        x = edge_attr[:, 1]
+        g_fr = edge_attr[:, 2]
+        b_fr = edge_attr[:, 3]
+        g_to = edge_attr[:, 4]
+        b_to = edge_attr[:, 5]
+        tau = edge_attr[:, 6]
+        theta_shift = edge_attr[:, 7]
+
+        src, dst = edge_index
+
+        Y = 1 / (r + 1j * x)
+        Y_real = torch.real(Y)
+        Y_imag = torch.imag(Y)
+
+        delta_theta1 = theta[src] - theta[dst]
+        delta_theta2 = theta[dst] - theta[src]
+
+        # Active power flow
+        P_flow_src = V[src] * V[dst] / tau * (
+            -Y_real * torch.cos(delta_theta1 - theta_shift) -
+             Y_imag * torch.sin(delta_theta1 - theta_shift)
+        ) + Y_real * (V[src] / tau)**2
+
+        P_flow_dst = V[dst] * V[src] / tau * (
+            -Y_real * torch.cos(delta_theta2 - theta_shift) -
+             Y_imag * torch.sin(delta_theta2 - theta_shift)
+        ) + Y_real * V[dst]**2
+
+        # Reactive power flow
+        Q_flow_src = V[src] * V[dst] / tau * (
+            -Y_real * torch.sin(delta_theta1 - theta_shift) +
+             Y_imag * torch.cos(delta_theta1 - theta_shift)
+        ) - (Y_imag + b_fr) * (V[src] / tau)**2
+
+        Q_flow_dst = V[dst] * V[src] / tau * (
+            -Y_real * torch.sin(delta_theta2 - theta_shift) +
+             Y_imag * torch.cos(delta_theta2 - theta_shift)
+        ) - (Y_imag + b_to) * V[dst]**2
+
+        # Aggregate to buses
+        Pbus_pred = torch.zeros_like(V).scatter_add_(0, src, P_flow_src)
+        Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
+
+        Qbus_pred = torch.zeros_like(V).scatter_add_(0, src, Q_flow_src)
+        Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
+
+        # Power mismatch
+        delta_P = Pnet - Pbus_pred - V**2 * shunt_g
+        delta_Q = Qnet - Qbus_pred + V**2 * shunt_b
+        delta_PQ_2 = delta_P**2 + delta_Q**2
+
+        delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
+
+        return delta_PQ_magnitude
