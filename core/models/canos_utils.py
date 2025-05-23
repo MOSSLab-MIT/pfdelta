@@ -69,7 +69,7 @@ class InteractionNetwork(nn.Module):
         # Apply marshalling and relational model phi_r (edge update)
         # phi_r is applied onto src node features, dst node features, and edges
         device = data["bus"].x.device
-        edge_hidden_dim = (edges.get("('bus', 'ac_line', 'bus')") or edges.get("('bus', 'branch', 'bus')")).shape[-1]
+        edge_hidden_dim = edges.get("('bus', 'ac_line', 'bus')", edges.get("('bus', 'branch', 'bus')")).shape[-1]
         sent_received_node_type = {node_type: torch.zeros(n.shape[0], edge_hidden_dim, device=device) for node_type, n in nodes.items()}
         updated_nodes_dict = {}
         updated_edges_dict = {}
