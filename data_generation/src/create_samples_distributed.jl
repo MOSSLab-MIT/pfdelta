@@ -104,21 +104,6 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 
 	producer_proc = procs[1] # Proc 2 will also be used for sampling
 	processor_procs = procs[2:end]
-	println("Sampler worker id: ", [procs[1], procs[2]])
-	# for w in [procs[1], procs[2]]
-	# 	@spawnat w begin
-	# 		function sample_and_send!(A, b, x0, sample_ch, num_batches, num_samples_p_batch, sampler_opts, sampler)
-	# 			for _ in 1:num_batches
-	# 				new_samples = sampler(A, b, x0, num_samples_p_batch; sampler_opts...)
-	# 				println("$(Dates.format(Dates.now(), "HH:MM:SS")): Batch produced on worker $(myid())")
-	# 				for sample in eachcol(new_samples)
-	# 					put!(sample_ch, sample)
-	# 				end
-	# 			end
-	# 			return new_samples
-	# 		end
-	# 	end
-	# end
 
 	# Gather network information used during processing
 	A, b, x, results, fnfp_model, base_load_feasible, net_r = initialize(net, pf_min, pf_lagging, pd_max, pd_min,
@@ -143,6 +128,7 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 
 	results = Distributed.fetch(producer)
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Results fetched!!")
+
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
 	Anb = (A, b)
