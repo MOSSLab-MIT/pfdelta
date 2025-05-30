@@ -4,6 +4,27 @@
 #using OPFLearn
 using Distributed
 
+function sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, done_ch, sampler)
+	new_samples = sampler(A, b, x0, num_samples; sampler_opts...)
+	if !isready(done_ch)
+		for sample in eachcol(new_samples)
+			put!(sample_ch, sample)
+		end
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
+	end
+end
+
+function sample_support(support_ch, sampler, sample_ch, done_ch)
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": SUPPORT SAMPLER STARTED")
+	while !isready(done_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Waiting for next batch...")
+		A, b, x0, num_samples, sampler_opts = take!(support_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, done_ch, sampler)
+	end
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": SUPPORT SAMPLER ENDING")
+end
+
 """ 
 Produces samples from the given polytope and stores them in the sample channel.
 Adds any new polytope constraints that are put in the polytope channel to the 
@@ -17,7 +38,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 discard, variance, reset_level, save_while, save_infeasible,
 						 stat_track, save_certs, net_name, dual_vars, save_order,
 						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
-						 final_ch, print_level, starting_k) #, save_ch)
+						 final_ch, print_level, starting_k, support_ch)
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 	println("SAMPLE PRODUCER PROC STARTED")
@@ -36,35 +57,26 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	#TEST: Use base_load_feasible in starting point
 	x0 = base_load_feasible * 0.9 + center' * 0.1
 	
-	# Initialize load sample, x, containing [PG; QG]
+	# Put samples in channel
 	num_new_samples = 4*num_procs
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample started!")
-	while true
-		if num_new_samples <= 40
-			new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-			for sample in eachcol(new_samples)
-				put!(sample_ch, sample)
-			end
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last initial batch produced")
-			break
-		end
-		new_samples = sampler(A, b, x0, 40; sampler_opts...)
-		for sample in eachcol(new_samples)
-			put!(sample_ch, sample)
+	while num_new_samples > 0
+		if num_new_samples > 40
+			put!(support_ch, (A, b, x0, 40, sampler_opts))
+		else
+			put!(support_ch, (A, b, x0, num_new_samples, sampler_opts))
 		end
 		num_new_samples -= 40
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
 	end
-	# sampler_workers = [myid(), myid() + 1]
-	# println("Sampler worker id: ", sampler_workers)
-	# futures = [
-	# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 2, num_procs, sampler_opts, sampler)
-	# 	for w in sampler_workers
-	# ]
-	# fetch.(futures)
 
-	new_samples = nothing
-	
+	# Produce them
+	while isready(support_ch)
+		A, b, x0, num_samples, sampler_opts = take!(support_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
+	end
+	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample done!")
+
 	k = starting_k  # Count of feasible samples collected
     i = 0  # Count of samples generated
 	u = 0  # Count of feasible samples since last unique active set found
@@ -74,7 +86,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	start_time = time()
 	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
-		sleep(1)
+		sleep(5)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 		n_certs = length(b)
 		while isready(polytope_ch)
@@ -184,65 +196,29 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 
 		if num_new_samples > 0
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Time to sample again")
-			while true
-				if num_new_samples <= 40
-					new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-					for sample in eachcol(new_samples)
-						put!(sample_ch, sample)
-					end
-					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last initial batch produced")
-					break
-				end
-				new_samples = sampler(A, b, x0, 40; sampler_opts...)
-				x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
-				for sample in eachcol(new_samples)
-					put!(sample_ch, sample)
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Time to sample!")
+			# Put samples in queue
+			while num_new_samples > 0
+				if num_new_samples > 40
+					put!(support_ch, (A, b, x0, 40, sampler_opts))
+				else
+					put!(support_ch, (A, b, x0, num_new_samples, sampler_opts))
 				end
 				num_new_samples -= 40
-				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
 			end
+
+			# Produce them
+			while isready(support_ch)
+				A, b, x0, num_samples, sampler_opts = take!(support_ch)
+				println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+				sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
+			end
+			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done!")
 		end
-		# if num_new_samples > 0
-		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling again")
-		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "num new samples: ", num_new_samples)
-		# 	if num_new_samples > 40
-		# 		while true
-		# 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling a batch")
-		# 			new_samples = sampler(A, b, x0, 40; sampler_opts...)
-		# 			for sample in eachcol(new_samples)
-		# 				put!(sample_ch, sample)
-		# 			end
-		# 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch sampled")
-		# 			num_new_samples -= 40
-		# 			# Last batch of samples
-		# 			if num_new_samples <= 40
-		# 				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Last new sample")
-		# 				new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-		# 				for sample in eachcol(new_samples)
-		# 					put!(sample_ch, sample)
-		# 				end
-		# 				break
-		# 			end
-		# 		end
-		# 	else
-		# 		new_samples = sampler(A, b, x0, num_new_samples; sampler_opts...)
-		# 		for sample in eachcol(new_samples)
-		# 			put!(sample_ch, sample)
-		# 		end
-		# # 	end
-		# 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done")
-		# 	x0 = new_samples[:, end]  # Set sampler origin to last sampled sample
-		# 	# futures = [
-		# 	# 	@spawnat w sample_and_send!(A, b, x0, sample_ch, 1, Int(1 + num_new_samples/2), sampler_opts, sampler)
-		# 	# 	for w in sampler_workers
-		# 	# ]
-		# 	# fetch.(futures)
-		# 	new_samples = nothing
-		# end
 		GC.gc()
 	end
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
+
 	# Put results objects into the final channel pipeline to get returned
 	put!(final_ch, "DONE FLAG")
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Draining sample channel")
@@ -392,5 +368,6 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		result = nothing
 		net_perturbed = nothing
 		i = i + 1
+		GC.gc()
 	end
 end

@@ -88,10 +88,12 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	result_chnl = Distributed.Channel{Any}(4 * nproc)
 	final_chnl = Distributed.Channel{Any}(1)
 	save_chnl = Distributed.Channel{Any}(4 * nproc)
+	support_chnl = Distributed.Channel{Any}(4 * nproc)
 	sample_ch = Distributed.RemoteChannel(()->sample_chnl, pid)
 	polytope_ch = Distributed.RemoteChannel(()->polytope_chnl, pid)
 	result_ch = Distributed.RemoteChannel(()->result_chnl, pid)
 	final_ch = Distributed.RemoteChannel(()->final_chnl, pid)
+	support_ch = Distributed.RemoteChannel(()->support_chnl, pid)
 	procs = Distributed.workers()
 
 	num_procs = nproc - 2  #TASK: Determine why the producer gets stuck running on the main proc
@@ -103,7 +105,8 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 	end
 
 	producer_proc = procs[1] # Proc 2 will also be used for sampling
-	processor_procs = procs[2:end]
+	support_procs = [procs[2]]
+	processor_procs = procs[3:end]
 
 	# Gather network information used during processing
 	A, b, x, results, fnfp_model, base_load_feasible, net_r = initialize(net, pf_min, pf_lagging, pd_max, pd_min,
@@ -115,11 +118,14 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 																		 reset_level, print_level)
 	
 	(print_level > 0) && println("Starting sampling...")
+	for proc in support_procs
+		support_producers = Distributed.remotecall(sample_support, proc, support_ch, sampler, sample_ch, final_ch)
+	end
 	producer = Distributed.remotecall(sample_producer, producer_proc,
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k) #, save_ch)
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k, support_ch)
 	for proc in processor_procs
 		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver,
 							   sample_ch, final_ch, polytope_ch, result_ch, perturb_topology_method, 
