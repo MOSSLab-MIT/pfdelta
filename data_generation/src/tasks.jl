@@ -18,7 +18,18 @@ function sample_support(support_ch, sampler, sample_ch, done_ch)
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": SUPPORT SAMPLER STARTED")
 	while !isready(done_ch)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Waiting for next batch...")
-		A, b, x0, num_samples, sampler_opts = take!(support_ch)
+		if !isready(support_ch)
+			put!(support_ch, "Empty")
+			println("Anti blocking flag put!")
+			sleep(10)
+			continue
+		end
+		out = take!(support_ch)
+		if typeof(out) == String
+			println("Anti blocking flag found: ", out)
+			continue
+		end
+		A, b, x0, num_samples, sampler_opts = out
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
 		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, done_ch, sampler)
 	end
@@ -39,6 +50,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 stat_track, save_certs, net_name, dual_vars, save_order,
 						 replace_samples, save_path, sample_ch, polytope_ch, result_ch,
 						 final_ch, print_level, starting_k, support_ch)
+
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 	println("SAMPLE PRODUCER PROC STARTED")
@@ -61,6 +73,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	num_new_samples = 4*num_procs
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample started!")
 	while num_new_samples > 0
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": About to put sample in support channel!")
 		if num_new_samples > 40
 			put!(support_ch, (A, b, x0, 40, sampler_opts))
 		else
@@ -68,10 +81,16 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 		num_new_samples -= 40
 	end
+	total_count = 4*num_procs
 
 	# Produce them
 	while isready(support_ch)
-		A, b, x0, num_samples, sampler_opts = take!(support_ch)
+		out = take!(support_ch)
+		if typeof(out) == String
+			println("Anti blocking flag found")
+			break
+		end
+		A, b, x0, num_samples, sampler_opt = out
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
 		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
 	end
@@ -88,6 +107,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		  (i < max_iter) & ((time() - start_time) < T)
 		sleep(5)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Total count: $total_count.")
 		n_certs = length(b)
 		while isready(polytope_ch)
 			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Modifying polytope")
@@ -141,7 +161,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 							       (i < max_iter) & ((time() - start_time) < T)
 			# Get sample result from result channel
 			x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed = take!(result_ch)
-			
+
 			# Set stats to defaults
 			iter_stats = Dict(:new_cert => new_cert,
 							  :new_set => false,
@@ -151,7 +171,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 							  :iter_time => iter_elapsed_time,
 							  :active_set => []
 							  )
-			
+
 			#TASK: Determine if there is a way to continue sampling off of old load
 			# Can only tell if the result is feasible 
 			#if feasible 
@@ -168,7 +188,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 											  x, result, discard, variance, net_name, 
 											  now_str, save_path, save_while, save_order,
 											  print_level)
-				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
+				store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "raw"))
 				net_perturbed = nothing
 				results_pfdelta = nothing
 				# put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
@@ -189,6 +209,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 				prev_k = k
 			end
 		end
+		total_count -= num_new_samples
 
 		# If this is reached, then no need to sample even more
 		if k >= K + starting_k
@@ -201,15 +222,23 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			while num_new_samples > 0
 				if num_new_samples > 40
 					put!(support_ch, (A, b, x0, 40, sampler_opts))
+					total_count += 40
 				else
 					put!(support_ch, (A, b, x0, num_new_samples, sampler_opts))
+					total_count += num_new_samples
 				end
 				num_new_samples -= 40
+				println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample put in supp. $num_new_samples left!")
 			end
 
 			# Produce them
 			while isready(support_ch)
-				A, b, x0, num_samples, sampler_opts = take!(support_ch)
+				out = take!(support_ch)
+				if typeof(out) == String
+					println("Anti blocking flag found")
+					break
+				end
+				A, b, x0, num_samples, sampler_opts = out
 				println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
 				sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
 			end
@@ -226,6 +255,11 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		take!(sample_ch)
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sample thrown")
 	end
+	while isready(support_ch)
+		take!(support_ch)
+		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "PreSample thrown")
+	end
+	put!(support_ch, "DONE FLAG")
 	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Flooding sample channel with done")
 	for _ in 1:num_procs
 		put!(sample_ch, "DONE FLAG")

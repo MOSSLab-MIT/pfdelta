@@ -116,6 +116,11 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 	w = 0
     while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V) & 
 		  (i < max_iter) & ((time() - start_time) < T)
+
+		if i % 1_000 == 0
+			GC.gc()
+		end
+
         iter_start_time = time()
 		
 		if print_level > 0
@@ -180,7 +185,7 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 													   x, result, discard, variance, net_name, 
 													   now_str, save_path, save_while, save_order,
 													   print_level)
-			store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
+			store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "raw"))
         else
 			save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 							save_while, net_name, now_str, save_order, dual_vars, save_path)
@@ -237,8 +242,8 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 												  x, result, discard, variance, net_name, 
 												  now_str, save_path, save_while, save_order,
 												  print_level)
-					store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds"))
-					println("Samples: $(k) / $(K),\t Iter: $(i)")
+					store_feasible_sample_json(k, net_perturbed, results_pfdelta, joinpath(save_path, "raw"))
+					println("Samples: $(k - starting_k) / $(K),\t Iter: $(i)")
                 else
 					save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								    save_while, net_name, now_str, save_order, dual_vars, save_path)
