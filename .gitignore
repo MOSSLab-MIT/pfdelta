@@ -3,6 +3,7 @@
 *.pyc
 *.pyo
 *.mat
+*.png
 
 .ipynb_checkpoints
 tutorial.ipynb
