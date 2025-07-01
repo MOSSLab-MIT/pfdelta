@@ -1,6 +1,102 @@
 import torch
 
 
+pfnet_pfdata_stats = {
+    "case118_seeds": {
+        "casename": "case118_seeds", 
+        "mean": {
+            "bus": {
+                "x": torch.tensor([4.7212e-01, 6.6688e-27, 2.8586e-01, 9.0312e-02, 0.0000e+00, 7.4576e-03]),
+                "y": torch.tensor([ 1.0280, -0.5947,  0.4654,  0.2504,  0.0000,  0.0075])
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0274, 0.1068, 0.0720, 0.9978, 0.0000])
+            }
+        },
+        "std": {
+            "bus": {
+                "x": torch.tensor([5.1877e-01, 1.1657e-23, 1.6960e+00, 1.3489e-01, 0.0000e+00, 6.1039e-02]),
+                "y": torch.tensor([0.0328, 0.3659, 2.6608, 0.8317, 0.0000, 0.0610])
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0210, 0.0756, 0.1777, 0.0107, 0.0000])
+            }
+        }
+    }
+}
+
+canos_pfdelta_stats = {
+    "case118_seeds": {
+        "mean":{
+            "bus": {
+                    "x": torch.tensor([0.3307, 0.5845]),
+                    "y": torch.tensor([0.0151, 0.2691]), 
+                    "bus_gen": torch.tensor([0.5525, 0.3173]),
+                    "bus_demand": torch.tensor([0.5162, 0.2398]),
+                    "bus_voltages": torch.tensor([-0.6396, 1.0290]),
+                    "shunt": torch.tensor([0.0, 0.0075]),
+                },
+            "PQ": {
+                "x": torch.tensor([0.4347, 0.2022]), 
+                "y": torch.tensor([-0.6596,  1.0152]),
+            }, 
+            "PV": {
+                "x": torch.tensor([0.2091, 1.0454]), 
+                "y": torch.tensor([0.4380, -0.6271]),
+                "generation": torch.tensor([0.8353, 0.7286]), 
+                "demand": torch.tensor([0.6262, 0.2907]),
+            }, 
+            "slack": {
+                "x": torch.tensor([3.4637e-18, 1.0583e+00]), 
+                "y": torch.tensor([21.3432, -0.8125]),
+                "generation": torch.tensor([21.3432, -0.8125]), 
+                "demand": torch.tensor([0., 0.])
+            },
+            ("bus", "ac_line", "bus"): {
+                "edge_attr": torch.tensor([0.0274, 0.1068, 0.0000, 
+                                            0.0360, 0.0000, 0.0360, 
+                                            0.9978, 0.0000]),
+                "edge_label": torch.tensor([ 0.0920,  0.0767, 
+                                             -0.0690, -0.0228])
+            },
+        },
+        "std": {
+            "bus": {
+                    "x": torch.tensor([1.4630, 0.4419]),
+                    "y": torch.tensor([2.2695, 0.85781]), 
+                    "bus_gen": torch.tensor([2.3803, 1.0612]),
+                    "bus_demand": torch.tensor([0.9875, 0.5016]),
+                    "bus_voltages": torch.tensor([0.3231, 0.0352]),
+                    "shunt": torch.tensor([0.0, 0.0610]),
+                },
+            "PQ": {
+                "x": torch.tensor([0.3378, 0.1852]),
+                "y": torch.tensor([0.3126, 0.0378]),
+            }, 
+            "PV": {
+                "x": torch.tensor([2.1543, 0.0224]), 
+                "y": torch.tensor([1.1555, 0.3258]),
+                "generation": torch.tensor([1.8244, 1.4756]), 
+                "demand": torch.tensor([1.4236, 0.7197]),
+            }, 
+            "slack": {
+                "x": torch.tensor([7.6358e-16, 9.7875e-03]), 
+                "y": torch.tensor([6.1415, 1.3867]),
+                "generation": torch.tensor([6.1415, 1.3867]), 
+                "demand": torch.tensor([0., 0.]),
+            }, 
+            ("bus", "ac_line", "bus"): {
+                "edge_attr": torch.tensor([0.0210, 0.0756, 0.0000, 
+                                            0.0888, 0.0000, 0.0888, 
+                                            0.0107, 0.0000]),
+                "edge_label": torch.tensor([1.5430, 0.5323, 
+                                             1.5317, 0.5184])
+            },
+        } 
+    }
+}
+
+
 opfdata_stats = {
     "pglib_opf_case14_ieee": {
         "n_minus_one": {

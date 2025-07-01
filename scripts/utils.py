@@ -22,7 +22,7 @@ def find_run(run_name):
         for i, folder in enumerate(matching_runs):
             print(f"{i}.", folder)
 
-    return matching_runs[0]
+    return matching_runs[0] if len(matching_runs) > 0 else -1
 
 def load_config_and_trainer(run_location):
     config = load_config(run_location)
@@ -60,11 +60,11 @@ def load_trainer(config):
     val_location = os.path.join(run_location, "val.json")
     with open(val_location, 'r') as f:
         val_errors = json.load(f)
-    trainer.val_errors = val_location
+    trainer.val_errors = val_errors
 
     # Load model parameters
     model_location = os.path.join(run_location, "model.pt")
-    model_params = torch.load(model_location)
+    model_params = torch.load(model_location, map_location="cpu")
     trainer.model.load_state_dict(model_params)
     trainer.model.eval()
 

@@ -2,6 +2,7 @@ import types
 
 import torch
 from torch import nn
+from torch_geometric.data import HeteroData
 
 from core.utils.registry import registry
 from core.utils.pf_losses_utils import PowerBalanceLoss
@@ -208,8 +209,12 @@ class Masked_L2_loss:
 
 
     def __call__(self, output, data):
-        target = data.y
-        mask = data.x[:, 10:]
+        if isinstance(data, HeteroData):
+            target = data["bus"].y
+            mask = data["bus"].x[:, 10:]
+        else:
+            target = data.y
+            mask = data.x[:, 10:]
 
         masked = mask.type(torch.bool)
 

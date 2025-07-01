@@ -4,7 +4,6 @@ import torch.nn as nn
 from core.utils.pf_losses_utils import GNSPowerBalanceLoss
 from core.utils.registry import registry
 
-
 @registry.register_model("graph_neural_solver")
 class GraphNeuralSolver(nn.Module):
     def __init__(self, K, hidden_dim, gamma):
@@ -97,12 +96,12 @@ class GraphNeuralSolver(nn.Module):
         theta_j = data['bus'].theta[dst]
 
         # Compute p_global
-        term1 = v_i * v_j * y_ij / tau_ij * (
-            torch.sin(theta_i - theta_j - delta_ij - shift_ij) +  
-            torch.sin(theta_j - theta_i - delta_ij + shift_ij))
+        term1 = -v_i * v_j * y_ij / tau_ij * (
+            torch.cos(theta_i - theta_j - delta_ij - shift_ij) +  
+            torch.cos(theta_j - theta_i - delta_ij + shift_ij))
 
-        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.sin(delta_ij)
-        term3 = v_j ** 2 * y_ij * torch.sin(delta_ij)
+        term2 = (v_i / tau_ij) ** 2 * y_ij * torch.cos(delta_ij)
+        term3 = v_j ** 2 * y_ij * torch.cos(delta_ij)
         p_joule_edge = torch.abs(term1 + term2 + term3)
         
         # Map to individual graphs
@@ -146,8 +145,11 @@ class GraphNeuralSolver(nn.Module):
         pg_max_slack = pg_max_vals[is_slack][:, 1]
         pg_min_slack = pg_min_vals[is_slack][:, 0]
 
-        graph_ids = is_slack.cumsum(dim=0) - 1
-        num_graphs = graph_ids.max().item() + 1
+        gen_idx = torch.arange(pg_setpoints.size(0), device=pg_setpoints.device)
+        graph_ids = torch.bucketize(gen_idx, data["gen"].ptr[1:])  # gives [num_gen_nodes] → [num_graphs]
+
+        # Initialize output tensors
+        num_graphs = data["gen"].ptr.size(0) - 1
         
         pg_setpoint_slack = pg_setpoints[is_slack]
         pg_setpoints_non_slack = pg_setpoints.clone()

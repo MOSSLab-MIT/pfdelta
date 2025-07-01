@@ -131,7 +131,7 @@ def single_config(config, args, override_args, i=None):
         config["functional"] = {}
 
     # Load functional arguments
-    config["functional"] = merge_dicts(config["functional"], vars(args))
+    config["functional"] = merge_dicts(vars(args), config["functional"])
 
     # Verify trainer exists and set up one if there is none
     if config["functional"].get("trainer_name", None) is None:

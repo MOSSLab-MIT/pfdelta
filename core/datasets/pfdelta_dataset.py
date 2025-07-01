@@ -1,22 +1,27 @@
 import json
 import os
-import torch
 import random
 from tqdm import tqdm
-import numpy as np
 from typing import Callable, Sequence, Any
 from collections import defaultdict
+from functools import partial
 
+import torch
+import numpy as np
 from torch_geometric.data import InMemoryDataset, HeteroData
 from torch_geometric.data.collate import collate
 
+from core.datasets.dataset_utils import (
+    canos_pf_data_mean0_var1,
+    canos_pf_slack_mean0_var1,
+    pfnet_data_mean0_var1
+)
+from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
-
-# TODO: make sure to implement the logic for all the "nose" cases too
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -24,26 +29,33 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        if task in [3.2, 3.3]: # TODO: add a flag to specify the specific processed dir!
+        if task in [3.2, 3.3]:
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_")
         else: 
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}")
 
-        self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+        self.all_case_names = ["case14_seeds", "case30_seeds", "case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
 
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
             1.2: {"feasible":{"none": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}}, # FEASIBILITY FOR TEST NOT INCLUDED
+            1.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             2.2: {"feasible":{"none": 12000, "n-1": 12000, "n-2": 12000}},
             2.3: {"feasible":{"none": 6000,  "n-1": 6000,  "n-2": 6000}},
             3.1: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             3.2: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
             3.3: {"feasible":{"none": 18000, "n-1": 18000, "n-2": 18000}},
-            4.1: {"feasible": {}, "near infeasible": {}}, 
-            4.2: {"feasible": {}, "approaching infeasible": {}, "near infeasible": {}},
-        } 
+            4.1: {"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}, 
+                  "feasible": {"none": 16200, "n-1": 16200, "n-2": 16200}}, 
+            4.2: {"approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200}, 
+                  "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}, 
+                  "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}, 
+            4.3:{"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
+
+        if case_name == "case2000_seeds":
+            self.task_config = {1.3: {"feasible":{"none": 10000, "n-1": 10000, "n-2": 10000}}}
+        
         self.feasibility_config = {
             "feasible": {
                 "none": 56000,
@@ -83,11 +95,15 @@ class PFDeltaDataset(InMemoryDataset):
     def processed_file_names(self):
         return ['train.pt', 'val.pt', 'test.pt']
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         data = HeteroData()
 
-        network_data = pm_case['network']
-        solution_data = pm_case['solution']['solution']
+        if feasibility: 
+            network_data = pm_case['solved_net']
+            solution_data = pm_case['solved_net']
+        else: 
+            network_data = pm_case['network']
+            solution_data = pm_case['solution']['solution']
 
         # Bus nodes
         pf_x, pf_y = [], []
@@ -138,7 +154,10 @@ class PFDeltaDataset(InMemoryDataset):
                         pg += gen_sol['pg']
                         qg += gen_sol['qg']
                     else:
-                        assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                        if feasibility:
+                            assert gen['pg'] == 0 and gen['qg'] == 0, f"Expected gen {gen_id} to be off"
+                        else:
+                            assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
 
             bus_gen.append(torch.tensor([pg, qg]))
 
@@ -196,7 +215,11 @@ class PFDeltaDataset(InMemoryDataset):
                                 )
                 slack_gen.append(is_slack)
             else:
-                assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+                if feasibility:
+                    assert solution_data['gen'][gen_id]['pg'] == 0 and solution_data['gen'][gen_id]['qg'] == 0, f"Expected gen {gen_id} to be off"
+                else:
+                    assert solution_data['gen'].get(gen_id) is None, f"Expected gen {gen_id} to be off."
+
 
         # Load nodes
         demand = []
@@ -222,7 +245,8 @@ class PFDeltaDataset(InMemoryDataset):
             ]))
 
             branch_sol = solution_data['branch'].get(branch_id_str)
-            assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
+            if feasibility==None:
+                assert branch_sol is not None, f"Missing solution for active branch {branch_id_str}"
 
             if branch_sol:
                 edge_label.append(torch.tensor([
@@ -298,7 +322,6 @@ class PFDeltaDataset(InMemoryDataset):
         return data
 
     def shuffle_split_and_save_data(self, root): 
-        # TODO: implement logic for what train and test splits to save for a given task so that it gets saved correctly later
         # when being combined
         task, model = self.task, self.model 
         task_config = self.task_config[task]
@@ -318,41 +341,94 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
-                shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
-                with open(shuffle_path, "r") as f:
-                    shuffle_dict = json.load(f)
-                shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
+                if train_size == 0 and test_size == 0:
+                    continue
 
-                raw_path = os.path.join(root, grid_type, "raw")
-                raw_fnames = [os.path.join(raw_path, f"sample_{i+1}.json") for i in shuffle_map.keys()]
-                fnames_shuffled = [raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()]
+                if feasibility == "feasible": 
+                    shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
+                    with open(shuffle_path, "r") as f:
+                        shuffle_dict = json.load(f)
+                    shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
 
-                # extend the lists instead of overwriting
-                split_dict = {
-                        'train': fnames_shuffled[:int(0.9 * train_size)],
-                        'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
-                        'test': fnames_shuffled[-int(test_size):],
+                    raw_path = os.path.join(root, grid_type, "raw")
+                    raw_fnames = [os.path.join(raw_path, f"sample_{i+1}.json") for i in shuffle_map.keys()]
+                    fnames_shuffled = [raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()]
+
+                    # extend the lists instead of overwriting
+                    split_dict = {
+                            'train': fnames_shuffled[:int(0.9 * train_size)],
+                            'val': fnames_shuffled[int(0.9 * train_size):int(train_size)], # this is optional!
+                            'test': fnames_shuffled[-int(test_size):],
+                        }
+
+                    for split, files in split_dict.items():
+                        data_list = []
+                        print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
+                        for fname in tqdm(files, desc=f"Building {split} data"):
+                            with open(fname, "r") as f:
+                                pm_case = json.load(f)
+                            data = self.build_heterodata(pm_case)
+                            data_list.append(data)
+
+                        # For tasks that don't load from every folder
+                        if len(data_list) == 0:
+                            continue
+                        data, slices = self.collate(data_list)
+                        processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                        
+                        if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
+                            os.mkdir(os.path.join(root, f"{grid_type}/processed"))
+                        if not os.path.exists(processed_path):
+                            os.mkdir(processed_path)
+
+                        torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                        all_data_lists[split].extend(data_list)
+                else: 
+                    infeasibility_type = "around_nose" if feasibility == "approaching infeasible" else "nose"
+                    infeasible_train_path = os.path.join(root, grid_type, "close2inf_train", infeasibility_type)
+                    infeasible_test_path = os.path.join(root, grid_type, "close2inf_test", infeasibility_type)
+
+                    # Collect filenames
+                    train_files = sorted([
+                        os.path.join(infeasible_train_path, f) 
+                        for f in os.listdir(infeasible_train_path) if f.endswith(".json")
+                    ])
+                    if infeasibility_type == "nose": 
+                        test_files = sorted([
+                            os.path.join(infeasible_test_path, f) 
+                            for f in os.listdir(infeasible_test_path) if f.endswith(".json")
+                        ])
+                    else: 
+                        test_files = None
+
+                    # Create the split dictionary directly
+                    split_idx = int(0.9 * len(train_files))
+                    split_dict = {
+                        'train': train_files[:split_idx],
+                        'val': train_files[split_idx:],
+                        'test': test_files,
                     }
 
-                for split, files in split_dict.items():
-                    data_list = []
-                    print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
-                    for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(fname, "r") as f:
-                            pm_case = json.load(f)
-                        data = self.build_heterodata(pm_case)
-                        data_list.append(data)
+                    for split, files in split_dict.items():
+                        data_list = []
+                        if not files:
+                            continue
+                        print(f"Processing split: {model} {task} {grid_type} {feasibility} {split} ({len(files)} files)")
+                        for fname in tqdm(files, desc=f"Building {split} data"):
+                            with open(fname, "r") as f:
+                                pm_case = json.load(f)
+                            data = self.build_heterodata(pm_case, feasibility=True)
+                            data_list.append(data)
 
-                    data, slices = self.collate(data_list)
-                    processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
-                    
-                    if not os.path.exists(os.path.join(root, f"{grid_type}/processed")):
-                        os.mkdir(os.path.join(root, f"{grid_type}/processed"))
-                    if not os.path.exists(processed_path):
-                        os.mkdir(processed_path)
+                        if len(data_list) == 0:
+                            continue
 
-                    torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
-                    all_data_lists[split].extend(data_list)
+                        data, slices = self.collate(data_list)
+                        processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
+                        os.makedirs(processed_path, exist_ok=True)
+
+                        torch.save((data, slices), os.path.join(processed_path, f'{split}.pt'))
+                        all_data_lists[split].extend(data_list)
         
         return all_data_lists
 
@@ -403,11 +479,21 @@ class PFDeltaDataset(InMemoryDataset):
         """Loads dataset for the specified split.
         
         Args:
-            split (str): The split to load ('train', 'val', or 'test')
+            split (str): The split to load ('train', 'val', 'test', 'separate_{split}_{feasibility}_{grid_type}')
         """
-        processed_path = os.path.join(self.processed_dir, f"{split}.pt")
-        print(f"Loading {split} dataset from {processed_path}")
-        self.data, self.slices = torch.load(processed_path)
+        if "separate" in split:
+            # split should be of format "separate_{split}_{feasibility}_{grid_type}"
+            _, split_str, feasibility_str, grid_type_str = split.split("_")
+            if feasibility_str == "near infeasible": 
+                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{4.1}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+            else: 
+                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+            print(f"Loading {split} dataset from {processed_path}")
+            self.data, self.slices = torch.load(processed_path)
+        else: 
+            processed_path = os.path.join(self.processed_dir, f"{split}.pt")
+            print(f"Loading {split} dataset from {processed_path}")
+            self.data, self.slices = torch.load(processed_path)
 
 
 @registry.register_dataset("pfdeltaGNS")
@@ -415,9 +501,9 @@ class PFDeltaGNS(PFDeltaDataset):
     def __init__(self, root_dir='data', case_name='', split='train', model="GNS", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         super().__init__(root_dir, case_name, split, model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         # call base version
-        data = super().build_heterodata(pm_case)
+        data = super().build_heterodata(pm_case, feasibility=feasibility)
         num_buses = data['bus'].x.size(0)
         num_gens = data['gen'].generation.size(0)
         num_loads = data['load'].demand.size(0)
@@ -443,7 +529,7 @@ class PFDeltaGNS(PFDeltaDataset):
 
             if bus_type == 1:  # PQ bus
                 # Flat start for PQ bus
-                x_gns[bus_idx] = torch.tensor([1.0, 0.0])
+                x_gns[bus_idx] = torch.tensor([0.0, 1.0])
                 pd = pf_x[0]
                 qd = pf_x[1]
                 pg = bus_gen[0]
@@ -451,7 +537,7 @@ class PFDeltaGNS(PFDeltaDataset):
             elif bus_type == 2:  # PV bus
                 v = pf_x[1]
                 theta = torch.tensor(0.0)
-                x_gns[bus_idx] = torch.stack([v, theta])
+                x_gns[bus_idx] = torch.stack([theta, v])
                 pd = bus_demand[0]
                 qd = bus_demand[1]
                 pg = bus_gen[0]
@@ -463,8 +549,8 @@ class PFDeltaGNS(PFDeltaDataset):
                 pg = bus_gen[0]
                 qg = bus_gen[1]
 
-            v_buses[bus_idx] = x_gns[bus_idx][0]
-            theta_buses[bus_idx] = x_gns[bus_idx][1]
+            v_buses[bus_idx] = x_gns[bus_idx][1]
+            theta_buses[bus_idx] = x_gns[bus_idx][0]
             pd_buses[bus_idx] = pd
             qd_buses[bus_idx] = qd
             pg_buses[bus_idx] = pg
@@ -483,17 +569,30 @@ class PFDeltaGNS(PFDeltaDataset):
         data['gen'].num_nodes = num_gens
         data['load'].num_nodes = num_loads
 
+        if self.pre_transform:
+            data = self.pre_transform(data)
+
         return data
 
 
 @registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', model="CANOS", task=1.1, add_bus_type=True, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        if pre_transform is not None: 
+            if pre_transform == "canos_pf_data_mean0_var1": 
+                stats = canos_pfdelta_stats[case_name]
+                pre_transform = partial(canos_pf_data_mean0_var1, stats)
+        
+        if transform is not None: 
+            if transform == "canos_pf_slack_mean0_var1": 
+                stats = canos_pfdelta_stats[case_name]
+                transform = partial(canos_pf_slack_mean0_var1, stats)
+
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         # call base version
-        data = super().build_heterodata(pm_case)
+        data = super().build_heterodata(pm_case, feasibility=feasibility)
 
         # Now prune the data to only keep bus, PV, PQ, slack
         keep_nodes = {"bus", "PV", "PQ", "slack"}
@@ -507,17 +606,30 @@ class PFDeltaCANOS(PFDeltaDataset):
             if src not in keep_nodes or dst not in keep_nodes:
                 del data[edge_type]
 
+        if self.pre_transform:
+            data = self.pre_transform(data)
+
         return data
 
 
 @registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset): 
     def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        if pre_transform:
+            if pre_transform == "pfnet_data_mean0_var1":
+                stats = pfnet_pfdata_stats[case_name]
+                pre_transform = partial(pfnet_data_mean0_var1, stats)
+        
+        if transform is not None: 
+            if transform == "pfnet_data_mean0_var1": 
+                stats = pfnet_pfdata_stats[case_name]
+                transform = partial(pfnet_data_mean0_var1, stats)
+
         super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
 
-    def build_heterodata(self, pm_case):
+    def build_heterodata(self, pm_case, feasibility=False):
         # call base version
-        data = super().build_heterodata(pm_case)
+        data = super().build_heterodata(pm_case, feasibility=feasibility)
 
         num_buses = data['bus'].x.size(0)
         bus_types = data['bus'].bus_type
@@ -570,28 +682,8 @@ class PFDeltaPFNet(PFDeltaDataset):
         x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
         y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
 
-        if self.split == 'train':
-            # Strip one-hot and pred_mask
-            x_cont = x_pfnet[:, 4:10]  # shape [N, 6]
-            y_cont = y_pfnet           # shape [N, 6]
-
-            xy = torch.cat([x_cont, y_cont], dim=0)
-            mean = xy.mean(dim=0, keepdim=True)
-            std = xy.std(dim=0, keepdim=True) + 1e-7
-
-            self.norm_mean = mean
-            self.norm_std = std
-
-            x_cont_norm = (x_cont - mean) / std
-            y_norm = (y_cont - mean) / std
-
-            x_normalized = torch.cat([x_pfnet[:, :4], x_cont_norm, x_pfnet[:, 10:]], dim=1)
-
-            data['bus'].x = x_normalized
-            data['bus'].y = y_norm
-        else:
-            data['bus'].x = x_pfnet
-            data['bus'].y = y_pfnet
+        data['bus'].x = x_pfnet
+        data['bus'].y = y_pfnet
 
         data['gen'].num_nodes = num_gens
         data['load'].num_nodes = num_loads
@@ -599,10 +691,13 @@ class PFDeltaPFNet(PFDeltaDataset):
         edge_attrs = []
         for attr in data['bus', 'branch', 'bus'].edge_attr:
             r, x = attr[0], attr[1]
-            b = attr[2] + attr[4]
+            b = attr[3] + attr[5]
             tau, angle = attr[6], attr[7]
             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
 
         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+
+        if self.pre_transform:
+            data = self.pre_transform(data)
 
         return data

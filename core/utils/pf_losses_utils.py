@@ -1,12 +1,16 @@
 import os
 import pickle
-
 import torch
 
+from torch.nn.functional import mse_loss
+from torch_geometric.nn import global_add_pool
+
 from core.utils.registry import registry
+from core.datasets.dataset_utils import canos_pf_data_mean0_var1
+from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 
-
-def PowerBalanceLoss(predictions, data):
+@registry.register_loss("universal_power_balance")
+class PowerBalanceLoss:
     """
     Compute the power balance loss.
 
@@ -22,60 +26,209 @@ def PowerBalanceLoss(predictions, data):
     Returns:
         torch.Tensor: Loss value; sum of squared power mismatches.
     """
-    bus_type = data["bus"].bus_type
-    edge_index = data["bus", "forward","bus"].edge_index
-    edge_feat = data["bus", "forward","bus"].edge_feat
-    shunt_g = data["bus"].shunt_g
-    shunt_b = data["bus"].shunt_b
-    # Unpack node feature values (pred and target)
-    V_pred, theta_pred, Pnet, Qnet = predictions.T # Pnet and Qnet should correspond to Pg - Pd for each bus.
+    def __init__(self, model): 
+        self.power_balance_mean = None 
+        self.power_balance_max = None
+        self.power_balance_l2 = None
+        self.model = model
+        self.loss_name = "PBL Mean"
 
-    # branch attributes (resistance, reactance, charging_susceptance, tap ratio magnitude, shift angle)
-    r, x, bs, tau, theta_shift = edge_feat.T[:5]
+    def __call__(self, outputs, data):
+        power_balance_model_preds = self.collect_model_predictions(self.model, data, outputs)
+        predictions = power_balance_model_preds["predictions"]
+        edge_attr = power_balance_model_preds["edge_attr"]
+        edge_index = data["bus", "branch","bus"].edge_index
+    
+        shunt_g = data["bus"].shunt[:, 0]
+        shunt_b = data["bus"].shunt[:, 1]
+        # Unpack node feature and edge feature values values
+        V_pred, theta_pred, Pnet, Qnet = predictions 
+        r, x, bs, tau, theta_shift = edge_attr 
 
-    # Compute bus-level power injections based on predictions
-    Pbus_pred = torch.zeros_like(V_pred)
-    Qbus_pred = torch.zeros_like(V_pred)
-    src, dst = edge_index
+        # Compute bus-level power injections based on predictions
+        Pbus_pred = torch.zeros_like(V_pred)
+        Qbus_pred = torch.zeros_like(V_pred)
+        src, dst = edge_index
 
-    Y_real = torch.real(1/(r + 1j*x))
-    Y_imag = torch.imag(1/(r + 1j*x))
-    suscept = bs
-    delta_theta1 = theta_pred[src] - theta_pred[dst] 
-    delta_theta2 = theta_pred[dst] - theta_pred[src] 
+        Y_real = torch.real(1/(r + 1j*x))
+        Y_imag = torch.imag(1/(r + 1j*x))
+        suscept = bs
+        delta_theta1 = theta_pred[src] - theta_pred[dst] 
+        delta_theta2 = theta_pred[dst] - theta_pred[src] 
+        # NOTE: difference in the delta_ij is added to gns loss
+        # Active power flows
+        P_flow_src = V_pred[src] * V_pred[dst] / tau * (
+                    -Y_real * torch.cos(delta_theta1 - theta_shift) - Y_imag * torch.sin(delta_theta1 - theta_shift)
+        ) + Y_real * (V_pred[src] / tau)**2
 
-    # Active power flows
-    P_flow_src = V_pred[src] * V_pred[dst] / tau * (
-                -Y_real * torch.cos(delta_theta1 - theta_shift) - Y_imag * torch.sin(delta_theta1 - theta_shift)
-    ) + Y_real * (V_pred[src] / tau)**2
+        P_flow_dst = V_pred[dst] * V_pred[src] / tau * (
+                    -Y_real * torch.cos(delta_theta2 - theta_shift) - Y_imag * torch.sin(delta_theta2 - theta_shift)
+        ) + Y_real * V_pred[dst]**2
 
-    P_flow_dst = V_pred[dst] * V_pred[src] / tau * (
-                -Y_real * torch.cos(delta_theta2 - theta_shift) - Y_imag * torch.sin(delta_theta2 - theta_shift)
-    ) + Y_real * V_pred[dst]**2
+        # Reactive power flows
+        Q_flow_src = V_pred[src] * V_pred[dst] / tau * (
+                    -Y_real * torch.sin(delta_theta1 - theta_shift) + Y_imag * torch.cos(delta_theta1 - theta_shift)
+        ) - (Y_imag + suscept / 2) * (V_pred[src] / tau)**2
 
-    # Reactive power flows
-    Q_flow_src = V_pred[src] * V_pred[dst] / tau * (
-                -Y_real * torch.sin(delta_theta1 - theta_shift) + Y_imag * torch.cos(delta_theta1 - theta_shift)
-    ) - (Y_imag + suscept / 2) * (V_pred[src] / tau)**2
+        Q_flow_dst = V_pred[dst] * V_pred[src] / tau * (
+                    -Y_real * torch.sin(delta_theta2 - theta_shift) + Y_imag * torch.cos(delta_theta2 - theta_shift)
+        ) - (Y_imag + suscept / 2) * V_pred[dst]**2
 
-    Q_flow_dst = V_pred[dst] * V_pred[src] / tau * (
-                -Y_real * torch.sin(delta_theta2 - theta_shift) + Y_imag * torch.cos(delta_theta2 - theta_shift)
-    ) - (Y_imag + suscept / 2) * V_pred[dst]**2
+        # Aggregate contributions for all nodes
+        Pbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, P_flow_src)
+        Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
 
-    # Aggregate contributions for all nodes
-    Pbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, P_flow_src)
-    Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
+        Qbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, Q_flow_src)
+        Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
 
-    Qbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, Q_flow_src)
-    Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
+        # Calculate the power mismatches ΔP and ΔQ
+        delta_P = Pnet - Pbus_pred - V_pred**2 * shunt_g
+        delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b 
 
-    # Calculate the power mismatches ΔP and ΔQ
-    delta_P = Pnet - Pbus_pred - V_pred**2 * shunt_g
-    delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b 
+        # Compute the loss as the sum of squared mismatches
+        delta_PQ_2 = delta_P**2 + delta_Q**2
 
-    # Compute the loss as the sum of squared mismatches
-    delta_PQ_magnitude = torch.sqrt(delta_P**2 + delta_Q**2)
-    return delta_PQ_magnitude, delta_P, delta_Q
+        # Calculate PBL Mean
+        delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
+        self.power_balance_mean = delta_PQ_magnitude.mean()
+
+        # Calculate PBL L2
+        batch_idx = data["bus"].batch
+        batched_power_balance_l2 = torch.sqrt(global_add_pool(delta_PQ_2, batch_idx))
+        self.power_balance_l2 = batched_power_balance_l2.mean()
+
+        # Calculate PBL Max
+        self.power_balance_max = delta_PQ_magnitude.max()
+
+        # new_max = delta_PQ_magnitude.max()
+        # if self.power_balance_max is None:
+        #     self.power_balance_max = new_max
+        # else:
+        #     self.power_balance_max = delta_PQ_magnitude.max() # TODO: fix this
+
+        return self.power_balance_mean
+
+
+    def collect_model_predictions(self, model_name, data, output=None):
+        """ """
+        power_balance_model_preds = {}
+        if model_name == "CANOS":
+            device = data["bus"].x.device
+            num_buses = data["bus"].num_nodes
+            bus_output = output["bus"] 
+            theta_pred = bus_output[:, 0] 
+            V_pred = bus_output[:, 1] 
+            Pnet = torch.zeros(num_buses, device=device)
+            Qnet = torch.zeros(num_buses, device=device)
+
+            # PQ
+            pq_idx = data["PQ", "PQ_link", "bus"].edge_index[1]
+            bus_gen = data['bus'].bus_gen[pq_idx]
+            pq_pg = bus_gen[:, 0]
+            pq_qg = bus_gen[:, 1]
+            Pnet[pq_idx] = pq_pg - data["PQ"].x[:, 0]
+            Qnet[pq_idx] = pq_qg - data["PQ"].x[:, 1]
+
+            # PV
+            pv_idx = data["PV", "PV_link", "bus"].edge_index[1]
+            pv_outputs = output["PV"]
+            Pnet[pv_idx] = data["PV"].x[:, 0]
+            Qnet[pv_idx] = pv_outputs[:, 0]
+
+            # Slack
+            slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+            slack_outputs = output["slack"]
+            Pnet[slack_idx] = slack_outputs[:, 0]
+            Qnet[slack_idx] = slack_outputs[:, 1]
+
+            # Collect edge attributes
+            edge_attr = data["bus", "branch","bus"].edge_attr
+            r = edge_attr[:, 0]
+            x = edge_attr[:, 1]
+            bs = edge_attr[:, 3] + edge_attr[:, 5]
+            tau = edge_attr[:, 6]
+            theta_shift = edge_attr[:, 7]
+
+            power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
+            power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
+
+            return power_balance_model_preds
+
+        elif model_name == "PFNet": 
+            device = data["bus"].x.device
+            # Unnormalize predictions
+            casename = data.case_name[0]
+            mean = pfnet_pfdata_stats[casename]["mean"]["bus"]["y"].to(device)
+            std = pfnet_pfdata_stats[casename]["std"]["bus"]["y"].to(device)
+            output = (output * std) + mean
+
+            num_buses = data["bus"].num_nodes
+            theta_pred = output[:, 1]
+            V_pred = output[:, 0]
+            Pnet = torch.zeros(num_buses, device=device)
+            Qnet = torch.zeros(num_buses, device=device)
+
+            # PQ
+            pq_idx = (data['bus'].bus_type == 1).nonzero(as_tuple=True)[0]
+            bus_gen = data['bus'].bus_gen[pq_idx]
+            pq_pg = bus_gen[:, 0]
+            pq_qg = bus_gen[:, 1]
+            pq_outputs = output[pq_idx]
+            Pnet[pq_idx] = pq_pg - pq_outputs[:, 2]
+            Qnet[pq_idx] = pq_qg - pq_outputs[:, 3]
+
+            # PV
+            pv_idx = (data['bus'].bus_type == 2).nonzero(as_tuple=True)[0]
+            pv_outputs = output[pv_idx]
+            Pnet[pv_idx] = pv_outputs[:, 2]
+            Qnet[pv_idx] = pv_outputs[:, 3]
+
+            # Slack
+            slack_idx = (data['bus'].bus_type == 3).nonzero(as_tuple=True)[0]
+            slack_outputs = output[slack_idx]
+            Pnet[slack_idx] = slack_outputs[:, 2]
+            Qnet[slack_idx] = slack_outputs[:, 3]
+
+            # Unnormalize edge attributes
+            mean = pfnet_pfdata_stats[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            std = pfnet_pfdata_stats[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            edge_attr = data["bus", "branch","bus"].edge_attr
+            edge_attr = (edge_attr * std) + mean
+
+            # Collect edge attributes
+            r = edge_attr[:, 0]
+            x = edge_attr[:, 1]
+            bs = edge_attr[:, 2]
+            tau = edge_attr[:, 3]
+            theta_shift = edge_attr[:, 4]
+
+            power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
+            power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
+
+            return power_balance_model_preds
+    
+        elif model_name == "GNS": 
+            V_pred = data["bus"].v
+            theta_pred = data["bus"].theta
+            pg = data['bus'].pg
+            pd = data['bus'].pd
+            qd = data['bus'].qd
+            qg = data['bus'].qg
+            Pnet = pg - pd
+            Qnet = qg - qd
+
+            # Collect edge attributes
+            edge_attr = data["bus", "branch","bus"].edge_attr
+            r = edge_attr[:, 0]
+            x = edge_attr[:, 1]
+            bs = edge_attr[:, 3] + edge_attr[:, 5]
+            tau = edge_attr[:, 6]
+            theta_shift = edge_attr[:, 7]
+
+            power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
+            power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
+
+            return power_balance_model_preds
 
 
 @registry.register_loss("gns_layer_loss")
@@ -114,7 +267,7 @@ class GNSPowerBalanceLoss:
         # Edge values
         br_r = edge_attr[:, 0]
         br_x = edge_attr[:, 1]
-        b_ij = edge_attr[:, 3]
+        b_ij = edge_attr[:, 3] + edge_attr[:, 5]
         shift_ij = edge_attr[:, -1]
         tau_ij = edge_attr[:, -2]
         y = 1 / (torch.complex(br_r, br_x))
@@ -129,24 +282,24 @@ class GNSPowerBalanceLoss:
 
         # Active power flows
         P_flow_src = (
-            (v_i * v_j * y_ij / tau_ij) * torch.sin(theta_i - theta_j - delta_ij - shift_ij) 
-            + ((v_i / tau_ij) ** 2) * (y_ij * torch.sin(delta_ij))
+            - (v_i * v_j * y_ij / tau_ij) * torch.cos(theta_i - theta_j - delta_ij - shift_ij) 
+            + ((v_i / tau_ij) ** 2) * (y_ij * torch.cos(delta_ij))
         ) 
 
         P_flow_dst = (
-            (v_j * v_i * y_ij / tau_ij) * torch.sin(theta_j - theta_i - delta_ij + shift_ij)
-            + ((v_j) ** 2) * (y_ij * torch.sin(delta_ij))
+            - (v_i * v_j * y_ij / tau_ij) * torch.cos(theta_j - theta_i - delta_ij + shift_ij)
+            + ((v_j) ** 2) * (y_ij * torch.cos(delta_ij))
         )
 
         # Reactive power flows
         Q_flow_src = (
-            (-v_i * v_j * y_ij / tau_ij) * torch.cos(theta_i - theta_j - delta_ij - shift_ij)
-            + ((v_i / tau_ij) ** 2) * (y_ij * torch.cos(delta_ij) - b_ij / 2)
+            (-v_i * v_j * y_ij / tau_ij) * torch.sin(theta_i - theta_j - delta_ij - shift_ij)
+            - ((v_i / tau_ij) ** 2) * (y_ij * torch.sin(delta_ij) + b_ij / 2) # this is term is fine
         )
 
         Q_flow_dst = (
-            (-v_j * v_i * y_ij / tau_ij) * torch.cos(theta_j - theta_i - delta_ij + shift_ij)
-            + ((v_j) ** 2) * (y_ij * torch.sin(delta_ij) - b_ij / 2)
+            (-v_j * v_i * y_ij / tau_ij) * torch.sin(theta_j - theta_i - delta_ij + shift_ij)
+            - ((v_j) ** 2) * (y_ij * torch.sin(delta_ij) + b_ij / 2) # this is term is fine
         ) 
 
         # Aggregate contributions for all nodes
@@ -156,8 +309,8 @@ class GNSPowerBalanceLoss:
         Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
 
         if layer_loss: 
-            delta_p = (pg - pd - g_s * (v ** 2)) + Pbus_pred
-            delta_q = qg - qd + b_s * (v ** 2) + Qbus_pred
+            delta_p = (pg - pd - g_s * (v ** 2)) - Pbus_pred
+            delta_q = (qg - qd + b_s * (v ** 2)) - Qbus_pred
             delta_s = (delta_p ** 2 + delta_q ** 2).mean()
             if training: 
                 self.power_balance_loss = delta_s
@@ -176,24 +329,41 @@ class constraint_violations_loss_pf:
         
     def __call__(self, output_dict, data):
         device = data["bus"].x.device
+        casename = output_dict["casename"]
         # Get the predictions and edge features
         bus_pred = output_dict["bus"]
+        PV_pred = output_dict["PV"]
+        slack_pred = output_dict["slack"]
+        slack_demand = data["slack"].demand
+        PV_generation = data['PV'].generation
+        PV_demand = data['PV'].demand
         edge_pred = output_dict["edge_preds"]
         edge_indices = data["bus", "branch", "bus"].edge_index
-        edge_features = data["bus", "branch", "bus"].edge_attr
         va, vm = bus_pred.T
-        complex_voltage = vm * torch.exp(1j* va)
+
+        # # Unnormalize slack predictions 
+        # mean = canos_pfdelta_stats[casename]["mean"]["slack"]["y"].to(device)
+        # std = canos_pfdelta_stats[casename]["std"]["slack"]["y"].to(device)
+        # unnormalized_slack_pred = (slack_pred * std) + mean
 
         # Get the branch flows from the edge predictions
         n = data["bus"].x.shape[0]
         sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
-        flows_rev = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
-        flows_fwd = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        flows_rev = edge_pred[:, 2] + 1j * edge_pred[:, 3]  
+        flows_fwd = edge_pred[:, 0] + 1j * edge_pred[:, 1]  
         sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
         sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
 
         # Generator flows (already aggregated per bus)
-        bus_gen = data["bus"].bus_gen.to(device) 
+        bus_gen = data["bus"].bus_gen.to(device)
+        slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+        pv_idx = data["PV", "PV_link", "bus"].edge_index[1]
+        slack_pg = slack_pred[:, 0] + slack_demand[:, 0]
+        slack_qg = slack_pred[:, 1] +  slack_demand[:, 1]
+        pv_pg = PV_generation[:, 0]
+        pv_qg = PV_pred[:, 0] + PV_demand[:, 1]
+        bus_gen[slack_idx] = torch.stack([slack_pg, slack_qg], dim=1)
+        bus_gen[pv_idx] = torch.stack([pv_pg, pv_qg], dim=1)
         gen_flows = bus_gen[:, 0] + 1j * bus_gen[:, 1]
 
         # Demand flows (already aggregated per bus)
@@ -233,4 +403,29 @@ class constraint_violations_loss_pf:
         self.imag_flow_mismatch_violation = violation_degree_imag_flow_mismatch
 
         return loss_c
+
+
+@registry.register_loss("canos_pf_mse")
+class CANOS_PF_MSE:
+    def __init__(self, ):
+        self.loss = None
+    
+    def __call__(self, output_dict, data):
+        PV_pred, PQ_pred, slack_pred = output_dict["PV"], output_dict["PQ"], output_dict["slack"]
+        edge_preds = output_dict["edge_preds"]
+
+        # gather targets
+        PV_target, PQ_target, slack_target = data["PV"].y, data["PQ"].y, data["slack"].y
+        branch_target = data["bus", "branch", "bus"].edge_label
+
+        # calculate L2 loss
+        pv_loss = mse_loss(PV_pred, PV_target)
+        pq_loss = mse_loss(PQ_pred, PQ_target)
+        slack_loss = mse_loss(slack_pred, slack_target)
+        edge_loss = mse_loss(edge_preds, branch_target)
+
+        total_loss = pv_loss + pq_loss + slack_loss + edge_loss
+        self.loss = total_loss
+
+        return total_loss
 

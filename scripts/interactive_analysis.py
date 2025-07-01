@@ -1,6 +1,7 @@
 import os
 import sys
 import yaml
+import copy
 import argparse
 import IPython
 
@@ -9,7 +10,12 @@ import torch
 # Change working directory to one above
 sys.path.append(os.getcwd())
 
-from scripts.utils import find_run, load_config_and_trainer
+from scripts.utils import (
+    find_run,
+    load_config_and_trainer,
+    load_config,
+    load_trainer,
+)
 
 
 def parser():
@@ -27,6 +33,7 @@ if __name__ == "__main__":
     run_location = find_run(args.run_name)
 
     # Load trainer
-    trainer, config = load_config_and_trainer(run_location)
+    config = load_config(run_location)
+    trainer = load_trainer(copy.deepcopy(config))
 
     IPython.embed()
