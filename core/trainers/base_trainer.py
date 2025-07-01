@@ -91,8 +91,10 @@ class BaseTrainer:
 
         # Report device being used
         cpu = self.config["functional"]["cpu"]
-        if cpu or not torch.cuda.is_available():
+        if cpu or (not torch.cuda.is_available() and not torch.backends.mps.is_available()):
             self.device = torch.device("cpu")
+        elif torch.backends.mps.is_available():
+            self.device = torch.device("mps")
         else:
             self.device = torch.device("cuda")
         print("\U0001F4D1 Device being used:", self.device)
