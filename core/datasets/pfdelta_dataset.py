@@ -22,7 +22,8 @@ from core.utils.registry import registry
 
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        """ making a note in the docstring -- if you want to reload a specific case but with the added bus type, you will have to do force_reload=True -- this will overwrite the current path for that task """
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -30,12 +31,12 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
-        if task in [3.2, 3.3]: # TODO: add a flag to specify the specific processed dir!
+        if task in [3.2, 3.3]:
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_")
         else: 
             self._custom_processed_dir = os.path.join(self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}")
 
-        self.all_case_names = ["case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
+        self.all_case_names = ["case14_seeds", "case30_seeds", "case57_seeds", "case118_seeds", "case500_seeds", "case2000_seeds"]
 
         self.task_config = {
             1.1: {"feasible":{"none": 54000, "n-1": 0, "n-2": 0}},
@@ -51,9 +52,9 @@ class PFDeltaDataset(InMemoryDataset):
                   "feasible": {"none": 16200, "n-1": 16200, "n-2": 16200}}, 
             4.2: {"approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200}, 
                   "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}, 
-                  "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}}
+                  "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}, 
+            4.3:{"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
         
-
         self.feasibility_config = {
             "feasible": {
                 "none": 56000,
@@ -74,6 +75,16 @@ class PFDeltaDataset(InMemoryDataset):
                 "test": {"none": 200, "n-1": 200, "n-2": 200}
             },
         }
+
+        self.task_split_config = {3.1: {"train": [self.case_name], 
+                                        "val": self.all_case_names,
+                                        "test": self.all_case_names},
+                                  3.2: {"train": ["case14_seeds", "case30_seeds", "case57_seeds"], 
+                                        "val": ["case118_seeds", "case500_seeds"],
+                                        "test": ["case118_seeds", "case500_seeds"]},
+                                  3.3: {"train": ["case118_seeds", "case500_seeds"], 
+                                        "val": ["case14_seeds", "case30_seeds", "case57_seeds"],
+                                        "test": ["case14_seeds", "case30_seeds", "case57_seeds"]}}
 
         super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.split)
@@ -339,6 +350,9 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
+                if train_size == 0 and test_size == 0:
+                    continue
+
                 if feasibility == "feasible": 
                     shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
                     with open(shuffle_path, "r") as f:
@@ -367,7 +381,7 @@ class PFDeltaDataset(InMemoryDataset):
 
                         # For tasks that don't load from every folder
                         if len(data_list) == 0:
-                            break
+                            continue
                         data, slices = self.collate(data_list)
                         processed_path = os.path.join(root, f"{grid_type}/processed/task_{task}_{feasibility}_{model}")
                         
@@ -440,7 +454,6 @@ class PFDeltaDataset(InMemoryDataset):
         if task in [3.1, 3.2, 3.3]:
             roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names]
             casename = self.case_name if task == 3.1 else ""
-            # for tasks with multiple case names, we need to aggregate data from all cases
         else:
             roots = [os.path.join(self.root, self.case_name)]
             casename = self.case_name
@@ -452,8 +465,14 @@ class PFDeltaDataset(InMemoryDataset):
             
             # Add data from this root to the combined lists
             for split in combined_data_lists.keys():
-                combined_data_lists[split].extend(task_data_lists[split])
-        
+                if task in [3.1, 3.2, 3.3]:
+                    # extract case name from root
+                    case_name = os.path.basename(root)
+                    if case_name in self.task_split_config[task][split]:
+                        combined_data_lists[split].extend(task_data_lists[split])
+                else: 
+                    combined_data_lists[split].extend(task_data_lists[split])
+                
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
                 print(f"Collating combined {split} data with {len(data_list)} samples")
@@ -469,20 +488,21 @@ class PFDeltaDataset(InMemoryDataset):
                     
                 torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
                 print(f"Saved combined {split} data with {len(data_list)} samples")
-
+    
     def load(self, split):
         """Loads dataset for the specified split.
         
         Args:
-            split (str): The split to load ('train', 'val', 'test', 'separate_{split}_{feasibility}_{grid_type}')
+            split (str): The split to load ('train', 'val', 'test', 'separate_{casename}_{split}_{feasibility}_{grid_type}') # specify a different type of string for 3.1 
         """
+
         if "separate" in split:
-            # split should be of format "separate_{split}_{feasibility}_{grid_type}"
-            _, split_str, feasibility_str, grid_type_str = split.split("_")
+            # split should be of format "separate_{split}_{feasibility}_{grid_type}_{casename}"
+            _, casename_str, split_str, feasibility_str, grid_type_str = split.split("_")
             if feasibility_str == "near infeasible": 
-                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{4.1}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+                processed_path = os.path.join(self.root, f"{casename_str}", f"{grid_type_str}", "processed", f"task_{4.1}_{feasibility_str}_{self.model}", f"{split_str}.pt")
             else: 
-                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+                processed_path = os.path.join(self.root, f"{casename_str}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
             print(f"Loading {split} dataset from {processed_path}")
             self.data, self.slices = torch.load(processed_path)
         else: 
