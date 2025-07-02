@@ -19,11 +19,9 @@ from core.datasets.dataset_utils import (
 from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
-
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
     def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
-        """ making a note in the docstring -- if you want to reload a specific case but with the added bus type, you will have to do force_reload=True -- this will overwrite the current path for that task """
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -54,6 +52,9 @@ class PFDeltaDataset(InMemoryDataset):
                   "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}, 
                   "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000}}, 
             4.3:{"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}}}
+
+        if case_name == "case2000_seeds":
+            self.task_config = {1.3: {"feasible":{"none": 10000, "n-1": 10000, "n-2": 10000}}}
         
         self.feasibility_config = {
             "feasible": {

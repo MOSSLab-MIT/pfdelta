@@ -67,14 +67,14 @@ end
 function find_max_loads(pd_max, net_r, net_path, net_name, model_type, r_solver,
 						save_max_load, results, save_while, print_level)
 	if isnothing(pd_max)
-		max_load_file = joinpath(net_path, net_name * "_found_max_load.csv")
+		max_load_file = joinpath(net_path, "max_load.csv")
 		if isfile(max_load_file )
 			pd_max = readdlm(max_load_file , ',')
 		else
 			pm_pd_max = PM.instantiate_model(net_r, model_type, build_opf_var_load)
 			pd_max, status = find_max_loads(pm_pd_max, print_level=print_level, solver=r_solver)
 								   
-			save_while && writedlm(max_load_file, pd_max, ',')
+			save_max_load && writedlm(max_load_file, pd_max, ',')
 		end
 	end
 	net_r["pd_max"] = pd_max
@@ -91,7 +91,7 @@ Sets the load values in the net to the given load profile
 specified in a 2*n_load x 1 array of n_load real then n_load
 reactive load powers.
 """
-function set_network_load(net, new_load; scale_load=true)
+function set_network_load!(net, new_load; scale_load=true)
     if scale_load
 		new_load = new_load * 1 / net["baseMVA"]
 	end
