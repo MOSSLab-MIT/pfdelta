@@ -21,7 +21,7 @@ from core.utils.registry import registry
 
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='../../hf_pfdelta_data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -505,11 +505,11 @@ class PFDeltaDataset(InMemoryDataset):
             else: 
                 processed_path = os.path.join(self.root, f"{casename_str}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
             print(f"Loading {split} dataset from {processed_path}")
-            self.data, self.slices = torch.load(processed_path)
+            self.data, self.slices = torch.load(processed_path, weights_only=False)
         else: 
             processed_path = os.path.join(self.processed_dir, f"{split}.pt")
             print(f"Loading {split} dataset from {processed_path}")
-            self.data, self.slices = torch.load(processed_path)
+            self.data, self.slices = torch.load(processed_path, weights_only=False)
 
 
 @registry.register_dataset("pfdeltaGNS")

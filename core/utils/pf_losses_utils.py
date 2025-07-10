@@ -322,7 +322,7 @@ class GNSPowerBalanceLoss:
 
 @registry.register_loss("pf_constraint_violation")
 class constraint_violations_loss_pf:
-    def __init__(self, ):
+    def __init__(self,):
         self.constraint_loss = None
         self.bus_real_mismatch = None
         self.bus_reactive_mismatch = None

@@ -2,19 +2,19 @@ config_type: experiment
 dataset:
   datasets:
   - add_bus_type: true
-    case_name: case118_seeds
+    case_name: case14_seeds
     model: CANOS
     name: pfdeltaCANOS
-    root_dir: data/pfdelta_data
+    root_dir: ../../hf_pfdelta_data
     split: train
-    task: 1.3
+    task: 4.1
   - add_bus_type: true
-    case_name: case118_seeds
+    case_name: case14_seeds
     model: CANOS
     name: pfdeltaCANOS
-    root_dir: data/pfdelta_data
+    root_dir: ../../hf_pfdelta_data
     split: val
-    task: 1.3
+    task: 4.1
 functional:
   config: canos_pf_jobs
   cpu: false
