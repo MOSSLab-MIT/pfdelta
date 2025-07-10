@@ -4,7 +4,6 @@
 *.pyo
 *.mat
 *.json
-*.ipynb
 *.png
 .ipynb_checkpoints
 tutorial.ipynb
