@@ -21,7 +21,7 @@ from core.utils.registry import registry
 
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    def __init__(self, root_dir='../../hf_pfdelta_data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+    def __init__(self, root_dir='data', case_name='', split='train', model='', task=1.3, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
         self.split = split
         self.case_name = case_name
         self.force_reload = force_reload
@@ -375,7 +375,9 @@ class PFDeltaDataset(InMemoryDataset):
                         data_list = []
                         print(f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)")
                         for fname in tqdm(files, desc=f"Building {split} data"):
+                            print("fname: ", fname)
                             with open(fname, "r") as f:
+                                
                                 pm_case = json.load(f)
                             data = self.build_heterodata(pm_case)
                             data_list.append(data)

@@ -16,8 +16,8 @@ class GNNTrainer(BaseTrainer):
 
 
     def train_one_epoch(self, train_dataloader):
-        import ipdb
-        ipdb.set_trace()
+        # import ipdb
+        # ipdb.set_trace()
 
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)

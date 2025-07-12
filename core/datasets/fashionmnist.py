@@ -6,7 +6,7 @@ from core.utils.registry import registry
 
 @registry.register_dataset("fashion")
 class FashionMNISTDataset(Dataset):
-    def __init__(self, train=True, root='../../hf_pfdelta_data', ratio=1.):
+    def __init__(self, train=True, root='/mnt/home/donti-group-shared/hf_pfdelta_data', ratio=1.):
         transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,))

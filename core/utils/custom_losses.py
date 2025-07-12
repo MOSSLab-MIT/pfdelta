@@ -81,10 +81,9 @@ def PBL_max(predictions, data):
     max_loss = per_node_loss.max()
     return max_loss
 
-
 @registry.register_loss("combined_loss")
 class CombinedLoss:
-    def __init__(self, loss1, loss2, lamb=1, inp1={}, inp2={}):
+    def __init__(self, loss1, loss2, lamb=1, inp1={}, inp2={}, output_name=''):
         self.loss1_name = loss1
         self.loss2_name = loss2
         self.lamb = lamb
@@ -94,7 +93,10 @@ class CombinedLoss:
 
         loss1_printname = getattr(self.loss1, "loss_name", loss1)
         loss2_printname = getattr(self.loss2, "loss_name", loss2)
-        self.loss_name = loss1_printname + "+" + loss2_printname
+        if output_name:
+            self.loss_name = output_name
+        else:
+            self.loss_name = loss1_printname + "+" + loss2_printname
 
     def initialize_loss(self, loss_name, loss_inputs):
         # This is for pytorch losses
@@ -120,6 +122,15 @@ class CombinedLoss:
         weighted_loss = loss1 + self.lamb*loss2
         return weighted_loss
 
+
+@registry.register_loss("two_seperate_losses")
+class TwoLoss(CombinedLoss):
+    def __init__(self, loss1, loss2, lamb=1, inp1={}, inp2={}):
+        super().__init__(self, loss1, loss2, lamb, inp1, inp2)
+    def __call__(self, predictions, labels):
+        loss1 = self.loss1(predictions, labels)
+        loss2 = self.loss2(predictions, labels)
+        return loss1, loss2
 
 @registry.register_loss("Objective_n_Penalty")
 class Objective_n_Penalty:
