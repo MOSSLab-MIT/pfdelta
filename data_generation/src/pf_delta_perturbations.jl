@@ -1,3 +1,5 @@
+using Graphs: SimpleGraph, add_edge!, is_connected
+
 function perturb_topology!(net; method="none") 
     branch_keys = collect(keys(net["branch"]))
     gen_keys = collect(keys(net["gen"]))
@@ -19,7 +21,7 @@ function perturb_topology!(net; method="none")
     active_branch_keys = [k for k in branch_keys if original_br_status[k] == 1]
     active_gen_keys = [k for k in gen_keys if original_gen_status[k] == 1]
 
-    # while true
+    while true
         # Reset branches and gen status
         for k in branch_keys
             net["branch"][k]["br_status"] = original_br_status[k]
@@ -81,26 +83,22 @@ function perturb_topology!(net; method="none")
             error("Invalid method specified: $method. Choose from 'none', 'N-1', or 'N-2'.")
         end
         
-        return
-
-    #     # Only return if the network is still connected
-    #     is_connected_adj_matrix(net) && return
-    # end
+        # Only return if the network is still connected
+        if is_graph_connected(net)
+            return
+        end
+    end
 end
 
-# benchmark this (could be taking longer than solving the opf)
-function is_connected_adj_matrix(net)
-    branches = net["branch"]
-    buses = sort(collect(keys(net["bus"])))
-    bus_index_map = Dict(b => i for (i, b) in enumerate(buses))  # bus_i → 1-based index for Graphs.jl
+function is_graph_connected(net)
+    nb = length(net["bus"])
+    g = SimpleGraph(nb)
 
-    g = SimpleGraph(length(buses))
-
-    for branch in values(branches)
+    for (_, branch) in net["branch"]
         if branch["br_status"] == 1
-            f = string(branch["f_bus"])
-            t = string(branch["t_bus"])
-            add_edge!(g, bus_index_map[f], bus_index_map[t])
+            f = branch["f_bus"]
+            t = branch["t_bus"]
+            add_edge!(g, f, t)
         end
     end
 

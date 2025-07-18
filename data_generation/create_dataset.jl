@@ -43,17 +43,37 @@ function create_dataset_seeds(
 		mkpath(seeds_storage_path)
 	end
 	# Gather initial set
-	results, Anb = point_generator(network, num_seeds; returnAnb=true, save_path=save_path,
-		perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method,
-		net_path=save_path, save_max_load=true,)
-	print("\n\n\n")
-	A, b = Anb
-	println("Initial seeds produced.")
-	P = results["inputs"]["pd"]
-	Q = results["inputs"]["qd"]
+	if !isfile(file_name)
+		results, Anb = point_generator(network, num_seeds; returnAnb=true, save_path=save_path,
+			perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method,
+			net_path=save_path, save_max_load=true,)
+		A, b = Anb
+		println("A: ", typeof(A), " ", size(A))
+		println("b: ", typeof(b), " ", size(b))
+		print("\n\n\n")
+		println("Initial seeds produced.")
+		P = results["inputs"]["pd"]
+		Q = results["inputs"]["qd"]
+	else
+		println("PREVIOUS SEEDS MADE FOUND! LOADING...")
+		print("\n\n\n")
+		all_results = JSON.parsefile(file_name)
+		results = all_results["initial"]
+		# Cast to matrix
+		P = hcat(results["inputs"]["pd"]...)
+		Q = hcat(results["inputs"]["qd"]...)
+		A = hcat(all_results["A"]...)
+		b = reshape(all_results["b"][1], :, 1)
+	end
 	seeds = P .+ Q .* im
+	println("Seeds: ", size(seeds))
 	# Save results
-	all_results = Dict("initial" => results)
+	all_results = Dict(
+		"initial" => results,
+		"A" => A,
+		"b" => b,
+		"counter" => -1,
+	)
 	open(file_name, "w") do io
 		JSON.print(io, all_results)
 	end
@@ -161,15 +181,24 @@ function create_dataset_seeds(
 			" not enough! Producing more seeds")
 		# If it is not enough, create more seeds, reset max_radius
 		num_new_seeds = floor(Int, num_seeds * portion_of_new_seeds)
-		new_results, Anb = point_generator(network, num_new_seeds; returnAnb=true, save_path=save_path,
-			perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method,
-			net_path=save_path, starting_k=num_seeds_produced, A=A, b=b)
-		A, b = Anb
 		print("\n\n\n")
-		P = new_results["inputs"]["pd"]
-		Q = new_results["inputs"]["qd"]
+		if !(string(counter) in keys(all_results))
+			new_results, Anb = point_generator(network, num_new_seeds; returnAnb=true, save_path=save_path,
+				perturb_costs_method=perturb_costs_method, perturb_topology_method=perturb_topology_method,
+				net_path=save_path, starting_k=num_seeds_produced, A=A, b=b)
+			A, b = Anb
+			println("Produced $num_new_seeds new seeds! Checking if enough...")
+			P = new_results["inputs"]["pd"]
+			Q = new_results["inputs"]["qd"]
+		else
+			# In this case, the current A and b are still up to date, so no need to reupload them
+			println("Previous seed batch found! Loading...")
+			new_results = all_results[string(counter+1)]
+			P = hcat(new_results["inputs"]["pd"]...)
+			Q = hcat(new_results["inputs"]["qd"]...)
+		end
 		new_seeds = P .+ Q .* im
-		println("Produced $num_new_seeds new seeds! Checking if enough...")
+		println("Current seeds :", size(seeds), " New: ", size(new_seeds))
 		# Add them to the set of points
 		seeds = vcat(seeds, new_seeds)
 		g, g_weights = create_graph(real(seeds), starting_distance)
@@ -184,6 +213,9 @@ function create_dataset_seeds(
 		println("Max radius reset to $max_radius")
 		# Save progress
 		all_results[string(counter)] = new_results
+		all_results["A"] = A
+		all_results["b"] = b
+		all_results["counter"] = string(counter)
 		open(file_name, "w") do io
 			JSON.print(io, all_results)
 		end
