@@ -1,5 +1,4 @@
-config_type: local_simple_batch
-batch_name: canos_test
+config_type: experiment
 dataset:
   datasets:
   - add_bus_type: true
@@ -21,7 +20,7 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/canos_pf_task_1_3/canos_pf_hd128_depth15_lr5e-4_seed11_0_250510_134237_250711
-  run_name: canos_pf_hd128_depth15_lr5e-4_seed11_0_250510_134237_250711
+  run_name: canos_pf_hd128_depth15_lr5e-4_seed11_0_250510_134237_250711_0
   seed: 11
   slurm_jobid: '3513544'
   trainer_name: gnn_trainer

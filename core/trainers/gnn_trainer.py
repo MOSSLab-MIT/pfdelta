@@ -37,12 +37,18 @@ class GNNTrainer(BaseTrainer):
 
             # Backpropagate
             losses[0].backward()
+
+            # print("parameters: ", [p.grad for p in self.model.parameters()])
             self.grad_manip(losses)
             self.optimizer.step()
 
             # Update train step
             self.update_train_step()
+            # import ipdb
+            # ipdb.set_trace()
+            
 
+        
         return running_loss
 
 

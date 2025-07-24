@@ -245,12 +245,10 @@ class PowerFlowNet(nn.Module):
         Returns:
             (torch.Tensor): Output node embeddings (num_nodes, output_dim).
         """
-        # import ipdb
-        # ipdb.set_trace()
         x, mask, edge_index, edge_features = self.data_gatherer(data)
 
         # assert data.x.shape[-1] == self.nfeature_dim * 2 + 4 # features and their mask + one-hot node type embedding
-        # x = data.x[:, 4:4+self.nfeature_dim] # first four features: node type. not elegant at all this way. just saying.
+        # x = x[:, 4:4+self.nfeature_dim] # first four features: node type. not elegant at all this way. just saying.
 
         x = self.mask_embd(mask) + x
 
@@ -270,6 +268,6 @@ class PowerFlowNet(nn.Module):
         else:
             x = self.layers[-1](x=x, edge_index=edge_index)
 
-        # # Mask out known values
+        # Mask out known values
         # x = place_known_values(x, data)
         return x

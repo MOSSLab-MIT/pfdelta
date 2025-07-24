@@ -90,8 +90,13 @@ class BaseTrainer:
             print("\U0001F4D1 is_debug flag passed, NO RESULTS WILL BE RECORDED!")
 
         # Report device being used
-        cpu = self.config["functional"]["cpu"]
-        if cpu or not torch.cuda.is_available():
+        # cpu = self.config["functional"]["cpu"]
+        # if cpu or not torch.cuda.is_available():
+        #     self.device = torch.device("cpu")
+        # else:
+        #     self.device = torch.device("cuda")
+        # cpu = self.config["functional"]["cpu"]
+        if not torch.cuda.is_available():
             self.device = torch.device("cpu")
         else:
             self.device = torch.device("cuda")
@@ -596,7 +601,7 @@ class BaseTrainer:
 
             # Update train step
             self.update_train_step()
-
+       
         return running_loss
 
 

@@ -37,6 +37,7 @@ def find_run_folder(run_name):
 def plot_errors(run_folder, error_key):
     """Loads the train.json file and plots the errors for the given run and
     error key."""
+    print("ABOUT TO PLOT ERRORS")
     max_ticks = 15
 
     # Build the path to the train.json file
@@ -57,6 +58,7 @@ def plot_errors(run_folder, error_key):
         error_key = list(train_data[first_epoch].keys())[0]
 
     # Set up figure
+    print("FIGURE SET UP")
     plt.figure(figsize=(10, 6))
     plt.xlabel('Training point')
     plt.ylabel(f'{error_key}')
@@ -75,6 +77,7 @@ def plot_errors(run_folder, error_key):
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
     print(epochs)
     print_epochs = list(map(int, epochs))
+    print("FIRST PLOTTING")
     plt.plot(print_epochs, errors, marker='o', linestyle='-', color='b', label="Train")
 
     ## Val values
@@ -100,10 +103,12 @@ def plot_errors(run_folder, error_key):
     print(json.dumps(summary, indent=3))
 
     plt.legend()
+    plt.savefig("canos_train_on_mse.jpg")
     plt.show()
 
 
 if __name__ == "__main__":
+    print("DUKE")
     # Gather arguments
     run_name = args.run_name
     error_name = args.error

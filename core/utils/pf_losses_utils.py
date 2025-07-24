@@ -7,7 +7,7 @@ from torch_geometric.nn import global_add_pool
 
 from core.utils.registry import registry
 from core.datasets.dataset_utils import canos_pf_data_mean0_var1
-from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
+from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats, pfnet_pfdata_stats_constraint_violation
 
 @registry.register_loss("universal_power_balance")
 class PowerBalanceLoss:
@@ -190,8 +190,13 @@ class PowerBalanceLoss:
             Qnet[slack_idx] = slack_outputs[:, 3]
 
             # Unnormalize edge attributes
-            mean = pfnet_pfdata_stats[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
-            std = pfnet_pfdata_stats[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            stats_dict = {}
+            if (data['bus', 'branch', 'bus'].edge_attr.shape[1] == 5):
+                stats_dict = pfnet_pfdata_stats
+            elif (data['bus', 'branch', 'bus'].edge_attr.shape[1] == 7):
+                stats_dict = pfnet_pfdata_stats_constraint_violation
+            mean = stats_dict[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            std = stats_dict[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
             edge_attr = data["bus", "branch","bus"].edge_attr
             edge_attr = (edge_attr * std) + mean
 
@@ -322,12 +327,132 @@ class GNSPowerBalanceLoss:
 
 @registry.register_loss("pf_constraint_violation")
 class constraint_violations_loss_pf:
-    def __init__(self,):
+    def __init__(self, model="CANOS"):
         self.constraint_loss = None
         self.bus_real_mismatch = None
         self.bus_reactive_mismatch = None
+        self.model = model
+
+    def derive_branch_flows(self, output_dict, data):
+        # import ipdb
+        # ipdb.set_trace()
+
+        # Create complex voltage
+        va = output_dict["bus"][:, 0]
+        vm = output_dict["bus"][:, -1]
+        v_complex = vm * torch.exp(1j* va)
+
+        # Extract edge info
+        edge_index = data["bus", "branch", "bus"].edge_index
+        edge_attr = data["bus", "branch", "bus"].edge_attr
+
+        # import ipdb
+        # ipdb.set_trace()
+        # Unpack edge features
+        r, x, b, tap, angle, b_fr, b_to = edge_attr.T
+      
+        # Complex tap ratio
+        T_complex = tap * torch.exp(1j * angle)
+
+        # Complex admittances
+        Y_branch = 1 / (r + 1j * x)
+        Y_c_fr = 1j * b_fr
+        Y_c_to = 1j * b_to
+
+        # Node voltages
+        i, j = edge_index[0], edge_index[1]
+        vi = v_complex[i]
+        vj = v_complex[j]
         
+        # Compute complex branch flows
+        S_fr = (Y_branch + Y_c_fr).conj() * (torch.abs(vi) ** 2) / (torch.abs(T_complex) ** 2) - \
+            Y_branch.conj() * (vi * vj.conj()) / T_complex
+
+        S_to = (Y_branch + Y_c_to).conj() * (torch.abs(vj) ** 2) - \
+            Y_branch.conj() * (vj * vi.conj()) / T_complex.conj()
+
+        # Real/reactive power flows
+        p_fr, q_fr = S_fr.real, S_fr.imag
+        p_to, q_to = S_to.real, S_to.imag
+
+        return p_fr, q_fr, p_to, q_to
+
+    def construct_output_dict(self,  data, output_dict):
+        if self.model == "CANOS":
+            return output_dict
+        elif self.model == "PFNet":
+            power_balance_model_preds = {}
+            output = output_dict
+            device = data["bus"].x.device
+            # Unnormalize predictions
+            casename = data.case_name[0]
+            mean = pfnet_pfdata_stats_constraint_violation[casename]["mean"]["bus"]["y"].to(device)
+            std = pfnet_pfdata_stats_constraint_violation[casename]["std"]["bus"]["y"].to(device)
+            output = (output * std) + mean
+
+            num_buses = data["bus"].num_nodes
+            va_pred = output[:, 1]
+            vm_pred = output[:, 0] # NOT SURE IF 0th column or 1
+            # Pnet = torch.zeros(num_buses, device=device)
+            # Qnet = torch.zeros(num_buses, device=device)
+
+            # PQ
+            pq_idx = (data['bus'].bus_type == 1).nonzero(as_tuple=True)[0]
+            # bus_gen = data['bus'].bus_gen[pq_idx]
+            # pq_pg = bus_gen[:, 0]
+            # pq_qg = bus_gen[:, 1]
+            pq_outputs = output[pq_idx]
+            # Pnet[pq_idx] = pq_pg - pq_outputs[:, 2]
+            # Qnet[pq_idx] = pq_qg - pq_outputs[:, 3]
+
+            # PV
+            pv_idx = (data['bus'].bus_type == 2).nonzero(as_tuple=True)[0]
+            pv_outputs = output[pv_idx]
+            # Pnet[pv_idx] = pv_outputs[:, 2]
+            # Qnet[pv_idx] = pv_outputs[:, 3]
+
+            # Slack
+            slack_idx = (data['bus'].bus_type == 3).nonzero(as_tuple=True)[0]
+            slack_outputs = output[slack_idx]
+            # Pnet[slack_idx] = slack_outputs[:, 2]
+            # Qnet[slack_idx] = slack_outputs[:, 3]
+
+            # Unnormalize edge attributes
+            mean = pfnet_pfdata_stats_constraint_violation[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            std = pfnet_pfdata_stats_constraint_violation[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
+            edge_attr = data["bus", "branch","bus"].edge_attr
+            edge_attr = (edge_attr * std) + mean
+
+            # Collect edge attributes
+            r = edge_attr[:, 0]
+            x = edge_attr[:, 1]
+            bs = edge_attr[:, 2]
+            tau = edge_attr[:, 3]
+            theta_shift = edge_attr[:, 4]
+
+            # power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
+            power_balance_model_preds["PV"] = pv_outputs
+            power_balance_model_preds["PQ"] = pq_outputs
+            power_balance_model_preds["slack"] = slack_outputs
+            power_balance_model_preds["bus"] = torch.stack([vm_pred, va_pred], dim=-1)
+            power_balance_model_preds["casename"] = casename
+
+            p_fr, q_fr, p_to, q_to = self.derive_branch_flows(power_balance_model_preds, data)
+            power_balance_model_preds["edge_preds"] = torch.stack((p_fr, q_fr, p_to, q_to), dim=-1)
+            return power_balance_model_preds
+
     def __call__(self, output_dict, data):
+        # import ipdb
+        # ipdb.set_trace()
+        if self.model == "CANOS":
+            output_dict = output_dict
+            # # Unnormalize slack predictions 
+            # mean = canos_pfdelta_stats[casename]["mean"]["slack"]["y"].to(device)
+            # std = canos_pfdelta_stats[casename]["std"]["slack"]["y"].to(device)
+            # unnormalized_slack_pred = (slack_pred * std) + mean
+        elif self.model == "PFNet":
+            output_dict = self.construct_output_dict(data, output_dict)
+    
         device = data["bus"].x.device
         casename = output_dict["casename"]
         # Get the predictions and edge features
@@ -340,11 +465,6 @@ class constraint_violations_loss_pf:
         edge_pred = output_dict["edge_preds"]
         edge_indices = data["bus", "branch", "bus"].edge_index
         va, vm = bus_pred.T
-
-        # # Unnormalize slack predictions 
-        # mean = canos_pfdelta_stats[casename]["mean"]["slack"]["y"].to(device)
-        # std = canos_pfdelta_stats[casename]["std"]["slack"]["y"].to(device)
-        # unnormalized_slack_pred = (slack_pred * std) + mean
 
         # Get the branch flows from the edge predictions
         n = data["bus"].x.shape[0]

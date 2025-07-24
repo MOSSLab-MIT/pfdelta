@@ -88,6 +88,8 @@ def canos_pf_data_mean0_var1(stats, data):
 
 
 def pfnet_data_mean0_var1(stats, data):
+    # import ipdb
+    # ipdb.set_trace()
     means = stats["mean"]
     stds = stats["std"]
     eps = 1e-7

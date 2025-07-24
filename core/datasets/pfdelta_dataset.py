@@ -16,7 +16,7 @@ from core.datasets.dataset_utils import (
     canos_pf_slack_mean0_var1,
     pfnet_data_mean0_var1
 )
-from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
+from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats, pfnet_pfdata_stats_constraint_violation
 from core.utils.registry import registry
 
 @registry.register_dataset("pfdeltadata")
@@ -709,9 +709,104 @@ class PFDeltaPFNet(PFDeltaDataset):
         edge_attrs = []
         for attr in data['bus', 'branch', 'bus'].edge_attr:
             r, x = attr[0], attr[1]
-            b = attr[3] + attr[5]
+            b = attr[3] + attr[5] # attr[3] b_fr and attr[5] b_to
             tau, angle = attr[6], attr[7]
             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
+
+        data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
+
+        if self.pre_transform:
+            data = self.pre_transform(data)
+
+        return data
+
+
+@registry.register_dataset("pfdeltaPFNet_constraint_violation")
+class PFDeltaPFNet_Constraint_Violation(PFDeltaDataset): 
+    def __init__(self, root_dir='data', case_name='', split='train', model="PFNet", task=1.1, add_bus_type=False, transform=None, pre_transform=None, pre_filter=None, force_reload=False):
+        # import ipdb
+        # ipdb.set_trace()
+        if pre_transform:
+            if pre_transform == "pfnet_data_mean0_var1":
+                stats = pfnet_pfdata_stats_constraint_violation[case_name]
+                pre_transform = partial(pfnet_data_mean0_var1, stats)
+        
+        if transform is not None: 
+            if transform == "pfnet_data_mean0_var1": 
+                stats = pfnet_pfdata_stats_constraint_violation[case_name]
+                transform = partial(pfnet_data_mean0_var1, stats)
+
+        super().__init__(root_dir, case_name, split,  model, task, add_bus_type, transform, pre_transform, pre_filter, force_reload)
+
+    def build_heterodata(self, pm_case, feasibility=False):
+        # call base version
+        data = super().build_heterodata(pm_case, feasibility=feasibility)
+
+        num_buses = data['bus'].x.size(0)
+        bus_types = data['bus'].bus_type
+        pf_x = data['bus'].x
+        pf_y = data['bus'].y
+        shunts = data['bus'].shunt
+        num_gens = data['gen'].generation.size(0)
+        num_loads = data['load'].demand.size(0)
+
+        # New node features for PFNet
+        x_pfnet = []
+        y_pfnet = []
+        for i in range(num_buses):
+            bus_type = int(bus_types[i].item())
+
+            # One-hot encode bus type
+            one_hot = torch.zeros(4) 
+            one_hot[bus_type - 1] = 1  
+            gs, bs = shunts[i]
+
+            # Prediction mask
+            if bus_type == 1:   # PQ
+                pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
+                va, vm =  pf_y[i] 
+                pd, qd = pf_x[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pd, qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pd, qd, gs, bs])
+            elif bus_type == 2: # PV
+                pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
+                pg_pd, vm =  pf_x[i]
+                qg_qd, va = pf_y[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+            elif bus_type == 3: # Slack
+                pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
+                va, vm =  pf_x[i]
+                pg_pd, qg_qd = pf_y[i]
+                input_mask = (1 - pred_mask).float()
+                input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
+                features = torch.cat([one_hot, input_feats])
+                y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
+
+            x_pfnet.append(torch.cat([features, pred_mask]))
+            y_pfnet.append(y)
+
+        x_pfnet = torch.stack(x_pfnet)  # shape [N, 4+6+6=16]
+        y_pfnet = torch.stack(y_pfnet)  # shape [N, 6]
+
+        data['bus'].x = x_pfnet
+        data['bus'].y = y_pfnet
+
+        data['gen'].num_nodes = num_gens
+        data['load'].num_nodes = num_loads
+
+        edge_attrs = []
+        for attr in data['bus', 'branch', 'bus'].edge_attr:
+            r, x = attr[0], attr[1]
+            b = attr[3] + attr[5] # attr[3] b_fr and attr[5] b_to
+            tau, angle = attr[6], attr[7]
+            b_fr = attr[3]
+            b_to = attr[5]
+            edge_attrs.append(torch.tensor([r, x, b, tau, angle, b_fr, b_to]))
 
         data['bus', 'branch', 'bus'].edge_attr = torch.stack(edge_attrs)
 
