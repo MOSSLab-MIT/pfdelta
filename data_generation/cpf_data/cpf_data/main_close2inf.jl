@@ -1,5 +1,12 @@
 using Pkg
-Pkg.activate(".")
+# Activate the local environment
+Pkg.activate(@__DIR__)
+
+# Instantiate only if Manifest.toml is missing
+if !isfile(joinpath(@__DIR__, "Manifest.toml"))
+    Pkg.instantiate()
+end
+
 import PowerModels as PM
 import Random
 using MATLAB
@@ -25,12 +32,14 @@ case_name = ARGS[1]
 topology_perturb = ARGS[2]
 want_all = length(ARGS) >= 3 ? ARGS[3] : false
 
+# Define number of training samples
 n_samples_nose_train = 1800
-n_samples_around_nose_train = 4 # 4 around the nose per nose
+n_samples_around_nose_train = 4 
 
+# Define number of test samples
 n_samples_nose_test = 200
 
-solved_cases_path = joinpath("..", "final_data_no_exp", case_name, topology_perturb)
+solved_cases_path = joinpath("/Volumes/Crucial X9", case_name, topology_perturb)
 
 # Create training data
 split = "train"
