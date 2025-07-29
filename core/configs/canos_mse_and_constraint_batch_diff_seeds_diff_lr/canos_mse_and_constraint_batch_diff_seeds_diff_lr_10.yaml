@@ -1,10 +1,4 @@
-config_type: simple_batch
-job_parameters:
-  time: "03:00:00"
-  p: "cpu-gpu-rtx8000"
-  gpus: 1
-  body: "__launch__"
-batch_name: canos_mse_and_constraint_batch_diff_seeds_diff_lr
+config_type: experiment
 dataset:
   datasets:
   - add_bus_type: true
@@ -26,8 +20,8 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/canos_pf_task_1_3/
-  run_name: canos_pf_hd128_depth15_lr%lr_seed%seed
-  seed: _manual_list(11, 22, 33 | seed1, seed2, seed3)
+  run_name: canos_pf_hd128_depth15_lr1e3_seedseed3_10
+  seed: 33
   slurm_jobid: '3513544'
   trainer_name: gnn_trainer
 model:
@@ -49,7 +43,7 @@ optim:
       name: StepLR
       step_size: 4
   optimizer:
-    lr: _manual_list(0.001, 0.0001| 1e3, 1e4)
+    lr: 1000.0
     name: Adam
     weight_decay: 0.0
   train_params:

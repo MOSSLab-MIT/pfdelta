@@ -1,5 +1,10 @@
-config_type: local_simple_batch
-batch_name: my_local_test
+config_type: simple_batch
+job_parameters:
+  time: "03:00:00"
+  p: "cpu-gpu-rtx8000"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate power\n__launch__"
+batch_name: my_supercomputer_test
 model:
   name: mlp
   hidden_size: _manual_list(16, 32, 64, 128, 256 | mini, small, medium, large, massive)

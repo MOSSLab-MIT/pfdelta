@@ -52,10 +52,10 @@ pfnet_pfdata_stats_constraint_violation = {
         "mean": {
             "bus": {
                 "x": torch.tensor([4.7212e-01, 6.6688e-27, 2.8586e-01, 9.0312e-02, 0.0000e+00, 7.4576e-03]),
-                "y": torch.tensor([1.0280, -0.5947,  0.4654,  0.2504,  0.0000,  0.0075])
+                "y": torch.tensor([ 1.0280, -0.5947,  0.4654,  0.2504,  0.0000,  0.0075])
             },
             ("bus", "branch", "bus"): {
-                "edge_attr": torch.tensor([0.0615, 0.2012, 0.0114, 0.9939, 0.0000, 0.0057, 0.0057])
+                "edge_attr": torch.tensor([-0.5706, -0.8737,  3.2235,  0.2390,  0.0000,  3.2235,  3.2235])
             }
         },
         "std": {
@@ -64,7 +64,7 @@ pfnet_pfdata_stats_constraint_violation = {
                 "y": torch.tensor([0.0328, 0.3659, 2.6608, 0.8317, 0.0000, 0.0610])
             },
             ("bus", "branch", "bus"): {
-                "edge_attr": torch.tensor([0.0597, 0.1081, 0.0188, 0.0163, 0.0000, 0.0094, 0.0094])
+                "edge_attr": torch.tensor([0.3527, 0.7012, 9.4715, 0.6575, 0.0000, 9.4715, 9.4715])
             }
         }
     },
