@@ -1,6 +1,9 @@
-function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split; save_all=false)
+function create_close2infeasible(solved_cases_path, topology_perturb, n_nose, n_around_nose, split; save_all=false)
     
-    raw_shuffle_path = joinpath(solved_cases_path, "raw_shuffle.json")
+    main_dir = dirname(dirname(solved_cases_path))
+    println(main_dir)
+    raw_shuffle_path = joinpath(main_dir, "shuffle_files", topology_perturb, "raw_shuffle.json")
+    println(raw_shuffle_path)
     if isfile(raw_shuffle_path)
         shuffled_idx = JSON.parsefile(raw_shuffle_path)
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx))))
@@ -11,7 +14,7 @@ function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split
             selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]]
         end
     else
-        println("raw_shuffle.json not found, using all samples in debug mode.")
+        error("raw_shuffle.json not found at $(raw_shuffle_path). Please generate the file before running this script.")
         split = "debug"
         raw_dir = joinpath(solved_cases_path, "raw")
         json_files = Glob.glob("*.json", raw_dir)

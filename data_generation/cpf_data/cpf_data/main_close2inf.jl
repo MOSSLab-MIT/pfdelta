@@ -43,11 +43,11 @@ solved_cases_path = joinpath("/Volumes/Crucial X9", case_name, topology_perturb)
 
 # Create training data
 split = "train"
-create_close2infeasible(solved_cases_path, n_samples_nose_train, n_samples_around_nose_train, split; save_all=want_all)
+create_close2infeasible(solved_cases_path, topology_perturb, n_samples_nose_train, n_samples_around_nose_train, split; save_all=want_all)
 
 # Create testing data
 split = "test"
-create_close2infeasible(solved_cases_path, n_samples_nose_test, nothing, split)
+create_close2infeasible(solved_cases_path, topology_perturb, n_samples_nose_test, nothing, split)
 
 # Make sure you have the right number of files after it is done
 files = Glob.glob("sample_*.json", joinpath(solved_cases_path, "close2inf_train", "around_nose"))
