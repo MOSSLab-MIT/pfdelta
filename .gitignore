@@ -5,6 +5,7 @@
 *.mat
 *.png
 *.out
+*.pkl
 
 .ipynb_checkpoints
 tutorial.ipynb
