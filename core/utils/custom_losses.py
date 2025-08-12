@@ -22,7 +22,7 @@ def loss_loader(class_name, class_inputs, class_type):
 
 @registry.register_loss("GNNTorchLoss")
 class GNNTorchLoss:
-    def __init__(self, torch_nn_name, output_name, loss_inputs={}):
+    def __init__(self, torch_nn_name, output_name = "bus__y", loss_inputs={}):
         loss_class = getattr(torch.nn, torch_nn_name, None)
         assert loss_class is not None, f"Loss {torch_nn_name} not found in torch.nn!"
         assert isinstance(loss_inputs, dict), f"Loss inputs need to be a dictionary!"

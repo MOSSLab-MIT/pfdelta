@@ -1,0 +1,101 @@
+config_type: experiment
+dataset:
+  datasets:
+  - add_bus_type: true
+    case_name: case118_seeds
+    model: CANOS
+    name: pfdeltaCANOS
+    root_dir: ../../hf_pfdelta_data
+    split: train
+    task: 1.3
+  - add_bus_type: true
+    case_name: case118_seeds
+    model: CANOS
+    name: pfdeltaCANOS
+    root_dir: ../../hf_pfdelta_data
+    split: val
+    task: 1.3
+functional:
+  config: canos_pf_jobs
+  cpu: false
+  is_debug: false
+  run_location: runs/canos_pf_task_1_3/
+  run_name: canos_pf_hd128_depth15_lr0.00_seedseed2_5
+  seed: 22
+  slurm_jobid: '3513544'
+  trainer_name: gnn_trainer
+model:
+  dataset: _include_
+  hidden_dim: 128
+  include_sent_messages: true
+  k_steps: 15
+  name: canos_pf
+optim:
+  lr_scheduler:
+    milestones:
+    - 5
+    name: SequentialLR
+    schedulers:
+    - end_factor: 1
+      name: LinearLR
+      start_factor: 0.01
+    - gamma: 0.9
+      name: StepLR
+      step_size: 4
+  optimizer:
+    lr: 0.0005
+    name: Adam
+    weight_decay: 0.0
+  train_params:
+    batch_size: 64
+    epochs: 50
+    train_loss:
+    - lamb: 0
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: canos_pf_mse_only
+    - model: CANOS
+      name: universal_power_balance
+    - lamb: 0
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: canos_pf_mse_only
+    - lamb: 1
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: sum_of_losses
+    - keyword: pbl_pf
+      loss_name: PBL Max
+      name: recycle_loss
+      recycled_parameter: power_balance_max
+  val_params:
+    batch_size: 64
+    early_stop:
+      decrease_by: 0.01
+      decrease_for: 10
+      needs_best_every: 15
+    report_every: 2
+    val_loss:
+    - model: CANOS
+      name: universal_power_balance
+    - lamb: 0.1
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+    - lamb: 0
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: canos_pf_mse_only
+    - lamb: 1
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: sum_of_losses
+    - keyword: pbl_pf
+      loss_name: PBL Max
+      name: recycle_loss
+      recycled_parameter: power_balance_max

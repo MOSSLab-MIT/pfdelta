@@ -22,8 +22,8 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/pfnet_task_2_3/
-  run_name: pfnet_hd256_lr%lr_layers_4_K_3_seed%seed
-  seed: 11
+  run_name: pfnet_hd256_lr0.00_layers_4_K_3_seedseed3_8
+  seed: 33
   trainer_name: gnn_trainer
 model:
   K: 3
@@ -42,8 +42,17 @@ optim:
     batch_size: 64
     epochs: 100
     train_loss:
-    - name: pf_constraint_violation
-      model: PFNet
+    - model: PFNet
+      name: pf_constraint_violation
+    - inp1:
+        torch_nn_name: MSELoss
+      inp2:
+        model: PFNet
+      lamb: 0.1
+      loss1: GNNTorchLoss
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: combined_loss
     - name: GNNTorchLoss
       output_name: bus__y
       torch_nn_name: MSELoss
@@ -71,8 +80,17 @@ optim:
     val_loss:
     - model: PFNet
       name: universal_power_balance
-    - name: pf_constraint_violation
-      model: PFNet
+    - inp1:
+        torch_nn_name: MSELoss
+      inp2:
+        model: PFNet
+      lamb: 0.1
+      loss1: GNNTorchLoss
+      loss2: pf_constraint_violation
+      name: combined_loss
+      output_name: combined_loss
+    - model: PFNet
+      name: pf_constraint_violation
     - name: pfn_masked_mse
       regularize: false
     - name: pfn_masked_mse

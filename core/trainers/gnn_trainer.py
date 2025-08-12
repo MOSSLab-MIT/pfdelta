@@ -8,7 +8,6 @@ from torch_geometric.loader.dataloader import DataLoader
 from core.trainers.base_trainer import BaseTrainer
 from core.utils.registry import registry
 
-
 @registry.register_trainer("gnn_trainer")
 class GNNTrainer(BaseTrainer):
     def get_dataloader_class(self,):
@@ -16,13 +15,13 @@ class GNNTrainer(BaseTrainer):
 
 
     def train_one_epoch(self, train_dataloader):
-        import ipdb
-        ipdb.set_trace()
-
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)
         message = f"Epoch {self.epoch + 1} \U0001F3CB"
+
         for data in tqdm(train_dataloader, desc=message):
+            # import ipdb
+            # ipdb.set_trace()
             # Copy data in case models overwrite inputs
             data = copy.deepcopy(data)
             # Move data to device
@@ -31,6 +30,7 @@ class GNNTrainer(BaseTrainer):
             # Calculate output and loss
             self.optimizer.zero_grad()
             outputs = self.model(data)
+
             for i, loss_func in enumerate(self.train_loss):
                 losses[i] = loss_func(outputs, data)
                 running_loss[i] += losses[i].item()
@@ -38,16 +38,23 @@ class GNNTrainer(BaseTrainer):
             # Backpropagate
             losses[0].backward()
 
-            # print("parameters: ", [p.grad for p in self.model.parameters()])
+            # with torch.autograd.set_detect_anomaly(True):
+            #     losses[0].backward()
+            # for name, p in self.model.named_parameters():
+            #     if p.grad is not None and torch.any(torch.isnan(p.grad)):
+            #         print(name)
+            # import ipdb
+            # ipdb.set_trace()
+            
+            # print("grads: ", [p.grad for p in self.model.parameters()])
             self.grad_manip(losses)
+            # print("grads after grad_manip: ", [p.grad for p in self.model.parameters()])
             self.optimizer.step()
 
             # Update train step
             self.update_train_step()
             # import ipdb
             # ipdb.set_trace()
-            
-
         
         return running_loss
 

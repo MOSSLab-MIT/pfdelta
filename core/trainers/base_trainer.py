@@ -634,7 +634,6 @@ class BaseTrainer:
         if clip_grad_norm:
             clip_grad_norm_(self.model.parameters(), max_norm=1.0)
 
-
     def calc_val_errors(self, last_time=False):
         val_dataloaders = self.dataloaders[1:]
 

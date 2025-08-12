@@ -34,6 +34,8 @@ class PowerBalanceLoss:
         self.loss_name = "PBL Mean"
 
     def __call__(self, outputs, data):
+        # import ipdb
+        # ipdb.set_trace()
         power_balance_model_preds = self.collect_model_predictions(self.model, data, outputs)
         predictions = power_balance_model_preds["predictions"]
         edge_attr = power_balance_model_preds["edge_attr"]
@@ -81,10 +83,15 @@ class PowerBalanceLoss:
         Qbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, Q_flow_src)
         Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
 
+        
+       
         # Calculate the power mismatches ΔP and ΔQ
         delta_P = Pnet - Pbus_pred - V_pred**2 * shunt_g
         delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b 
-
+    
+        slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
+        # print("delta_P at slack indices", delta_P[slack_idx])
+        # print("delta_Q at slack indices", delta_Q[slack_idx])
         # Compute the loss as the sum of squared mismatches
         delta_PQ_2 = delta_P**2 + delta_Q**2
 
@@ -138,9 +145,10 @@ class PowerBalanceLoss:
             # Slack
             slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
             slack_outputs = output["slack"]
-            Pnet[slack_idx] = slack_outputs[:, 0]
-            Qnet[slack_idx] = slack_outputs[:, 1]
-
+            epsilon = 0
+            Pnet[slack_idx] = slack_outputs[:, 0] + epsilon
+            Qnet[slack_idx] = slack_outputs[:, 1] + epsilon
+            
             # Collect edge attributes
             edge_attr = data["bus", "branch","bus"].edge_attr
             r = edge_attr[:, 0]
@@ -334,9 +342,6 @@ class constraint_violations_loss_pf:
         self.model = model
 
     def derive_branch_flows(self, output_dict, data):
-        # import ipdb
-        # ipdb.set_trace()
-
         # Create complex voltage
         va = output_dict["bus"][:, 0]
         vm = output_dict["bus"][:, -1]
@@ -381,6 +386,8 @@ class constraint_violations_loss_pf:
         if self.model == "CANOS":
             return output_dict
         elif self.model == "PFNet":
+            # import ipdb
+            # ipdb.set_trace()
             power_balance_model_preds = {}
             output = output_dict
             device = data["bus"].x.device
@@ -391,32 +398,35 @@ class constraint_violations_loss_pf:
             output = (output * std) + mean
 
             num_buses = data["bus"].num_nodes
-            va_pred = output[:, 1]
-            vm_pred = output[:, 0] # NOT SURE IF 0th column or 1
-            # Pnet = torch.zeros(num_buses, device=device)
-            # Qnet = torch.zeros(num_buses, device=device)
 
+            map_indices = {"vm":0, "va":1, "p":2, "q":3, "gs":4, "bs":5}
             # PQ
             pq_idx = (data['bus'].bus_type == 1).nonzero(as_tuple=True)[0]
-            # bus_gen = data['bus'].bus_gen[pq_idx]
-            # pq_pg = bus_gen[:, 0]
-            # pq_qg = bus_gen[:, 1]
             pq_outputs = output[pq_idx]
-            # Pnet[pq_idx] = pq_pg - pq_outputs[:, 2]
-            # Qnet[pq_idx] = pq_qg - pq_outputs[:, 3]
+            # override with original values
+            pq_outputs[:, map_indices["p"]] = data["PQ"].x[:,0]
+            pq_outputs[:, map_indices["q"]] = data["PQ"].x[:,1]
 
             # PV
             pv_idx = (data['bus'].bus_type == 2).nonzero(as_tuple=True)[0]
             pv_outputs = output[pv_idx]
-            # Pnet[pv_idx] = pv_outputs[:, 2]
-            # Qnet[pv_idx] = pv_outputs[:, 3]
+            # override with original values
+            pv_outputs[:, map_indices["p"]] = data["PV"].x[:,0]
+            pv_outputs[:, map_indices["vm"]] = data["PV"].x[:,1]
 
-            # Slack
+            # Slack (V, theta)
             slack_idx = (data['bus'].bus_type == 3).nonzero(as_tuple=True)[0]
             slack_outputs = output[slack_idx]
-            # Pnet[slack_idx] = slack_outputs[:, 2]
-            # Qnet[slack_idx] = slack_outputs[:, 3]
+            # override with original values for V, theta
+            slack_outputs[:, map_indices["va"]] = data["slack"].x[:,0]
+            slack_outputs[:, map_indices["vm"]] = data["slack"].x[:,1]
 
+            va_pred = output[:, 1]
+            vm_pred = output[:, 0]
+            vm_pred[pv_idx] = data["PV"].x[:,1]
+            va_pred[slack_idx] = data["slack"].x[:,0]
+            vm_pred[slack_idx] = data["slack"].x[:,1]
+           
             # Unnormalize edge attributes
             mean = pfnet_pfdata_stats_constraint_violation[casename]["mean"][("bus", "branch", "bus")]["edge_attr"].to(device)
             std = pfnet_pfdata_stats_constraint_violation[casename]["std"][("bus", "branch", "bus")]["edge_attr"].to(device)
@@ -430,11 +440,10 @@ class constraint_violations_loss_pf:
             tau = edge_attr[:, 3]
             theta_shift = edge_attr[:, 4]
 
-            # power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
             power_balance_model_preds["PV"] = pv_outputs
             power_balance_model_preds["PQ"] = pq_outputs
             power_balance_model_preds["slack"] = slack_outputs
-            power_balance_model_preds["bus"] = torch.stack([vm_pred, va_pred], dim=-1)
+            power_balance_model_preds["bus"] = torch.stack([va_pred, vm_pred], dim=-1)
             power_balance_model_preds["casename"] = casename
 
             p_fr, q_fr, p_to, q_to = self.derive_branch_flows(power_balance_model_preds, data)

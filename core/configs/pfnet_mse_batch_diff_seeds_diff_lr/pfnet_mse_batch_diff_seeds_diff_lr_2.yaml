@@ -1,0 +1,90 @@
+config_type: experiment
+dataset:
+  datasets:
+  - add_bus_type: true
+    case_name: case118_seeds
+    model: PFNet_constraint_violation
+    name: pfdeltaPFNet_constraint_violation
+    root_dir: ../../hf_pfdelta_data/
+    split: train
+    task: 1.3
+    transform: pfnet_data_mean0_var1
+  - add_bus_type: true
+    case_name: case118_seeds
+    model: PFNet_constraint_violation
+    name: pfdeltaPFNet_constraint_violation
+    root_dir: ../../hf_pfdelta_data/
+    split: val
+    task: 1.3
+    transform: pfnet_data_mean0_var1
+functional:
+  config: powerflownet
+  cpu: false
+  is_debug: false
+  run_location: runs/pfnet_task_2_3/
+  run_name: pfnet_hd256_lr0.00_layers_4_K_3_seedseed1_2
+  seed: 11
+  trainer_name: gnn_trainer
+model:
+  K: 3
+  dropout_rate: 0.2
+  efeature_dim: 7
+  hidden_dim: 256
+  n_gnn_layers: 4
+  name: powerflownet
+  nfeature_dim: 6
+  output_dim: 6
+optim:
+  optimizer:
+    lr: 0.0005
+    name: Adam
+  train_params:
+    batch_size: 64
+    epochs: 100
+    train_loss:
+    - name: GNNTorchLoss
+      output_name: bus__y
+      torch_nn_name: MSELoss
+    - model: PFNet
+      name: pf_constraint_violation
+    - model: PFNet
+      name: universal_power_balance
+    - name: pfn_masked_mse
+      regularize: false
+    - name: pfn_masked_mse
+      regularize: true
+    - keyword: pbl_pf
+      loss_name: PBL Max
+      name: recycle_loss
+      recycled_parameter: power_balance_max
+    - keyword: pbl_pf
+      loss_name: PBL L2
+      name: recycle_loss
+      recycled_parameter: power_balance_l2
+  val_params:
+    batch_size: 64
+    early_stop:
+      decrease_by: 0.01
+      decrease_for: 10
+      needs_best_every: 15
+    report_every: 5
+    val_loss:
+    - model: PFNet
+      name: universal_power_balance
+    - model: PFNet
+      name: pf_constraint_violation
+    - name: pfn_masked_mse
+      regularize: false
+    - name: pfn_masked_mse
+      regularize: true
+    - name: GNNTorchLoss
+      output_name: bus__y
+      torch_nn_name: MSELoss
+    - keyword: pbl_pf
+      loss_name: PBL Max
+      name: recycle_loss
+      recycled_parameter: power_balance_max
+    - keyword: pbl_pf
+      loss_name: PBL L2
+      name: recycle_loss
+      recycled_parameter: power_balance_l2
