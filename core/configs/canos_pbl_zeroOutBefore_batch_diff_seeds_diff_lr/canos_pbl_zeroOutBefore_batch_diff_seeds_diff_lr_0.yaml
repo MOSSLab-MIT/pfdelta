@@ -1,10 +1,4 @@
-config_type: simple_batch
-job_parameters:
-  time: "03:00:00"
-  p: "cpu-gpu-rtx8000"
-  gpus: 1
-  body: "__launch__"
-batch_name: canos_pbl_zeroOutBefore_batch_diff_seeds_diff_lr
+config_type: experiment
 dataset:
   datasets:
   - add_bus_type: true
@@ -26,8 +20,8 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/canos_pf_task_1_3/
-  run_name: canos_pf_hd128_depth15_lr%lr_seed%seed_zeroOutBefore
-  seed: _manual_list(11, 22, 33 | seed1, seed2, seed3)
+  run_name: canos_pf_hd128_depth15_lr0.00_seedseed1_zeroOutBefore_0
+  seed: 11
   slurm_jobid: '3513544'
   trainer_name: gnn_trainer
 model:
@@ -49,7 +43,7 @@ optim:
       name: StepLR
       step_size: 4
   optimizer:
-    lr: _manual_list(0.001, 0.0001, 0.0005)
+    lr: 0.001
     name: Adam
     weight_decay: 0.0
   train_params:
@@ -63,8 +57,8 @@ optim:
       loss2: pf_constraint_violation
       name: combined_loss
       output_name: combined_loss
-    - name: pf_constraint_violation
-      model: CANOS
+    - model: CANOS
+      name: pf_constraint_violation
     - lamb: 0
       loss1: canos_pf_mse
       loss2: pf_constraint_violation

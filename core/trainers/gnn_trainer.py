@@ -145,6 +145,8 @@ class GNNTrainer(BaseTrainer):
 
     def customize_model_init_inputs(self, model_inputs):
         """We will use this method to pass data information to the model."""
+        # import ipdb
+        # ipdb.set_trace()
         # First, verify that the model inputs are a dictionary
         assert type(model_inputs) == dict
         # Second, verify that the model is requiring data information

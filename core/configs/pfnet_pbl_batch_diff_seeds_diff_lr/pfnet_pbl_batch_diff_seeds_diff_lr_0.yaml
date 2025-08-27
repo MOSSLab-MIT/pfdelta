@@ -1,10 +1,4 @@
-config_type: simple_batch
-job_parameters:
-  time: "03:00:00"
-  p: "cpu-gpu-rtx8000"
-  gpus: 1
-  body: "__launch__"
-batch_name: pfnet_pbl_batch_diff_seeds_diff_lr
+config_type: experiment
 dataset:
   datasets:
   - add_bus_type: true
@@ -28,8 +22,8 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/pfnet_task_2_3/
-  run_name: pfnet_hd256_lr%lr_layers_4_K_3_seed%seed_PFNet_power_balance_violation
-  seed: _manual_list(11, 22, 33 | seed1, seed2, seed3)
+  run_name: pfnet_hd256_lr0.00_layers_4_K_3_seedseed1_PFNet_power_balance_violation_0
+  seed: 11
   trainer_name: gnn_trainer
 model:
   K: 3
@@ -42,7 +36,7 @@ model:
   output_dim: 6
 optim:
   optimizer:
-    lr: _manual_list(0.001, 0.0001, 0.0005)
+    lr: 0.001
     name: Adam
   train_params:
     batch_size: 64
@@ -50,8 +44,8 @@ optim:
     train_loss:
     - model: PFNet
       name: universal_power_balance
-    - name: pf_constraint_violation
-      model: PFNet
+    - model: PFNet
+      name: pf_constraint_violation
     - name: GNNTorchLoss
       output_name: bus__y
       torch_nn_name: MSELoss
@@ -77,8 +71,8 @@ optim:
     val_loss:
     - model: PFNet
       name: universal_power_balance
-    - name: pf_constraint_violation
-      model: PFNet
+    - model: PFNet
+      name: pf_constraint_violation
     - name: pfn_masked_mse
       regularize: false
     - name: pfn_masked_mse

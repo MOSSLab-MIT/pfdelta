@@ -650,6 +650,8 @@ class BaseTrainer:
 
             loss_per_dataset.append(losses)
 
+        import ipdb
+        ipdb.set_trace()
         for i, val_loss in enumerate(loss_per_dataset):
             if not last_time:
                 print(f"\nValidation dataset {i+1} errors \U0001F440\n"+"-"*30)

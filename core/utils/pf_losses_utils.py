@@ -45,6 +45,7 @@ class PowerBalanceLoss:
         shunt_b = data["bus"].shunt[:, 1]
         # Unpack node feature and edge feature values values
         V_pred, theta_pred, Pnet, Qnet = predictions 
+        
         r, x, bs, tau, theta_shift = edge_attr 
 
         # Compute bus-level power injections based on predictions
@@ -83,20 +84,20 @@ class PowerBalanceLoss:
         Qbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, Q_flow_src)
         Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
 
-        
-       
         # Calculate the power mismatches ΔP and ΔQ
         delta_P = Pnet - Pbus_pred - V_pred**2 * shunt_g
         delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b 
     
         slack_idx = data["slack", "slack_link", "bus"].edge_index[1]
-        # print("delta_P at slack indices", delta_P[slack_idx])
-        # print("delta_Q at slack indices", delta_Q[slack_idx])
+        delta_P[slack_idx] = 0
+        delta_Q[slack_idx] = 0
+
         # Compute the loss as the sum of squared mismatches
         delta_PQ_2 = delta_P**2 + delta_Q**2
 
         # Calculate PBL Mean
         delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
+        #proposed solution to canos pbl: remove the zeroes in tensor
         self.power_balance_mean = delta_PQ_magnitude.mean()
 
         # Calculate PBL L2
@@ -169,6 +170,7 @@ class PowerBalanceLoss:
             mean = pfnet_pfdata_stats[casename]["mean"]["bus"]["y"].to(device)
             std = pfnet_pfdata_stats[casename]["std"]["bus"]["y"].to(device)
             output = (output * std) + mean
+            unnormalized_y = (data["bus"].y * std) + mean
 
             num_buses = data["bus"].num_nodes
             theta_pred = output[:, 1]
@@ -182,13 +184,13 @@ class PowerBalanceLoss:
             pq_pg = bus_gen[:, 0]
             pq_qg = bus_gen[:, 1]
             pq_outputs = output[pq_idx]
-            Pnet[pq_idx] = pq_pg - pq_outputs[:, 2]
-            Qnet[pq_idx] = pq_qg - pq_outputs[:, 3]
+            Pnet[pq_idx] = pq_pg - unnormalized_y[pq_idx, 2] # P fixed in PQ
+            Qnet[pq_idx] = pq_qg - unnormalized_y[pq_idx, 3] # Q fixed in PQ
 
             # PV
             pv_idx = (data['bus'].bus_type == 2).nonzero(as_tuple=True)[0]
             pv_outputs = output[pv_idx]
-            Pnet[pv_idx] = pv_outputs[:, 2]
+            Pnet[pv_idx] = unnormalized_y[pv_idx, 2] # P fixed in PV
             Qnet[pv_idx] = pv_outputs[:, 3]
 
             # Slack
