@@ -14,11 +14,14 @@ function create_close2infeasible(solved_cases_path, topology_perturb, n_nose, n_
             selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]]
         end
     else
-        error("raw_shuffle.json not found at $(raw_shuffle_path). Please generate the file before running this script.")
-        split = "debug"
+        @warn "raw_shuffle.json not found at $(raw_shuffle_path). Creating nose cases for all"
+        split = "all"
         raw_dir = joinpath(solved_cases_path, "raw")
+        println(raw_dir)
         json_files = Glob.glob("*.json", raw_dir)
+        println("Number of raw files found: ", length(json_files))
         selected_cases_idx = collect(1:length(json_files))
+        println("Number of raw files found: ", length(selected_cases_idx))
     end
 
     close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
@@ -49,7 +52,7 @@ function create_close2infeasible(solved_cases_path, topology_perturb, n_nose, n_
         cpf_success = @mget cpf_success
 
         if cpf_success 
-            if split == "train"
+            if split == "train" || split == "all"
                 current_sample_files = Glob.glob("sample_$(current_sample_idx)_*.m", raw_hard_save_path)
                 file_tuples = Tuple{String, Float64}[]
                 skip_sample = false
@@ -120,7 +123,10 @@ function create_close2infeasible(solved_cases_path, topology_perturb, n_nose, n_
                 end
             end
         end
-        println("Succesful_files: $(successful_files) / $(n_nose)")
+        if successful_files % 10 == 0
+            println("Successful files: $(successful_files) / $(n_nose)")
+        end
+
     end
 
     files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose"))

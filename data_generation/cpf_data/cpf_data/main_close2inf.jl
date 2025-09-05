@@ -39,7 +39,7 @@ n_samples_around_nose_train = 4
 # Define number of test samples
 n_samples_nose_test = 200
 
-solved_cases_path = joinpath("/Volumes/Crucial X9", case_name, topology_perturb)
+solved_cases_path = joinpath("/Users/anarivera/Documents/Projects/pfdelta_submitted/pfdelta/data", case_name, topology_perturb)
 
 # Create training data
 split = "train"

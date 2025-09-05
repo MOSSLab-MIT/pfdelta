@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Define your list of case names and perturbations
-case_names=("case30") #"case57" "case118") # "case500" "case2000")
-perturbations=("n-2")
+case_names=("case2000") # "case500" "case2000")
+perturbations=("n") # "n-1" "n-2")
 
 # Loop over all combinations
 for case_name in "${case_names[@]}"; do

@@ -11,6 +11,7 @@ class PFDeltaDataset(InMemoryDataset):
         self,
         root_dir="data",
         case_name="",
+        topology_perturb="n",
         transform=None,
         pre_transform=None,
         pre_filter=None,
@@ -18,6 +19,7 @@ class PFDeltaDataset(InMemoryDataset):
     ):
         self.root = root_dir
         self.case_name = case_name
+        self.topology_perturb = topology_perturb
         self.add_bus_type = True  # get rid of this later maybe
 
         super().__init__(
@@ -30,7 +32,7 @@ class PFDeltaDataset(InMemoryDataset):
     @property
     def raw_dir(self):
         return os.path.join(
-            self.root, self.case_name, "nose"
+            self.root, self.case_name, self.topology_perturb, "close2inf_test", "nose"
         )  # how did we do this in main?
 
     @property
