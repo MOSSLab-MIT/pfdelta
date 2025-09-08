@@ -1,0 +1,17 @@
+[paths]
+output_root = "/Volumes/Crucial X9"
+matlab_home = "/Applications/MATLAB_R2024b.app"
+
+[samples.train]
+nose = 1800
+around_nose = 4
+
+[samples.test]
+nose = 200
+
+[cases]
+names = ["case14", "case30", "case118"]
+perturbations = ["n", "n-1", "n-2"]
+
+[defaults]
+want_all = true
