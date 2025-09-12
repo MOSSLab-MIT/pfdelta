@@ -7,25 +7,16 @@ function create_close2infeasible(data_dir, case_name, topology_perturb,
     solved_cases_path = joinpath(data_dir, case_name, topology_perturb)
     
     selected_cases_idx_train, selected_cases_idx_test = parse_shuffle_file(solved_cases_path) # TODO: this will throw an error in the case the shuffle file does not exist.
-
-
-    # next up: set up dirs.
-
-    close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
-    println(close2inf_path)
-    mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
-    raw_hard_save_path = joinpath(close2inf_path, "raw")
-    nose_dir = joinpath(close2inf_path, "nose")
-    around_nose_dir = joinpath(close2inf_path, "around_nose")
     
-    mkpath(close2inf_path)
-    mkpath(mpc_save_path)
-    mkpath(raw_hard_save_path)
-    mkpath(nose_dir)
-    mkpath(around_nose_dir)
+    # Set up dirs to save files
+    create_dirs(solved_cases_path)
 
-    empty_folder.([mpc_save_path, raw_hard_save_path, nose_dir, around_nose_dir])
-    mkpath(joinpath(raw_hard_save_path, "non_converging"))
+    create_train_samples()
+
+    create_test_samples()
+
+    validate_samples()
+
 
     i = 0
     successful_files = 0
@@ -135,6 +126,23 @@ function parse_shuffle_file(solved_cases_path)
         println("raw_shuffle.json not found, using all samples in debug mode.") # TODO: instead of all samples, set a parameter that indicates how many samples to use for debug mode.
         num_samples_debug = 10 # TODO: make this a parameter
         return collect(1:num_samples_debug)
+    end
+end
+
+function create_dirs(solved_cases_path) # TODO: better way to do this, why are you deleting stuff?
+    for split in ["train", "test"]
+        close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
+        mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
+        raw_hard_save_path = joinpath(close2inf_path, "raw")
+        nose_dir = joinpath(close2inf_path, "nose")
+        around_nose_dir = joinpath(close2inf_path, "around_nose")
+        mkpath(close2inf_path)
+        mkpath(mpc_save_path)
+        mkpath(raw_hard_save_path)
+        mkpath(nose_dir)
+        mkpath(around_nose_dir)
+        empty_folder.([mpc_save_path, raw_hard_save_path, nose_dir, around_nose_dir])
+        mkpath(joinpath(raw_hard_save_path, "non_converging"))
     end
 end
 
