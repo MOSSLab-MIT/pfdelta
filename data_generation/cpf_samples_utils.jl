@@ -17,100 +17,6 @@ function create_close2infeasible(data_dir, case_name, topology_perturb,
 
     validate_samples()
 
-
-    i = 0
-    successful_files = 0
-    around_nose_counter = 0
-    while successful_files < n_nose
-        i += 1
-        current_sample_idx = selected_cases_idx[i]
-        create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx) 
-        current_net_path = joinpath(mpc_save_path, "sample_$(current_sample_idx).m")
-        mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);"
-        cpf_success = @mget cpf_success
-
-        if cpf_success
-            if split == "train"
-                current_sample_files = Glob.glob("sample_$(current_sample_idx)_*.m", raw_hard_save_path)
-                file_tuples = Tuple{String, Float64}[]
-                skip_sample = false
-                
-                for file in current_sample_files
-                    base = basename(file)
-                    if !endswith(base, "_nose.m")
-                        m = match(r"sample_(\d+)_lam_(m?\d+p\d+)\.m", base)
-                        if m !==nothing
-                            lam = parse(Float64, replace(m.captures[2], "p" => ".", "m" => "-"))
-                            if lam <= 0
-                                skip_sample = true
-                                break 
-                            else
-                                push!(file_tuples, (file, lam))                            
-                            end
-                        end
-                    end
-                end
-
-                if skip_sample || length(file_tuples) < n_around_nose + 1
-                    # delete all files associated with this sample
-                    for file in current_sample_files
-                        rm(file, force=true)
-                    end
-                    nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
-                    rm(nose_file, force=true)
-                    continue
-                end
-
-                # Save nose
-                nose_file = joinpath(close2inf_path, "raw", "sample_$(current_sample_idx)_nose.m")
-                solved_net = PM.parse_file(nose_file)
-                json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json")
-                json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
-                open(json_path, "w") do io
-                    write(io, JSON.json(json_dict_nose))
-                    successful_files += 1
-                end
-
-                # Save around-the-nose-files
-                sorted_files = sort(file_tuples, by = x -> abs(x[2]), rev=true)
-                selected_files = sorted_files[2:n_around_nose+1]
-
-                for (file, lam) in selected_files
-                    base = basename(file)
-                    solved_net = PM.parse_file(file)
-                    json_dict = Dict("lambda" => lam, "solved_net" => solved_net)
-                    filepath = joinpath(around_nose_dir, replace(base, ".m" => ".json"))
-                    if isfile(filepath)
-                        @warn "Overwriting existing file: $filepath"
-                    end
-                    open(filepath, "w") do io
-                        write(io, JSON.json(json_dict))
-                        around_nose_counter += 1
-                    end
-                end
-
-            elseif split == "test"
-                # Just save around the nose
-                nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
-                solved_net = PM.parse_file(nose_file)
-                json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json")
-                json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
-                open(json_path, "w") do io
-                    write(io, JSON.json(json_dict_nose))
-                    successful_files += 1
-                end
-            end
-        end
-        println("Succesful_files: $(successful_files) / $(n_nose)")
-    end
-
-    files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose"))
-    @assert length(files_nose) == n_nose "Got $(length(files_nose)) instead of $(n_nose)"
-    
-    if split === "train"
-        files_around = Glob.glob("sample_*.json", joinpath(close2inf_path, "around_nose"))
-        @assert length(files_around) == n_nose * n_around_nose "Got $(length(files_around)) instead of $(n_nose * n_around_nose)"
-    end
 end
 
 # Helper functions
@@ -130,6 +36,7 @@ function parse_shuffle_file(solved_cases_path)
 end
 
 function create_dirs(solved_cases_path) # TODO: better way to do this, why are you deleting stuff?
+    # TODO: too many dirs
     for split in ["train", "test"]
         close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
         mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
@@ -146,22 +53,116 @@ function create_dirs(solved_cases_path) # TODO: better way to do this, why are y
     end
 end
 
-function create_train_samples(selected_cases_idx_train)
+function create_train_samples(selected_cases_idx_train) # overall this whole function is a mess and needs to be cleaned up
+    # this function is doing way too much stuff
     successful_files = 0
     around_nose_counter = 0
     i = 0
     while successful_files < n_samples_nose_train # TODO: not defined
         i += 1
         current_sample_idx = selected_cases_idx_train[i] # TODO: not defined
+        create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
+        current_net_path = joinpath(mpc_save_path, "sample_$(current_sample_idx).m")
+        mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);" # it may not be able to find this
+
+        if cpf_success
+            current_sample_files = Glob.glob("sample_$(current_sample_idx)_*.m", raw_hard_save_path)
+            file_tuples = Tuple{String, Float64}[]
+            skip_sample = false
+            
+            for file in current_sample_files
+                base = basename(file)
+                if !endswith(base, "_nose.m")
+                    m = match(r"sample_(\d+)_lam_(m?\d+p\d+)\.m", base)
+                    if m !==nothing
+                        lam = parse(Float64, replace(m.captures[2], "p" => ".", "m" => "-"))
+                        if lam <= 0
+                            skip_sample = true
+                            break 
+                        else
+                            push!(file_tuples, (file, lam))                            
+                        end
+                    end
+                end
+            end
+
+            if skip_sample || length(file_tuples) < n_samples_around_nose_train + 1 # TODO: not defined
+                # delete all files associated with this sample
+                for file in current_sample_files
+                    rm(file, force=true)
+                end
+                nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
+                rm(nose_file, force=true)
+                continue
+            end
+
+            # Save nose
+            nose_file = joinpath(close2inf_path, "raw", "sample_$(current_sample_idx)_nose.m") # TODO: not defined
+            solved_net = PM.parse_file(nose_file)
+            json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") # TODO: not defined
+            json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
+            open(json_path, "w") do io
+                write(io, JSON.json(json_dict_nose))
+                successful_files += 1
+            end
+
+            # Save around-the-nose-files
+            sorted_files = sort(file_tuples, by = x -> abs(x[2]), rev=true)
+            selected_files = sorted_files[2:n_samples_around_nose_train+1] # TODO: not defined
+
+            for (file, lam) in selected_files
+                base = basename(file)
+                solved_net = PM.parse_file(file)
+                json_dict = Dict("lambda" => lam, "solved_net" => solved_net)
+                filepath = joinpath(around_nose_dir, replace(base, ".m" => ".json")) # TODO: not defined
+                if isfile(filepath)
+                    @warn "Overwriting existing file: $filepath" 
+                end
+                open(filepath, "w") do io
+                    write(io, JSON.json(json_dict))
+                    around_nose_counter += 1
+                end
+
+            end
+        end
     end
 end
 
 
-function create_test_samples()
+function create_test_samples() # overall this whole function is a mess and needs to be cleaned up
+    successful_files = 0
+    i = 0
+    while successful_files < n_samples_nose_test # TODO: not defined
+        i += 1
+        current_sample_idx = selected_cases_idx_test[i] # TODO: not defined
+        create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
+        current_net_path = joinpath(mpc_save_path, "sample_$(current_sample_idx).m")
+        mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);" # it may not be able to find this
+
+        if cpf_success
+            # Just save around the nose
+            nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
+            solved_net = PM.parse_file(nose_file)
+            json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") # TODO: not defined
+            json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
+            open(json_path, "w") do io
+                write(io, JSON.json(json_dict_nose))
+                successful_files += 1
+            end
+        end
+    end
 
 end
 
-
+function validate_samples()
+    files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose")) # TODO: not defined
+    @assert length(files_nose) == n_samples_nose_train "Got $(length(files_nose)) instead of $(n_samples_nose_train)" # TODO: not defined
+    
+    if split === "train" # TODO: not defined
+        files_around = Glob.glob("sample_*.json", joinpath(close2inf_path, "around_nose")) # TODO: not defined
+        @assert length(files_around) == n_samples_nose_train * n_samples_around_nose_train "Got $(length(files_around)) instead of $(n_samples_nose_train * n_samples_around_nose_train)" # TODO: not defined
+    end
+end
 
 # Old helper functions
 
