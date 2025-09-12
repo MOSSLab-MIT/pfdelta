@@ -9,7 +9,7 @@ function create_close2infeasible(data_dir, case_name, topology_perturb,
     selected_cases_idx_train, selected_cases_idx_test = parse_shuffle_file(solved_cases_path) # TODO: this will throw an error in the case the shuffle file does not exist.
     
     # Set up dirs to save files
-    create_dirs(solved_cases_path)
+    create_dirs(solved_cases_path) # TODO: will this have to return the paths?
 
     create_train_samples()
 
@@ -29,7 +29,7 @@ function create_close2infeasible(data_dir, case_name, topology_perturb,
         mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);"
         cpf_success = @mget cpf_success
 
-        if cpf_success 
+        if cpf_success
             if split == "train"
                 current_sample_files = Glob.glob("sample_$(current_sample_idx)_*.m", raw_hard_save_path)
                 file_tuples = Tuple{String, Float64}[]
@@ -145,6 +145,22 @@ function create_dirs(solved_cases_path) # TODO: better way to do this, why are y
         mkpath(joinpath(raw_hard_save_path, "non_converging"))
     end
 end
+
+function create_train_samples(selected_cases_idx_train)
+    successful_files = 0
+    around_nose_counter = 0
+    i = 0
+    while successful_files < n_samples_nose_train # TODO: not defined
+        i += 1
+        current_sample_idx = selected_cases_idx_train[i] # TODO: not defined
+    end
+end
+
+
+function create_test_samples()
+
+end
+
 
 
 # Old helper functions
