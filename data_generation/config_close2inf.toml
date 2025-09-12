@@ -1,0 +1,23 @@
+# config_close2inf.toml
+
+[matlab]
+# IMPORTANT: Only MATLAB R2024b (Intel build on macOS) is supported/tested.
+home = "/Applications/MATLAB_R2024b.app"
+
+[run]
+seed = 1234  # may get rid of this
+save_all = false   # default if job.want_all not set  # may get rid of this
+
+[sampling] # rename this
+n_samples_nose_train = 1800
+n_samples_around_nose_train = 4
+n_samples_nose_test = 200
+
+[io]
+base_dir = ".." # may get rid of this
+dataset_root = "final_data_no_exp" # may get rid of this
+
+[job]
+case_name = "case2000"
+topology_perturb = "n-1"
+want_all = true

@@ -1,22 +1,15 @@
-function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split; save_all=false)
-    
-    raw_shuffle_path = joinpath(solved_cases_path, "raw_shuffle.json")
-    if isfile(raw_shuffle_path)
-        shuffled_idx = JSON.parsefile(raw_shuffle_path)
-        sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx))))
+function create_close2infeasible(data_dir, case_name, topology_perturb,
+     n_nose, n_around_nose, split; save_all=false)
 
-        if split == "train"
-            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[1:end-2000]]
-        elseif split == "test"
-            selected_cases_idx = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]]
-        end
-    else
-        println("raw_shuffle.json not found, using all samples in debug mode.")
-        split = "debug"
-        raw_dir = joinpath(solved_cases_path, "raw")
-        json_files = Glob.glob("*.json", raw_dir)
-        selected_cases_idx = collect(1:length(json_files))
-    end
+    # TODO: add docstrings!
+    # TODO: solved_cases path needs to be more descriptive of the fact that this is the data dir where all case data is stored.
+
+    solved_cases_path = joinpath(data_dir, case_name, topology_perturb)
+    
+    selected_cases_idx_train, selected_cases_idx_test = parse_shuffle_file(solved_cases_path) # TODO: this will throw an error in the case the shuffle file does not exist.
+
+
+    # next up: set up dirs.
 
     close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
     println(close2inf_path)
@@ -128,6 +121,25 @@ function create_close2infeasible(solved_cases_path, n_nose, n_around_nose, split
         @assert length(files_around) == n_nose * n_around_nose "Got $(length(files_around)) instead of $(n_nose * n_around_nose)"
     end
 end
+
+# Helper functions
+function parse_shuffle_file(solved_cases_path)
+    raw_shuffle_path = joinpath(solved_cases_path, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
+    if isfile(raw_shuffle_path)
+        shuffled_idx = JSON.parsefile(raw_shuffle_path) # TODO: not sure this is a good name for this given the strucuture of the json file.
+        sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx)))) # TODO: why are you even doing this?
+        selected_cases_idx_train = [shuffled_idx[string(k)] for k in sorted_keys[1:end-2000]] # TODO: do not hard code the 2000 here
+        selected_cases_idx_test = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]] # TODO: do not hard code the 2000 here
+        return (selected_cases_idx_train, selected_cases_idx_test)
+    else
+        println("raw_shuffle.json not found, using all samples in debug mode.") # TODO: instead of all samples, set a parameter that indicates how many samples to use for debug mode.
+        num_samples_debug = 10 # TODO: make this a parameter
+        return collect(1:num_samples_debug)
+    end
+end
+
+
+# Old helper functions
 
 function create_matpower_file(solved_cases_path, save_path, idx)
     json_file = "sample_$(idx).json"

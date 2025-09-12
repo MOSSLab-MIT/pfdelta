@@ -1,18 +1,26 @@
+# Environment Setup
 using Pkg
-Pkg.activate(".")
+Pkg.activate(@__DIR__)
+Pkg.instantiate() # TODO: do we always need this? Maybe add some check to Manifest?
+ 
+# Imports
 import PowerModels as PM
 import Random
 using MATLAB
 import JSON
+import TOML
 import Glob
-using Debugger
 using FilePathsBase, FileIO
 PM.silence()
 
 include("create_cpf_samples.jl")
 
-# Setup MATLAB call  
-ENV["MATLAB_HOME"] = "/Applications/MATLAB_R2024b.app" # add your MATLAB path here (only intel MATLAB works for mac)
+# Load config
+const CFG_PATH = get(ENV, "CLOSE2INF_CONFIG", joinpath(@__DIR__, "config_close2inf.toml")) # TODO: parse this from the CLI instead
+cfg = TOML.parsefile(CFG_PATH)
+
+# Set MATLAB path from config  
+ENV["MATLAB_ROOT"] = cfg["matlab"]["home"] 
 
 # Argument parsing
 if length(ARGS) < 2
@@ -49,3 +57,17 @@ println("Number of files in close2inf_train_nose: ", length(files))
 
 files = Glob.glob("sample_*.json", joinpath(solved_cases_path, "close2inf_test", "nose"))
 println("Number of files in close2inf_test: ", length(files))
+
+ function main()
+    sampling = cfg["sampling"]
+    io = cfg["io"]
+    run = cfg["job"]
+    job = cfg["job"]
+
+    # TODO: define arguments for create_close2infeasible
+    solved_cases_path = false # TODO: define later
+
+    
+
+ end
+
