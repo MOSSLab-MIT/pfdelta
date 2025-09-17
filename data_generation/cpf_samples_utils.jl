@@ -1,22 +1,28 @@
+N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
+N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
+N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
 function create_close2infeasible(data_dir, case_name, topology_perturb,
      n_nose, n_around_nose, split; save_all=false)
 
     # TODO: add docstrings!
     # TODO: solved_cases path needs to be more descriptive of the fact that this is the data dir where all case data is stored.
 
+    # Resolve the path to the solved cases
     solved_cases_path = joinpath(data_dir, case_name, topology_perturb)
     
-    selected_cases_idx_train, selected_cases_idx_test = parse_shuffle_file(solved_cases_path) # TODO: this will throw an error in the case the shuffle file does not exist.
+    selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(solved_cases_path)
     
     # Set up dirs to save files
-    create_dirs(solved_cases_path) # TODO: will this have to return the paths?
+    dirs = create_dirs(solved_cases_path)
 
-    create_train_samples()
+    # Create samples
+    selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"])
 
-    create_test_samples()
+    selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"])
 
-    validate_samples()
-
+    selected_cases_idx_analysis != nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"])
+    
+    # TODO: implement sample validation
 end
 
 # Helper functions
@@ -27,131 +33,245 @@ function parse_shuffle_file(solved_cases_path)
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx)))) # TODO: why are you even doing this?
         selected_cases_idx_train = [shuffled_idx[string(k)] for k in sorted_keys[1:end-2000]] # TODO: do not hard code the 2000 here
         selected_cases_idx_test = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]] # TODO: do not hard code the 2000 here
-        return (selected_cases_idx_train, selected_cases_idx_test)
+        return (selected_cases_idx_train, selected_cases_idx_test, nothing)
     else
-        println("raw_shuffle.json not found, using all samples in debug mode.") # TODO: instead of all samples, set a parameter that indicates how many samples to use for debug mode.
         num_samples_debug = 10 # TODO: make this a parameter
-        return collect(1:num_samples_debug)
+        println("raw_shuffle.json not found, using $num_samples_debug samples for analysis mode.")
+        return nothing, nothing, collect(1:num_samples_debug)
     end
 end
 
-function create_dirs(solved_cases_path) # TODO: better way to do this, why are you deleting stuff?
-    # TODO: too many dirs
+function create_dirs(solved_cases_path)
+    # TODO: use either the word dir or path consistently
+
+    paths = Dict{String, NamedTuple}()
     for split in ["train", "test"]
-        close2inf_path = joinpath(solved_cases_path, "close2inf_" * split) 
-        mpc_save_path =  joinpath(close2inf_path, "generated_mpcs")
-        raw_hard_save_path = joinpath(close2inf_path, "raw")
-        nose_dir = joinpath(close2inf_path, "nose")
-        around_nose_dir = joinpath(close2inf_path, "around_nose")
-        mkpath(close2inf_path)
-        mkpath(mpc_save_path)
-        mkpath(raw_hard_save_path)
-        mkpath(nose_dir)
-        mkpath(around_nose_dir)
-        empty_folder.([mpc_save_path, raw_hard_save_path, nose_dir, around_nose_dir])
-        mkpath(joinpath(raw_hard_save_path, "non_converging"))
+        close2inf_path   = joinpath(solved_cases_path, "close2inf_" * split) 
+        mpc_save_path    = joinpath(close2inf_path, "generated_mpcs")
+        raw_hard_save    = joinpath(close2inf_path, "raw")
+        nose_dir         = joinpath(close2inf_path, "nose")
+
+        # always created
+        mkpath.((
+            close2inf_path,
+            mpc_save_path,
+            raw_hard_save,
+            nose_dir,
+            joinpath(raw_hard_save, "non_converging"), # had this for debugging originally, may remove
+        ))
+
+        dirs_to_clean = [mpc_save_path, raw_hard_save, nose_dir]
+
+        # only for train split
+        if split == "train"
+            around_nose_dir = joinpath(close2inf_path, "around_nose")
+            mkpath(around_nose_dir)
+            push!(dirs_to_clean, around_nose_dir)
+        end
+
+        # Warn before deleting
+        for d in dirs_to_clean
+            if !isempty(readdir(d))
+                @warn "Deleting existing contents in folder" folder=d
+            end
+        end
+
+        # Empty them
+        empty_folder.(dirs_to_clean)
+
+        # Update paths dict
+        paths[split] = (
+            base=close2inf_path,
+            mpcs=mpc_save_path,
+            raw=raw_hard_save,
+            nose=nose_dir,
+            around_nose=around_nose_dir,
+            solved_cases=solved_cases_path,
+        )
     end
+    return paths
 end
 
-function create_train_samples(selected_cases_idx_train) # overall this whole function is a mess and needs to be cleaned up
-    # this function is doing way too much stuff
+function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_files=false)
+
+    # Get paths to save samples
+    close2inf_path = train_dirs.base
+    mpc_save_path = train_dirs.mpcs
+    raw_hard_save_path = train_dirs.raw
+    nose_dir = train_dirs.nose
+    around_nose_dir = train_dirs.around_nose
+    solved_cases_path = train_dirs.solved_cases
+
+    # Initialize counters
     successful_files = 0
-    around_nose_counter = 0
     i = 0
-    while successful_files < n_samples_nose_train # TODO: not defined
-        i += 1
-        current_sample_idx = selected_cases_idx_train[i] # TODO: not defined
-        create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
-        current_net_path = joinpath(mpc_save_path, "sample_$(current_sample_idx).m")
-        mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);" # it may not be able to find this
+
+    while successful_files < N_SAMPLES_NOSE_TRAIN
+
+        i += 1 # shuffle file keys are 1-indexed
+        current_sample_idx = selected_cases_idx_train[i]
+
+        # Convert current sample from PowerModels to MATPOWER format
+        current_net_path  = create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
+
+        # Solve CPF using MATPOWER
+        sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
+        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
 
         if cpf_success
-            current_sample_files = Glob.glob("sample_$(current_sample_idx)_*.m", raw_hard_save_path)
-            file_tuples = Tuple{String, Float64}[]
-            skip_sample = false
+            # Validate CPF samples for current sample
+            skip_sample = validate_cpf_samples(sample_cpf_save_path)
             
-            for file in current_sample_files
-                base = basename(file)
-                if !endswith(base, "_nose.m")
-                    m = match(r"sample_(\d+)_lam_(m?\d+p\d+)\.m", base)
-                    if m !==nothing
-                        lam = parse(Float64, replace(m.captures[2], "p" => ".", "m" => "-"))
-                        if lam <= 0
-                            skip_sample = true
-                            break 
-                        else
-                            push!(file_tuples, (file, lam))                            
-                        end
-                    end
-                end
-            end
+            if skip_sample
+                # Delete the directory associated with this sample
+                warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
+                rm(sample_cpf_save_path; force=true, recursive=true)
+            else                
+                # Save nose sample
+                save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
 
-            if skip_sample || length(file_tuples) < n_samples_around_nose_train + 1 # TODO: not defined
-                # delete all files associated with this sample
-                for file in current_sample_files
-                    rm(file, force=true)
-                end
-                nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
-                rm(nose_file, force=true)
-                continue
-            end
+                # Create file tuples for around-the-nose samples
+                file_tuples = create_file_tuples(sample_cpf_save_path)
 
-            # Save nose
-            nose_file = joinpath(close2inf_path, "raw", "sample_$(current_sample_idx)_nose.m") # TODO: not defined
-            solved_net = PM.parse_file(nose_file)
-            json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") # TODO: not defined
-            json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
-            open(json_path, "w") do io
-                write(io, JSON.json(json_dict_nose))
+                # Save around-the-nose samples
+                save_around_nose_samples(file_tuples, around_nose_dir, current_sample_idx) # consider creating subdirs here for each sample?
+
                 successful_files += 1
-            end
 
-            # Save around-the-nose-files
-            sorted_files = sort(file_tuples, by = x -> abs(x[2]), rev=true)
-            selected_files = sorted_files[2:n_samples_around_nose_train+1] # TODO: not defined
-
-            for (file, lam) in selected_files
-                base = basename(file)
-                solved_net = PM.parse_file(file)
-                json_dict = Dict("lambda" => lam, "solved_net" => solved_net)
-                filepath = joinpath(around_nose_dir, replace(base, ".m" => ".json")) # TODO: not defined
-                if isfile(filepath)
-                    @warn "Overwriting existing file: $filepath" 
-                end
-                open(filepath, "w") do io
-                    write(io, JSON.json(json_dict))
-                    around_nose_counter += 1
-                end
-
+                # Optional: Delete directory with cpf files
+                if delete_cpf_files
+                    rm(sample_cpf_save_path; force=true, recursive=true)
             end
         end
     end
 end
 
+function create_test_samples(selected_cases_idx_test, test_dirs)
 
-function create_test_samples() # overall this whole function is a mess and needs to be cleaned up
+    # Get paths to save samples
+    close2inf_path = test_dirs.base
+    mpc_save_path = test_dirs.mpcs
+    raw_hard_save_path = train_dirs.raw
+    nose_dir = train_dirs.nose
+    solved_cases_path = train_dirs.solved_cases
+
+    # Initialize counters
     successful_files = 0
     i = 0
-    while successful_files < n_samples_nose_test # TODO: not defined
-        i += 1
-        current_sample_idx = selected_cases_idx_test[i] # TODO: not defined
-        create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
-        current_net_path = joinpath(mpc_save_path, "sample_$(current_sample_idx).m")
-        mat"cpf_success = solve_cpf($current_net_path, $raw_hard_save_path);" # it may not be able to find this
+
+    while successful_files < N_SAMPLES_NOSE_TEST
+
+        i += 1 # shuffle file keys are 1-indexed 
+        current_sample_idx = selected_cases_idx_test[i]
+
+        # Convert current sample from PowerModels to MATPOWER format
+        current_net_path  = create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
+
+        # Solve CPF using create_matpower_file
+        sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
+        mkpath(sample_cpf_save_path)
+        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
 
         if cpf_success
-            # Just save around the nose
-            nose_file = joinpath(raw_hard_save_path, "sample_$(current_sample_idx)_nose.m")
-            solved_net = PM.parse_file(nose_file)
-            json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") # TODO: not defined
-            json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net)
-            open(json_path, "w") do io
-                write(io, JSON.json(json_dict_nose))
+            # Validate CPF samples for current sample
+            skip_sample = validate_cpf_samples(sample_cpf_save_path)
+            
+            if skip_sample
+                # Delete the directory associated with this sample
+                warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
+                rm(sample_cpf_save_path; force=true, recursive=true)
+            else                
+                # Save nose sample only 
+                save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
+
                 successful_files += 1
+
+                # Optional: Delete directory with cpf files
+                if delete_cpf_files
+                    rm(sample_cpf_save_path; force=true, recursive=true)
             end
         end
     end
 
+end
+
+function validate_cpf_samples(sample_cpf_save_path)::Bool
+    files = readdir(sample_cpf_save_path; join=true)
+    valid_count = 0
+
+    for file in files
+        base = basename(file)
+        endswith(base, "_nose.m") && continue
+
+        m = match(r"^sample_(\d+)_lam_(m?\d+p\d+)\.m$", base)
+        m === nothing && continue
+
+        lam_str = replace(m.captures[2], "p" => ".", "m" => "-")
+        lam = tryparse(Float64, lam_str)
+        lam === nothing && continue
+
+        if lam <= 0
+            return true   # skip sample
+        else 
+            valid_count += 1
+        end
+    end
+
+    if valid_count < N_SAMPLES_AROUND_NOSE_TRAIN
+        return true # skip sample, not enough around the nose points
+    end
+
+    return false  # safe to keep
+end
+
+function save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
+    nose_file = Glob.glob("sample_$(current_sample_idx)_nose.m", sample_cpf_save_path)
+    solved_net = PM.parse_file(nose_file)
+    json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") 
+    json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net) # TODO: would be nice to add lambda value here corresponding to the nose.
+    open(json_path, "w") do io
+        write(io, JSON.json(json_dict_nose))
+    end
+end 
+
+function save_around_nose_samples(file_tuples, around_nose_dir, current_sample_idx)
+        sorted_files = sort(file_tuples, by = x -> abs(x[2]), rev=true)
+        selected_files = sorted_files[2:N_SAMPLES_AROUND_NOSE_TRAIN+1] 
+
+        for (file, lam) in selected_files
+            base = basename(file)
+            solved_net = PM.parse_file(file)
+            json_dict = Dict("lambda" => lam, "solved_net" => solved_net)
+            filepath = joinpath(around_nose_dir, replace(base, ".m" => ".json")) # TODO: not defined
+            if isfile(filepath)
+                @warn "Overwriting existing file: $filepath" 
+            end
+            open(filepath, "w") do io
+                write(io, JSON.json(json_dict))
+                around_nose_counter += 1
+            end
+        end
+end
+
+function create_file_tuples(sample_cpf_save_path)
+    files = readdir(sample_cpf_save_path; join=true)
+    file_tuples = []
+
+    for file in files
+        base = basename(file)
+        endswith(base, "_nose.m") && continue
+
+        m = match(r"^sample_(\d+)_lam_(m?\d+p\d+)\.m$", base)
+        m === nothing && continue
+
+        lam_str = replace(m.captures[2], "p" => ".", "m" => "-")
+        lam = tryparse(Float64, lam_str)
+        lam === nothing && continue
+
+        push!(file_tuples, (file, lam))
+    end
+
+    return file_tuples
 end
 
 function validate_samples()
@@ -166,7 +286,7 @@ end
 
 # Old helper functions
 
-function create_matpower_file(solved_cases_path, save_path, idx)
+function create_matpower_file(solved_cases_path, mpc_save_path, idx)
     json_file = "sample_$(idx).json"
     sample = JSON.parsefile(joinpath(solved_cases_path,"raw", json_file))
     net = sample["network"]
@@ -174,7 +294,8 @@ function create_matpower_file(solved_cases_path, save_path, idx)
     PM.update_data!(net, solution)
     update_vg!(net, solution)
     fix_branch_flows!(net)
-    PM.export_matpower(joinpath(save_path, "sample_$(idx).m"), net)
+    PM.export_matpower(joinpath(mpc_save_path, "sample_$(idx).m"), net)
+    return joinpath(mpc_save_path, "sample_$(idx).m")
 end
 
 
