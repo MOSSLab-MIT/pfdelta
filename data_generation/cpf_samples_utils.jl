@@ -1,8 +1,7 @@
-N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
-N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
-N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
-function create_close2infeasible(data_dir, case_name, topology_perturb,
-     n_nose, n_around_nose, split; save_all=false)
+const N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
+const N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
+const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
+function create_close2infeasible(data_dir, case_name, topology_perturb)
 
     # TODO: add docstrings!
     # TODO: solved_cases path needs to be more descriptive of the fact that this is the data dir where all case data is stored.
@@ -20,7 +19,7 @@ function create_close2infeasible(data_dir, case_name, topology_perturb,
 
     selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"])
 
-    selected_cases_idx_analysis != nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"])
+    selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"])
     
     # TODO: implement sample validation
 end
@@ -187,7 +186,7 @@ function create_test_samples(selected_cases_idx_test, test_dirs)
                 successful_files += 1
 
                 # Optional: Delete directory with cpf files
-                if delete_cpf_files
+                if delete_int_files
                     rm(sample_cpf_save_path; force=true, recursive=true)
             end
         end
