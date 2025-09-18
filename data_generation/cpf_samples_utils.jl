@@ -4,7 +4,7 @@ const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
 matlab_scripts_dir = abspath(joinpath(@__DIR__, "matlab"))
 mat"addpath($matlab_scripts_dir)"
 
-function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false)
+function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false, run_analysis_mode=false)
 
     # TODO: add docstrings!
     # TODO: solved_cases path needs to be more descriptive of the fact that this is the data dir where all case data is stored.
@@ -12,7 +12,7 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
     # Resolve the path to the solved cases
     solved_cases_path = joinpath(data_dir, case_name, topology_perturb)
     
-    selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(solved_cases_path)
+    selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(data_dir, topology_perturb)
     
     # Set up dirs to save files
     dirs = create_dirs(solved_cases_path)
@@ -22,14 +22,15 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
 
     selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"]; delete_int_files=delete_int_files)
 
-    selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"]; delete_int_files=false, n_nose_samples=100)
-    
+    if run_analysis_mode
+        selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["analysis"]; delete_int_files=delete_int_files, n_nose_samples=100)
+    end
     # TODO: implement sample validation
 end
 
 # Helper functions
-function parse_shuffle_file(solved_cases_path)
-    raw_shuffle_path = joinpath(solved_cases_path, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
+function parse_shuffle_file(data_dir, topology_perturb)
+    raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
     if isfile(raw_shuffle_path)
         shuffled_idx = JSON.parsefile(raw_shuffle_path) # TODO: not sure this is a good name for this given the strucuture of the json file.
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx)))) # TODO: why are you even doing this?
@@ -47,7 +48,7 @@ function create_dirs(solved_cases_path)
     # TODO: use either the word dir or path consistently
 
     paths = Dict{String, NamedTuple}()
-    for split in ["train", "test"]
+    for split in ["train", "test", "analysis"]
         close2inf_path   = joinpath(solved_cases_path, "close2inf_" * split) 
         mpc_save_path    = joinpath(close2inf_path, "generated_mpcs")
         raw_hard_save    = joinpath(close2inf_path, "raw")
@@ -65,7 +66,7 @@ function create_dirs(solved_cases_path)
         dirs_to_clean = [mpc_save_path, raw_hard_save, nose_dir]
 
         # only for train split
-        if split == "train"
+        if split in ["train", "analysis"]
             around_nose_dir = joinpath(close2inf_path, "around_nose")
             mkpath(around_nose_dir)
             push!(dirs_to_clean, around_nose_dir)
@@ -147,7 +148,7 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
                 next!(p; showvalues = [
                     (:done, successful_files),
                     (:total, n_nose_samples),
-                    (:pct, round(100 * successful_files / n_nose_samples; digits=1)),
+                    (:pct, round(100 * successful_files / n_nose_samples; digits=1))
                 ])
 
                 # Optional: Delete directory with cpf files
@@ -165,9 +166,9 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
     # Get paths to save samples
     close2inf_path = test_dirs.base
     mpc_save_path = test_dirs.mpcs
-    raw_hard_save_path = train_dirs.raw
-    nose_dir = train_dirs.nose
-    solved_cases_path = train_dirs.solved_cases
+    raw_hard_save_path = test_dirs.raw
+    nose_dir = test_dirs.nose
+    solved_cases_path = test_dirs.solved_cases
 
     # Initialize counters
     successful_files = 0

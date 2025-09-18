@@ -2,7 +2,8 @@ data_dir = "data"
 case_name = "case14"
 topology_perturb = "n"
 
-delete_intermediate = false
+delete_intermediate = true
+analysis_mode = true
 
 [matlab]
 # Note: Code has only been tested on this MATLAB version

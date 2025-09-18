@@ -35,7 +35,7 @@ function main()
         ENV["MATLAB_ROOT"] = cfg["matlab"]["home"]
     end
 
-    create_close2infeasible(cfg["data_dir"], cfg["case_name"], cfg["topology_perturb"]; delete_int_files=cfg["delete_intermediate"])
+    create_close2infeasible(cfg["data_dir"], cfg["case_name"], cfg["topology_perturb"]; delete_int_files=cfg["delete_intermediate"], run_analysis_mode=cfg["analysis_mode"])
 end
 
 main()
