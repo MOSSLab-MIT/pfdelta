@@ -18,7 +18,7 @@ include("cpf_samples_utils.jl")
 
 function main()
     if length(ARGS) < 1
-        println("Usage: julia main_close2inf.jl <config.toml>") # TODO: need to clarify paths here?
+        println("Usage: julia main_close2inf.jl <config.toml>") # TODO: need to clarify paths here
         exit(1)
     end
 
