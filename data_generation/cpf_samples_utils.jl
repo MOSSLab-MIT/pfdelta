@@ -1,7 +1,10 @@
 const N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
 const N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
 const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
-function create_close2infeasible(data_dir, case_name, topology_perturb)
+matlab_scripts_dir = abspath(joinpath(@__DIR__, "matlab"))
+mat"addpath($matlab_scripts_dir)"
+
+function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false)
 
     # TODO: add docstrings!
     # TODO: solved_cases path needs to be more descriptive of the fact that this is the data dir where all case data is stored.
@@ -15,11 +18,11 @@ function create_close2infeasible(data_dir, case_name, topology_perturb)
     dirs = create_dirs(solved_cases_path)
 
     # Create samples
-    selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"])
+    selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"]; delete_int_files=delete_int_files)
 
-    selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"])
+    selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"]; delete_int_files=delete_int_files)
 
-    selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"])
+    selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["train"]; delete_int_files=false, n_nose_samples=100)
     
     # TODO: implement sample validation
 end
@@ -35,8 +38,8 @@ function parse_shuffle_file(solved_cases_path)
         return (selected_cases_idx_train, selected_cases_idx_test, nothing)
     else
         num_samples_debug = 10 # TODO: make this a parameter
-        println("raw_shuffle.json not found, using $num_samples_debug samples for analysis mode.")
-        return nothing, nothing, collect(1:num_samples_debug)
+        @info "raw_shuffle.json not found, considering 2000 samples for analysis mode."
+        return nothing, nothing, collect(1:2000)
     end
 end
 
@@ -66,6 +69,8 @@ function create_dirs(solved_cases_path)
             around_nose_dir = joinpath(close2inf_path, "around_nose")
             mkpath(around_nose_dir)
             push!(dirs_to_clean, around_nose_dir)
+        else
+            around_nose_dir = nothing
         end
 
         # Warn before deleting
@@ -91,7 +96,7 @@ function create_dirs(solved_cases_path)
     return paths
 end
 
-function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_files=false)
+function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_files=false, n_nose_samples=N_SAMPLES_NOSE_TRAIN)
 
     # Get paths to save samples
     close2inf_path = train_dirs.base
@@ -104,8 +109,9 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_f
     # Initialize counters
     successful_files = 0
     i = 0
+    p = Progress(n_nose_samples; desc="Creating train samples", dt=0.5)
 
-    while successful_files < N_SAMPLES_NOSE_TRAIN
+    while successful_files < n_nose_samples
 
         i += 1 # shuffle file keys are 1-indexed
         current_sample_idx = selected_cases_idx_train[i]
@@ -115,7 +121,9 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_f
 
         # Solve CPF using MATPOWER
         sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
+        mkpath(sample_cpf_save_path)
         mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
+        @mget cpf_success
 
         if cpf_success
             # Validate CPF samples for current sample
@@ -123,7 +131,7 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_f
             
             if skip_sample
                 # Delete the directory associated with this sample
-                warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
+                @warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
                 rm(sample_cpf_save_path; force=true, recursive=true)
             else                
                 # Save nose sample
@@ -136,16 +144,23 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_cpf_f
                 save_around_nose_samples(file_tuples, around_nose_dir, current_sample_idx) # consider creating subdirs here for each sample?
 
                 successful_files += 1
+                next!(p; showvalues = [
+                    (:done, successful_files),
+                    (:total, n_nose_samples),
+                    (:pct, round(100 * successful_files / n_nose_samples; digits=1)),
+                ])
 
                 # Optional: Delete directory with cpf files
-                if delete_cpf_files
+                if delete_int_files
                     rm(sample_cpf_save_path; force=true, recursive=true)
+                end
             end
         end
     end
+    finish!(p)
 end
 
-function create_test_samples(selected_cases_idx_test, test_dirs)
+function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_files=false)
 
     # Get paths to save samples
     close2inf_path = test_dirs.base
@@ -157,6 +172,8 @@ function create_test_samples(selected_cases_idx_test, test_dirs)
     # Initialize counters
     successful_files = 0
     i = 0
+    p = Progress(N_SAMPLES_NOSE_TEST; desc="Creating test samples", dt=5)
+
 
     while successful_files < N_SAMPLES_NOSE_TEST
 
@@ -170,6 +187,7 @@ function create_test_samples(selected_cases_idx_test, test_dirs)
         sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
         mkpath(sample_cpf_save_path)
         mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
+        cpf_success = @mget cpf_success
 
         if cpf_success
             # Validate CPF samples for current sample
@@ -177,21 +195,23 @@ function create_test_samples(selected_cases_idx_test, test_dirs)
             
             if skip_sample
                 # Delete the directory associated with this sample
-                warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
+                @warn "Skipping sample $current_sample_idx due to invalid CPF samples, deleting associated files."
                 rm(sample_cpf_save_path; force=true, recursive=true)
             else                
                 # Save nose sample only 
                 save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
 
                 successful_files += 1
+                next!(p)
 
                 # Optional: Delete directory with cpf files
                 if delete_int_files
                     rm(sample_cpf_save_path; force=true, recursive=true)
+                end
             end
         end
+        update!(p; desc="Creating test samples ($(successful_files)/$(N_SAMPLES_NOSE_TEST))")
     end
-
 end
 
 function validate_cpf_samples(sample_cpf_save_path)::Bool
@@ -224,7 +244,7 @@ function validate_cpf_samples(sample_cpf_save_path)::Bool
 end
 
 function save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
-    nose_file = Glob.glob("sample_$(current_sample_idx)_nose.m", sample_cpf_save_path)
+    nose_file = Glob.glob("sample_$(current_sample_idx)_nose.m", sample_cpf_save_path)[1]
     solved_net = PM.parse_file(nose_file)
     json_path = joinpath(nose_dir, "sample_$(current_sample_idx)_nose.json") 
     json_dict_nose = Dict("lambda" => nothing, "solved_net" => solved_net) # TODO: would be nice to add lambda value here corresponding to the nose.
@@ -236,7 +256,6 @@ end
 function save_around_nose_samples(file_tuples, around_nose_dir, current_sample_idx)
         sorted_files = sort(file_tuples, by = x -> abs(x[2]), rev=true)
         selected_files = sorted_files[2:N_SAMPLES_AROUND_NOSE_TRAIN+1] 
-
         for (file, lam) in selected_files
             base = basename(file)
             solved_net = PM.parse_file(file)
@@ -247,7 +266,6 @@ function save_around_nose_samples(file_tuples, around_nose_dir, current_sample_i
             end
             open(filepath, "w") do io
                 write(io, JSON.json(json_dict))
-                around_nose_counter += 1
             end
         end
 end

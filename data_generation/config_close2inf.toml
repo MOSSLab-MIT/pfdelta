@@ -1,9 +1,12 @@
-data_dir = "/path/to/data"
-case_name = "case2000"
-topology_perturb = "n-1"
+data_dir = "data"
+case_name = "case14"
+topology_perturb = "n"
+
+delete_intermediate = false
 
 [matlab]
 # Note: Code has only been tested on this MATLAB version
 # TODO: you need to add info here on which matpower version should be used too.
 # TODO: add note on intel matlab only for mac
 home = "/Applications/MATLAB_R2024b.app"
+
