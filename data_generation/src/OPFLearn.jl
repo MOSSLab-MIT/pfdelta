@@ -17,7 +17,6 @@ import PowerModels
 import PowerModels: ref, ids, var
 const PM = PowerModels
 PM.silence()
-
 import Random
 
 import Ipopt
