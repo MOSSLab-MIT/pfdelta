@@ -123,6 +123,7 @@ function perturb_costs!(net; method="none")
     end
 end
 
+# TODO: get rid of this
 function perturb_load!(net, r)
     # Step 1: Create active power demand vector
     load_ids = sort(collect(keys(net["load"])))
@@ -157,6 +158,7 @@ function perturb_load!(net, r)
     return nothing
 end
 
+# TODO: get rid of this
 function sample_ball(center::Vector{Float64}, r::Float64)
     n = length(center)
 
