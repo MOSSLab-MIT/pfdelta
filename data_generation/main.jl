@@ -37,13 +37,15 @@ case14 = loadcase("case14")
 case30 = loadcase("case30")
 case57 = loadcase("case57")
 case118 = loadcase("case118")
+case500 = loadcase("case500")
+case2000 = loadcase("case2000")
 cases = Dict(
 	"case14" => case14,
 	"case30" => case30,
 	"case57" => case57,
 	"case118" => case118,
-	"case500" => loadcase("case500"),
-	"case2000" => loadcase("case2000")
+	"case500" => case500,
+	"case2000" => case2000
 )
 println("Cases loaded!")
 
@@ -106,7 +108,7 @@ function uniform_creator(
 	end
 end
 
-
+# Entry point
 if length(ARGS) == 0
 	println("No arguments provided!")
 else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
@@ -122,7 +124,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	end
 	network = cases[network_name]
 	if topology_perturb == "none"
-		dataset_size = 56000
+		dataset_size = 100
 	elseif topology_perturb == "n-1"
 		dataset_size = 29000
 	else
@@ -159,15 +161,14 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 			)
 		end
 	elseif data_method == "uniform"
-		folder_path = joinpath("$(network_name)_unif", topology_perturb)
+		folder_path = joinpath("$(network_name)", topology_perturb)
 		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
 		# Make folder
-		mkpath(folder_path)
-		mkpath(joinpath(folder_path, "allseeds"))
+		mkpath(joinpath(folder_path, "raw"))
 		if topology_perturb == "none"
-			with_checkpoint = true
+			with_checkpoint = false
 		else
-			with_checkpoint = true
+			with_checkpoint = false
 		end
 		if !with_checkpoint
 			# Create samples
@@ -187,7 +188,6 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 				topology_perturb,
 			)
 		end
-		# mv(joinpath(folder_path, "allseeds"), joinpath(folder_path, "raw"))
 		println("DONE")
 
 	end

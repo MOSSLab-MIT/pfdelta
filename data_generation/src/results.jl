@@ -108,7 +108,6 @@ function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::Strin
         sample = Dict(
             "network" => net, 
             "solution" => result,
-			"parent_seed"=> -1
         )
     else
         sample = Dict(
