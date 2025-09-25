@@ -1,11 +1,11 @@
-function cpf_success = solve_cpf(current_net_path, save_path)
+function cpf_success = solve_cpf(current_net_path, save_path, save_path_non_converging)
     define_constants;
     k = 2.5;
 
     % Specify CPF options
     mpopt = mpoption('out.all', 0, 'verbose', 0);
     mpopt = mpoption(mpopt, 'cpf.enforce_p_lims', 0, 'cpf.enforce_q_lims', 0, ...
-        'cpf.enforce_v_lims', 0, 'cpf.enforce_flow_lims', 0);  % would v_lims enforcement only at PQ?
+        'cpf.enforce_v_lims', 0, 'cpf.enforce_flow_lims', 0);
     mpopt = mpoption(mpopt, 'cpf.stop_at', 'NOSE', 'cpf.plot.level', 0); 
     mpopt.exp.use_legacy_core = 1;  % <-- force legacy CPF with callback support
 
@@ -38,7 +38,7 @@ function cpf_success = solve_cpf(current_net_path, save_path)
 
     if exist('non_converging_reason', 'var')
         json_str = jsonencode(non_converging_reason);
-        save_path = fullfile(save_path, 'non_converging', [base_name, '_reason.json']);
+        save_path = fullfile(save_path_non_converging, [base_name, '_reason.json']);
         fid = fopen(save_path, 'w');
         if fid == -1
             error('Could not open file for writing.');
