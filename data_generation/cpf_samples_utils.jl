@@ -41,64 +41,6 @@ function parse_shuffle_file(data_dir, topology_perturb)
     end
 end
 
-function create_dirs(solved_cases_path)
-    # TODO: use either the word dir or path consistently
-
-    paths = Dict{String, NamedTuple}()
-    for split in ["train", "test", "analysis"] # TODO: how to deal with analysis now
-        raw_cpf_dir = joinpath(solved_cases_path, "raw_cpf")
-        mpc_save_path = joinpath(solved_cases_path, "generated_mpcs")
-        around_nose_dir = joinpath(solved_cases_path, "around_nose")
-        nose_dir = joinpath(solved_cases_path, "nose")
-        non_converging_dir = joinpath(solved_cases_path, "non_converging")
-
-        # always created
-        mkpath.((
-            raw_cpf_dir,
-            mpc_save_path,
-            around_nose_dir,
-            nose_dir,
-            non_converging_dir,
-        ))
-
-        dirs_to_clean = [raw_cpf_dir, around_nose_dir, nose_dir, mpc_save_path, non_converging_dir]
-
-        # only for train split
-        if split == "train"
-            around_nose_dir_train = joinpath(around_nose_dir, split)
-            mkpath(around_nose_dir_train)
-        end
-
-        # for both train and test split
-        if split in ["train", "test"]
-            nose_dir_split = joinpath(nose_dir, split)
-            mkpath(nose_dir_split)
-        end
-
-        # Warn before deleting
-        for d in dirs_to_clean
-            if !isempty(readdir(d))
-                @warn "Deleting existing contents in folder" folder=d
-            end
-        end
-
-        # Empty them
-        empty_folder.(dirs_to_clean)
-
-        # Update paths dict
-        paths[split] = (
-            base=close2inf_path,
-            mpcs=mpc_save_path,
-            raw=raw_hard_save,
-            nose=nose_dir,
-            around_nose=around_nose_dir,
-            solved_cases=solved_cases_path,
-            non_converging=non_converging
-        )
-    end
-    return paths
-end
-
 function create_dirs(solved_cases_path::AbstractString; analysis=false)
     # --- anchors ---
     raw_cpf    = joinpath(solved_cases_path, "raw_cpf")
