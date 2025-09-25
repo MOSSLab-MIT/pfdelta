@@ -167,6 +167,8 @@ function create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf, T=I
 		# Perturb generator costs
 		perturb_costs!(net_perturbed; method=perturb_costs_method)
 
+		# Change bus type to PV if needed
+		change_bus_type!(net_perturbed)
 		#######################################
 
         # Solve OPF for the load sample
