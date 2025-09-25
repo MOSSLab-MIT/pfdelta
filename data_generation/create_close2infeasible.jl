@@ -2,7 +2,7 @@
 using Pkg
 Pkg.activate(@__DIR__)
 Pkg.instantiate() # TODO: do we always need this? Maybe add some check to Manifest?
- 
+
 # Imports
 import PowerModels as PM
 import Random
@@ -11,6 +11,7 @@ import TOML
 import Glob
 using FilePathsBase # TODO: is this used? 
 using ProgressMeter
+using MATLAB
 PM.silence()
 
 include("cpf_samples_utils.jl")
@@ -31,7 +32,20 @@ function main()
 
     # set MATLAB
     ensure_matlab_root!(cfg)
-    using MATLAB # don't like having the import here
+
+    # Add custom MATLAB helpers from repo (if present)
+    matlab_scripts_dir = abspath(joinpath(@__DIR__, "matlab"))
+    if isdir(matlab_scripts_dir)
+        mat"addpath($matlab_scripts_dir)"
+    end
+
+    # set up matpower
+    matpower_dir = get(get(cfg, "matlab", Dict{String,Any}()), "matpower_path", "")
+    if !isempty(matpower_dir)
+        ensure_matpower!(String(matpower_dir))
+    else
+        @warn "No matlab.matpower_path in config; MATPOWER will not be added to path."
+    end
 
     create_close2infeasible(
         cfg["data_dir"], cfg["case_name"], cfg["topology_perturb"];
@@ -58,8 +72,26 @@ function ensure_matlab_root!(cfg::Dict)
         ENV["MATLAB_ROOT"] = dirname(dirname(matlab_cmd))
         return
     end
+
     # Last resort: leave unset and let MATLAB.jl try; but emit a helpful message
     @warn "MATLAB_ROOT not set and 'matlab' not on PATH. On clusters, load a module (e.g., `module load matlab/matlab-2024a`) or set [matlab].home in the config."
+end
+
+
+function ensure_matpower!(dir::AbstractString)
+    if !isdir(dir)
+        @warn "MATPOWER directory not found at $dir"
+        return
+    end
+    # Add MATPOWER (recursively) to MATLAB path
+    mat"""addpath(genpath($dir));"""
+
+    # Optional sanity check: print where runpf resolves from
+    try
+        mat"disp(['MATPOWER runpf at: ', which('runpf')])"
+    catch e
+        @warn "Could not locate MATPOWER (runpf) after addpath. Check matpower_path." error=e
+    end
 end
 
 main()

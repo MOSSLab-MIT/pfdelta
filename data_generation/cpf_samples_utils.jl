@@ -1,8 +1,6 @@
 const N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
 const N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
 const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
-matlab_scripts_dir = abspath(joinpath(@__DIR__, "matlab"))
-mat"addpath($matlab_scripts_dir)"
 
 function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false, run_analysis_mode=false)
 
@@ -15,17 +13,17 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
     selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(data_dir, topology_perturb)
     
     # Set up dirs to save files
-    dirs = create_dirs(solved_cases_path)
+    dirs = create_dirs(solved_cases_path; analysis=run_analysis_mode)
 
     # Create samples
+    @info "Creating samples for case $case_name, $topology_perturb"
     selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"]; delete_int_files=delete_int_files)
 
     selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"]; delete_int_files=delete_int_files)
 
     if run_analysis_mode
-        selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["analysis"]; delete_int_files=delete_int_files, n_nose_samples=100)
+        selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["analysis"]; delete_int_files=false, n_nose_samples=100)
     end
-    # TODO: implement sample validation
 end
 
 # Helper functions
@@ -38,7 +36,6 @@ function parse_shuffle_file(data_dir, topology_perturb)
         selected_cases_idx_test = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]] # TODO: do not hard code the 2000 here
         return (selected_cases_idx_train, selected_cases_idx_test, nothing)
     else
-        num_samples_debug = 10 # TODO: make this a parameter
         @info "raw_shuffle.json not found, considering 2000 samples for analysis mode."
         return nothing, nothing, collect(1:2000)
     end
@@ -48,30 +45,34 @@ function create_dirs(solved_cases_path)
     # TODO: use either the word dir or path consistently
 
     paths = Dict{String, NamedTuple}()
-    for split in ["train", "test", "analysis"]
-        close2inf_path   = joinpath(solved_cases_path, "close2inf_" * split) 
-        mpc_save_path    = joinpath(close2inf_path, "generated_mpcs")
-        raw_hard_save    = joinpath(close2inf_path, "raw")
-        nose_dir         = joinpath(close2inf_path, "nose")
+    for split in ["train", "test", "analysis"] # TODO: how to deal with analysis now
+        raw_cpf_dir = joinpath(solved_cases_path, "raw_cpf")
+        mpc_save_path = joinpath(solved_cases_path, "generated_mpcs")
+        around_nose_dir = joinpath(solved_cases_path, "around_nose")
+        nose_dir = joinpath(solved_cases_path, "nose")
+        non_converging_dir = joinpath(solved_cases_path, "non_converging")
 
         # always created
         mkpath.((
-            close2inf_path,
+            raw_cpf_dir,
             mpc_save_path,
-            raw_hard_save,
+            around_nose_dir,
             nose_dir,
-            joinpath(raw_hard_save, "non_converging"), # had this for debugging originally, may remove
+            non_converging_dir,
         ))
 
-        dirs_to_clean = [mpc_save_path, raw_hard_save, nose_dir]
+        dirs_to_clean = [raw_cpf_dir, around_nose_dir, nose_dir, mpc_save_path, non_converging_dir]
 
         # only for train split
-        if split in ["train", "analysis"]
-            around_nose_dir = joinpath(close2inf_path, "around_nose")
-            mkpath(around_nose_dir)
-            push!(dirs_to_clean, around_nose_dir)
-        else
-            around_nose_dir = nothing
+        if split == "train"
+            around_nose_dir_train = joinpath(around_nose_dir, split)
+            mkpath(around_nose_dir_train)
+        end
+
+        # for both train and test split
+        if split in ["train", "test"]
+            nose_dir_split = joinpath(nose_dir, split)
+            mkpath(nose_dir_split)
         end
 
         # Warn before deleting
@@ -92,20 +93,108 @@ function create_dirs(solved_cases_path)
             nose=nose_dir,
             around_nose=around_nose_dir,
             solved_cases=solved_cases_path,
+            non_converging=non_converging
         )
     end
+    return paths
+end
+
+function create_dirs(solved_cases_path::AbstractString; analysis=false)
+    # --- anchors ---
+    raw_cpf    = joinpath(solved_cases_path, "raw_cpf")
+    an_train   = joinpath(solved_cases_path, "around_nose", "train")
+    nose_train = joinpath(solved_cases_path, "nose", "train")
+    nose_test  = joinpath(solved_cases_path, "nose", "test")
+    non_converging = joinpath(solved_cases_path, "non_converging")
+    mpc_dir = joinpath(solved_cases_path, "generated_mpcs")
+
+    # --- analysis dirs (optional) ---
+    analysis_dir  = joinpath(solved_cases_path, "analysis")
+    raw_cpf_a     = joinpath(analysis_dir, "raw_cpf")
+    around_nose_a = joinpath(analysis_dir, "around_nose")
+    nose_a        = joinpath(analysis_dir, "nose")
+    non_converging_a = joinpath(analysis_dir, "non_converging")
+    mpc_dir_a = joinpath(analysis_dir, "generated_mpcs")
+
+    # --- create everything ---
+    to_create = Any[
+        raw_cpf,
+        an_train,
+        nose_train,
+        nose_test,
+        non_converging,
+        mpc_dir
+    ]
+    if analysis
+        append!(to_create, (raw_cpf_a, around_nose_a, nose_a, non_converging_a, mpc_dir_a))
+    end
+    mkpath.(to_create)
+
+    # --- always clean writable leaves ---
+    dirs_to_clean = Any[
+        raw_cpf,
+        an_train,
+        nose_train,
+        nose_test,
+        non_converging,
+        mpc_dir
+    ]
+    if analysis
+        append!(dirs_to_clean, (raw_cpf_a, around_nose_a, nose_a, non_converging_a, mpc_dir_a))
+    end
+
+    for d in dirs_to_clean
+        if !isempty(readdir(d))
+            @warn "Deleting existing contents in folder" folder=d
+        end
+    end
+    empty_folder.(dirs_to_clean)
+
+    # --- assemble paths dict ---
+    paths = Dict{String, NamedTuple}()
+
+    paths["train"] = (
+        base        = solved_cases_path,
+        raw_cpf     = raw_cpf,
+        around_nose = an_train,
+        nose        = nose_train,
+        non_converging = non_converging, 
+        mpc_dir = mpc_dir
+    )
+
+    paths["test"] = (
+        base    = solved_cases_path,
+        raw_cpf = raw_cpf,
+        nose    = nose_test,
+        non_converging = non_converging,
+        mpc_dir = mpc_dir, 
+        around_nose = nothing
+
+    )
+
+    if analysis
+        paths["analysis"] = (
+            base        = analysis_dir,
+            raw_cpf     = raw_cpf_a,
+            around_nose = around_nose_a,
+            nose        = nose_a,
+            non_converging = non_converging_a,
+            mpc_dir = mpc_dir_a
+        )
+    end
+
     return paths
 end
 
 function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_files=false, n_nose_samples=N_SAMPLES_NOSE_TRAIN)
 
     # Get paths to save samples
-    close2inf_path = train_dirs.base
-    mpc_save_path = train_dirs.mpcs
-    raw_hard_save_path = train_dirs.raw
+    mpc_save_path = train_dirs.mpc_dir
+    raw_hard_save_path = train_dirs.raw_cpf
     nose_dir = train_dirs.nose
     around_nose_dir = train_dirs.around_nose
-    solved_cases_path = train_dirs.solved_cases
+    solved_cases_path = train_dirs.base
+    non_converging_path = train_dirs.non_converging
 
     # Initialize counters
     successful_files = 0
@@ -123,7 +212,7 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
         # Solve CPF using MATPOWER
         sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
         mkpath(sample_cpf_save_path)
-        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
+        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path, $non_converging_path);"
         @mget cpf_success
 
         if cpf_success
@@ -147,8 +236,7 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
                 successful_files += 1
                 next!(p; showvalues = [
                     (:done, successful_files),
-                    (:total, n_nose_samples),
-                    (:pct, round(100 * successful_files / n_nose_samples; digits=1))
+                    (:total, n_nose_samples)
                 ])
 
                 # Optional: Delete directory with cpf files
@@ -164,17 +252,16 @@ end
 function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_files=false)
 
     # Get paths to save samples
-    close2inf_path = test_dirs.base
-    mpc_save_path = test_dirs.mpcs
-    raw_hard_save_path = test_dirs.raw
+    mpc_save_path = test_dirs.mpc_dir
+    raw_hard_save_path = test_dirs.raw_cpf
     nose_dir = test_dirs.nose
-    solved_cases_path = test_dirs.solved_cases
+    solved_cases_path = test_dirs.base
+    non_converging_path = test_dirs.non_converging
 
     # Initialize counters
     successful_files = 0
     i = 0
     p = Progress(N_SAMPLES_NOSE_TEST; desc="Creating test samples", dt=5)
-
 
     while successful_files < N_SAMPLES_NOSE_TEST
 
@@ -187,7 +274,7 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
         # Solve CPF using create_matpower_file
         sample_cpf_save_path = joinpath(raw_hard_save_path, "cpf_sample_$(current_sample_idx)")
         mkpath(sample_cpf_save_path)
-        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path);"
+        mat"cpf_success = solve_cpf($current_net_path, $sample_cpf_save_path, $non_converging_path);"
         cpf_success = @mget cpf_success
 
         if cpf_success
@@ -203,7 +290,10 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
                 save_nose_samples(sample_cpf_save_path, nose_dir, current_sample_idx)
 
                 successful_files += 1
-                next!(p)
+                next!(p; showvalues = [
+                    (:done, successful_files), 
+                    (:total, N_SAMPLES_NOSE_TEST)
+                ])
 
                 # Optional: Delete directory with cpf files
                 if delete_int_files
@@ -211,8 +301,8 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
                 end
             end
         end
-        update!(p; desc="Creating test samples ($(successful_files)/$(N_SAMPLES_NOSE_TEST))")
     end
+    finish!(p)
 end
 
 function validate_cpf_samples(sample_cpf_save_path)::Bool
@@ -237,7 +327,7 @@ function validate_cpf_samples(sample_cpf_save_path)::Bool
         end
     end
 
-    if valid_count < N_SAMPLES_AROUND_NOSE_TRAIN
+    if valid_count < N_SAMPLES_AROUND_NOSE_TRAIN + 1 # +1 because the nose is also included in valid count
         return true # skip sample, not enough around the nose points
     end
 

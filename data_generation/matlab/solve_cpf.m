@@ -1,4 +1,4 @@
-function cpf_success = solve_cpf(current_net_path, save_path)
+function cpf_success = solve_cpf(current_net_path, save_path, save_path_non_converging)
     define_constants;
     k = 2.5;
 
@@ -38,7 +38,7 @@ function cpf_success = solve_cpf(current_net_path, save_path)
 
     if exist('non_converging_reason', 'var')
         json_str = jsonencode(non_converging_reason);
-        save_path = fullfile(save_path, 'non_converging', [base_name, '_reason.json']);
+        save_path = fullfile(save_path_non_converging, [base_name, '_reason.json']);
         fid = fopen(save_path, 'w');
         if fid == -1
             error('Could not open file for writing.');
