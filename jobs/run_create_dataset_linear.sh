@@ -16,4 +16,4 @@ PERTS=(none n-1 n-2)
 PERT="${PERTS[$SLURM_ARRAY_TASK_ID]}"
 
 cd "$HOME/pfdelta/data_generation"
-srun julia main.jl uniform_linear case14 "$PERT"
+srun julia main.jl uniform_linear case14 "$PERT" /home/akrivera/orcd/scratch/pfdelta_data

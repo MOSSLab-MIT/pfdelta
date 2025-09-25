@@ -18,9 +18,6 @@ include("src/OPFLearn.jl")
 # include("create_dataset.jl")
 end
 
-root_dir = dirname(@__DIR__)
-data_dir = joinpath(root_dir, "data")
-
 function loadcase(casenum::String)
 	case_to_path = Dict(
 		"case14" => "pglib/pglib_opf_case14_ieee.m",
@@ -118,6 +115,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	data_method, comp_method = split(ARGS[1], "_")
 	network_name = ARGS[2]
 	topology_perturb = ARGS[3]
+	data_dir = ARGS[4] # setting an absolute path here for now.
 	if comp_method == "linear"
 		point_generator = OPFLearn.create_samples
 		parallel = false
