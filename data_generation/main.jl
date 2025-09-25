@@ -11,7 +11,7 @@ using JSON
 using Debugger
 using Plots
 using Statistics
-
+using Logging
 using PowerModels
 
 include("src/OPFLearn.jl")
@@ -127,7 +127,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	end
 	network = cases[network_name]
 	if topology_perturb == "none"
-		dataset_size = 10
+		dataset_size = 56000
 	elseif topology_perturb == "n-1"
 		dataset_size = 29000
 	else
