@@ -18,6 +18,9 @@ include("src/OPFLearn.jl")
 # include("create_dataset.jl")
 end
 
+root_dir = dirname(@__DIR__)
+data_dir = joinpath(root_dir, "data")
+
 function loadcase(casenum::String)
 	case_to_path = Dict(
 		"case14" => "pglib/pglib_opf_case14_ieee.m",
@@ -124,7 +127,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	end
 	network = cases[network_name]
 	if topology_perturb == "none"
-		dataset_size = 100
+		dataset_size = 10
 	elseif topology_perturb == "n-1"
 		dataset_size = 29000
 	else
@@ -161,7 +164,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 			)
 		end
 	elseif data_method == "uniform"
-		folder_path = joinpath("$(network_name)", topology_perturb)
+		folder_path = joinpath(data_dir, "$(network_name)", topology_perturb)
 		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
 		# Make folder
 		mkpath(joinpath(folder_path, "raw"))
