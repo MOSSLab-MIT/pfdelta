@@ -123,6 +123,32 @@ function perturb_costs!(net; method="none")
     end
 end
 
+function change_bus_type!(net)
+    PV_buses = [bus_key for (bus_key, bus) in net["bus"] if bus["bus_type"] == 2]
+    pv_bus_set = Set(parse(Int, k) for k in PV_buses)
+
+    PV_bus_to_gen_map = Dict{String, Vector{Dict{String, Any}}}() # stores mapping from bus_idx to gens at that bus
+
+    # Populate PV_bus_to_gen_map
+    for (_, gen) in net["gen"]
+        gen_bus = gen["gen_bus"]
+        if gen_bus in pv_bus_set
+            push!(get!(PV_bus_to_gen_map, string(gen_bus), Vector{Dict{String,Any}}()), gen)
+        end
+    end
+
+    # Check if all gens are out for a given PV bus and change bus type
+    for bus_key in PV_buses
+        gens = PV_bus_to_gen_map[bus_key]
+        if all(gen["gen_status"] == 0 for gen in gens)
+            net["bus"][bus_key]["bus_type"] = 1
+            @warn "Bus $bus_key was PV and is now a PQ bus (no active gens)"
+        end
+    end
+end
+
+
+# TODO: get rid of this
 function perturb_load!(net, r)
     # Step 1: Create active power demand vector
     load_ids = sort(collect(keys(net["load"])))
@@ -157,6 +183,7 @@ function perturb_load!(net, r)
     return nothing
 end
 
+# TODO: get rid of this
 function sample_ball(center::Vector{Float64}, r::Float64)
     n = length(center)
 
@@ -172,3 +199,4 @@ function sample_ball(center::Vector{Float64}, r::Float64)
     sample = center .+ radius .* z
     return sample
 end
+

@@ -348,7 +348,7 @@ def batch_config(config, args, override_args):
 
 def expand_raw_job(raw_job):
     expanded_jobs = []
-    expand_functions = ["_manual_list"]
+    expand_functions = ["_manual_list", "_connected_list"]
     raw_job_str = json.dumps(raw_job)
     # We create a queue to be able to add more items as we go
     queue = [raw_job_str]
@@ -377,20 +377,103 @@ def expand_raw_job(raw_job):
         key = current_dict[key_start:key_end]
         # We go type by type
         if curr_func == "_manual_list":
-            new_dicts = manual_list_expansion(inputs, key, current_dict, search_result, end)
+            new_dicts = manual_list_expansion(
+                inputs, key, current_dict, search_result, end)
             queue = new_dicts + queue
+        if curr_func == "_connected_list":
+            assert len(inputs) >= 3, \
+                f"Connected list has a syntax of key -- value1, value2... | name1, name2..."
+            new_dicts = connected_list_expansion(inputs, current_dict)
+            queue = new_dicts + queue
+
 
     return expanded_jobs
 
 
-def manual_list_expansion(inputs, key, current_dict, search_result, end):
-    start_of_dict = current_dict[:search_result-1]
-    end_of_dict = current_dict[end+2:]
+def connected_list_expansion(inputs, current_dict):
+    assert inputs[1] == "--", \
+        f"Connected list has a syntax of key -- value1, value2... | name1, name2..."
+
+    connect_key = inputs[0]     # Key used to indicate lists are connected
+    connected_inputs = []       # Inputs of connect_keys
+    connected_keys = []
+    end = 0
+    starts = []
+    ends = []
+    # Gather all related connected lists
+    while True:
+        search_result = current_dict.find("_connected_list(" + connect_key, end)
+        # If search_result == -1, then no more lists
+        if search_result == -1:
+            break
+        end = current_dict.find(")", search_result)
+        # Keep track of start and end for placing values back in
+        starts.append(search_result)
+        ends.append(end)
+        # Keep track of corresponding key
+        key_end = search_result - 4
+        key_start = current_dict[:key_end].rfind('"') + 1
+        connected_keys.append(current_dict[key_start:key_end])
+        # Gather this list input
+        start_inputs = starts[-1] + 16 + len(connect_key) + 4
+        this_list_inputs = current_dict[start_inputs:end].split(" ")
+        connected_inputs.append(this_list_inputs)
+
+    # Make sure all lists have the same number of inputs
+    num_inputs = len(connected_inputs[0])
+    for inps in connected_inputs:
+        assert num_inputs == len(inps), \
+            "There's connected lists with a different number of inputs!"
+
     # Process run names if any and process instances
+    connected_instances, connected_names = [], []
+    for inps in connected_inputs:
+        instances, names = list_process_names(inps)
+        connected_instances.append(instances)
+        connected_names.append(names)
+
+    # Create new dictionaries
+    new_dicts = []
+    starts.reverse()
+    ends.reverse()
+    # vamos a cambiar 
+    num_cases = len(connected_instances[0])
+    for i in range(num_cases):
+        values = [instances[i] for instances in connected_instances]
+        names = [names[i] for names in connected_names]
+        values.reverse()
+        new_dict = current_dict
+        for key, value, name, start, end in zip(
+            connected_keys, values, names, starts, ends
+        ):
+            # Check if it is intended to be a string
+            if parse_value(value) == value:
+                value = '"' + value + '"'
+            # Construct new dictionary
+            start_of_dict = new_dict[:start - 1]
+            end_of_dict = new_dict[end + 2:]
+            new_dict = start_of_dict + value + end_of_dict
+            # We modify run name if necessary
+            run_name_idx = new_dict.find("run_name")
+            if run_name_idx != -1:
+                # Gather run name
+                run_name_start = run_name_idx + 12
+                run_name_end = new_dict.find('"', run_name_start)
+                run_name = new_dict[run_name_start:run_name_end]
+                # Compute new run name
+                new_run_name = run_name.replace(f"%{key}", name)
+                new_dict = new_dict[:run_name_start] + new_run_name + new_dict[run_name_end:]
+        new_dicts.append(new_dict)
+
+    return new_dicts
+
+
+def list_process_names(inputs):
     if "|" in inputs:
         idx = inputs.index("|")
         inputs.pop(idx)
-        assert (len(inputs) % 2) == 0, "In manual list, number of names needs to equal number of instances!"
+        assert (len(inputs) % 2) == 0, \
+            "In lists, the number of names needs to equal number of instances!"
         num_instances = len(inputs)//2
         instances = inputs[:num_instances]
         instances = [instance[:-1] for instance in instances[:-1]] + [instances[-1]] # Delete comma at end
@@ -401,6 +484,16 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
         instances = inputs
         instances = [instance[:-1] for instance in instances[:-1]] + [instances[-1]]
         names = [instance[:4] for instance in instances]
+
+    return instances, names
+
+
+def manual_list_expansion(inputs, key, current_dict, search_result, end):
+    start_of_dict = current_dict[:search_result-1]
+    end_of_dict = current_dict[end+2:]
+
+    # Process run names if any and process instances
+    instances, names = list_process_names(inputs)
 
     # Create dictionaries
     new_dicts = []
@@ -415,7 +508,7 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
         if run_name_idx != -1:
             # Gather run name
             run_name_start = run_name_idx + 12
-            run_name_end = new_dict.rfind('"', run_name_start)
+            run_name_end = new_dict.find('"', run_name_start)
             run_name = new_dict[run_name_start:run_name_end]
             # Compute new run name
             new_run_name = run_name.replace(f"%{key}", name)

@@ -154,13 +154,14 @@ class PowerBalanceLoss:
 
             return power_balance_model_preds
 
-        elif model_name == "PFNet": 
+        elif model_name == "PFNet":
             device = data["bus"].x.device
             # Unnormalize predictions
             casename = data.case_name[0]
             mean = pfnet_pfdata_stats[casename]["mean"]["bus"]["y"].to(device)
             std = pfnet_pfdata_stats[casename]["std"]["bus"]["y"].to(device)
             output = (output * std) + mean
+            unnormalized_y = (data["bus"].y * std) + mean
 
             num_buses = data["bus"].num_nodes
             theta_pred = output[:, 1]
@@ -174,13 +175,13 @@ class PowerBalanceLoss:
             pq_pg = bus_gen[:, 0]
             pq_qg = bus_gen[:, 1]
             pq_outputs = output[pq_idx]
-            Pnet[pq_idx] = pq_pg - pq_outputs[:, 2]
-            Qnet[pq_idx] = pq_qg - pq_outputs[:, 3]
+            Pnet[pq_idx] = pq_pg - unnormalized_y[pq_idx, 2] # P fixed in PQ
+            Qnet[pq_idx] = pq_qg - unnormalized_y[pq_idx, 3] # Q fixed in PQ
 
             # PV
             pv_idx = (data['bus'].bus_type == 2).nonzero(as_tuple=True)[0]
             pv_outputs = output[pv_idx]
-            Pnet[pv_idx] = pv_outputs[:, 2]
+            Pnet[pv_idx] = unnormalized_y[pv_idx, 2] # P fixed in PV
             Qnet[pv_idx] = pv_outputs[:, 3]
 
             # Slack

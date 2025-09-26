@@ -77,6 +77,16 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
+        self.task_split_config = {3.1: {"train": [self.case_name], 
+                                        "val": self.all_case_names,
+                                        "test": self.all_case_names},
+                                  3.2: {"train": ["case14_seeds", "case30_seeds", "case57_seeds"], 
+                                        "val": ["case118_seeds", "case500_seeds"],
+                                        "test": ["case118_seeds", "case500_seeds"]},
+                                  3.3: {"train": ["case118_seeds", "case500_seeds"], 
+                                        "val": ["case14_seeds", "case30_seeds", "case57_seeds"],
+                                        "test": ["case14_seeds", "case30_seeds", "case57_seeds"]}}
+
         super().__init__(self.root, transform, pre_transform, pre_filter, force_reload=force_reload)
         self.load(self.split)
 
@@ -445,7 +455,6 @@ class PFDeltaDataset(InMemoryDataset):
         if task in [3.1, 3.2, 3.3]:
             roots = [os.path.join(self.root, case_name) for case_name in self.all_case_names]
             casename = self.case_name if task == 3.1 else ""
-            # for tasks with multiple case names, we need to aggregate data from all cases
         else:
             roots = [os.path.join(self.root, self.case_name)]
             casename = self.case_name
@@ -457,8 +466,14 @@ class PFDeltaDataset(InMemoryDataset):
             
             # Add data from this root to the combined lists
             for split in combined_data_lists.keys():
-                combined_data_lists[split].extend(task_data_lists[split])
-        
+                if task in [3.1, 3.2, 3.3]:
+                    # extract case name from root
+                    case_name = os.path.basename(root)
+                    if case_name in self.task_split_config[task][split]:
+                        combined_data_lists[split].extend(task_data_lists[split])
+                else: 
+                    combined_data_lists[split].extend(task_data_lists[split])
+                
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
                 print(f"Collating combined {split} data with {len(data_list)} samples")
@@ -474,20 +489,21 @@ class PFDeltaDataset(InMemoryDataset):
                     
                 torch.save((combined_data, combined_slices), os.path.join(concat_path, f'{split}.pt'))
                 print(f"Saved combined {split} data with {len(data_list)} samples")
-
+    
     def load(self, split):
         """Loads dataset for the specified split.
         
         Args:
-            split (str): The split to load ('train', 'val', 'test', 'separate_{split}_{feasibility}_{grid_type}')
+            split (str): The split to load ('train', 'val', 'test', 'separate_{casename}_{split}_{feasibility}_{grid_type}') # specify a different type of string for 3.1 
         """
+
         if "separate" in split:
-            # split should be of format "separate_{split}_{feasibility}_{grid_type}"
-            _, split_str, feasibility_str, grid_type_str = split.split("_")
+            # split should be of format "separate_{split}_{feasibility}_{grid_type}_{casename}"
+            _, casename_str, split_str, feasibility_str, grid_type_str = split.split("_")
             if feasibility_str == "near infeasible": 
-                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{4.1}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+                processed_path = os.path.join(self.root, f"{casename_str}", f"{grid_type_str}", "processed", f"task_{4.1}_{feasibility_str}_{self.model}", f"{split_str}.pt")
             else: 
-                processed_path = os.path.join(self.root, f"{self.case_name}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
+                processed_path = os.path.join(self.root, f"{casename_str}", f"{grid_type_str}", "processed", f"task_{self.task}_{feasibility_str}_{self.model}", f"{split_str}.pt")
             print(f"Loading {split} dataset from {processed_path}")
             self.data, self.slices = torch.load(processed_path)
         else: 

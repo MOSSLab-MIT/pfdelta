@@ -3,7 +3,9 @@
 *.pyc
 *.pyo
 *.mat
+*.png
 *.out
+*.pkl
 
 .ipynb_checkpoints
 tutorial.ipynb
@@ -13,6 +15,11 @@ runs
 experiment_results
 case14
 case14_seeds
+case30_data
+case57_seeds
+case118_seeds
+case500_seeds
+case2000_seeds
 case14_unif
 case30
 case30_data
