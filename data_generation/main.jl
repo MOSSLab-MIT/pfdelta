@@ -15,7 +15,6 @@ using Logging
 using PowerModels
 
 include("src/OPFLearn.jl")
-# include("create_dataset.jl")
 end
 
 function loadcase(casenum::String)
@@ -33,30 +32,24 @@ function loadcase(casenum::String)
 	return network
 end
 
-case14 = loadcase("case14")
-case30 = loadcase("case30")
-case57 = loadcase("case57")
-case118 = loadcase("case118")
-case500 = loadcase("case500")
-case2000 = loadcase("case2000")
 cases = Dict(
-	"case14" => case14,
-	"case30" => case30,
-	"case57" => case57,
-	"case118" => case118,
-	"case500" => case500,
-	"case2000" => case2000
+	"case14" => loadcase("case14"),
+	"case30" => loadcase("case30"),
+	"case57" => loadcase("case57"),
+	"case118" => loadcase("case118"),
+	"case500" => loadcase("case500"),
+	"case2000" => loadcase("case2000")
 )
 println("Cases loaded!")
 
-function uniform_creator(
+function generator_w_checkpoint(
 		folder_path,
 		dataset_size,
 		point_generator,
 		topology_perturb,
 )
 	progress_results = joinpath(folder_path, "results.json")
-	num_parts = 50
+	num_parts = 10
 	fragment = Int(dataset_size/num_parts)
 	A = nothing
 	b = nothing
@@ -103,7 +96,6 @@ function uniform_creator(
 			println("##\t\tCREATED PART $i/$(num_parts)!\t\t\t##")
 			println("##\t\t\t\t\t\t\t\t##")
 			println("##################################################\n\n\n")
-			return
 		end
 	end
 end
@@ -112,10 +104,14 @@ end
 if length(ARGS) == 0
 	println("No arguments provided!")
 else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
-	data_method, comp_method = split(ARGS[1], "_")
+	# data_method, comp_method = split(ARGS[1], "_")
+	comp_method = ARGS[1]
 	network_name = ARGS[2]
 	topology_perturb = ARGS[3]
 	data_dir = ARGS[4] # setting an absolute path here for now.
+
+	# Handles comp_method
+	point_generator = nothing
 	if comp_method == "linear"
 		point_generator = OPFLearn.create_samples
 		parallel = false
@@ -123,7 +119,20 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 		point_generator = OPFLearn.dist_create_samples
 		parallel = true
 	end
+
+	# Handles checkpoints
+	with_checkpoint = nothing
+	if length(ARGS) >= 4
+		with_checkpoint = true
+	else
+		with_checkpoint = false
+	end
+
+	# Loads correct network
 	network = cases[network_name]
+
+	# Sets topology perturbation and number of samples for it
+	dataset_size = nothing
 	if topology_perturb == "none"
 		dataset_size = 56000
 	elseif topology_perturb == "n-1"
@@ -131,65 +140,33 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	else
 		dataset_size = 20000
 	end
-	if data_method == "seeds"
-		folder_path = joinpath("$(network_name)_seeds", topology_perturb)
-		seeds_needed = trunc(Int, dataset_size * 0.03)
-		samples_per_seed = ceil(Int, dataset_size / seeds_needed) - 1
-		if network_name in ["case57", "case2000"]
-			portion_of_new_seeds = 0.3
-		else
-			portion_of_new_seeds = 0.1
-		end
-		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
-		if length(ARGS) == 4 && ARGS[4] == "just_expansion"
-			expand_dataset_seeds(
-				joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
-				cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-				perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-				parallel=parallel
-			)
-		else
-			allseeds = create_dataset_seeds(
-				network, seeds_needed; perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-				min_distance=-2., save_path=folder_path, portion_of_new_seeds=portion_of_new_seeds,
-				point_generator=point_generator)
-			println("\n\n\n#########################\n\n\n")
-			expand_dataset_seeds(
-				joinpath(folder_path, "seeds.json"), samples_per_seed; base_case=network,
-				cp_seeds_to_raw=true, seed_expander=OPFLearn.create_seed_samples,
-				perturb_topology_method=topology_perturb, perturb_costs_method="shuffle",
-				parallel=parallel
-			)
-		end
-	elseif data_method == "uniform"
-		folder_path = joinpath(data_dir, "$(network_name)", topology_perturb)
-		println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method, data method: $data_method")
-		# Make folder
-		mkpath(joinpath(folder_path, "raw"))
-		if topology_perturb == "none"
-			with_checkpoint = false
-		else
-			with_checkpoint = false
-		end
-		if !with_checkpoint
-			# Create samples
-			results = point_generator(network, dataset_size; save_path=folder_path, perturb_costs_method="shuffle",
-				perturb_topology_method=topology_perturb, net_path=folder_path, save_max_load=true,)
-			# Results file name
-			file_name = joinpath(folder_path, "results.json")
-			open(file_name, "w") do io
-				JSON.print(io, results)
-			end
-			return
-		else
-			uniform_creator(
-				folder_path,
-				dataset_size,
-				point_generator,
-				topology_perturb,
-			)
-		end
-		println("DONE")
 
+	println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method")
+
+	# Set up folders
+	folder_path = joinpath(network_name, topology_perturb)
+	mkpath(folder_path)
+	mkpath(joinpath(folder_path, "raw"))
+
+	# Start generation
+	if !with_checkpoint
+		# Create samples
+		results = point_generator(network, dataset_size; save_path=folder_path, perturb_costs_method="shuffle",
+			perturb_topology_method=topology_perturb, net_path=folder_path, save_max_load=true,)
+		# Results file name
+		file_name = joinpath(folder_path, "results.json")
+		open(file_name, "w") do io
+			JSON.print(io, results)
+		end
+	else
+		generator_w_checkpoint(
+			folder_path,
+			dataset_size,
+			point_generator,
+			topology_perturb,
+		)
 	end
+
+	println("DONE")
+
 end
