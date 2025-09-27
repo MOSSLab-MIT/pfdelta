@@ -122,7 +122,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 
 	# Handles checkpoints
 	with_checkpoint = nothing
-	if length(ARGS) >= 4
+	if length(ARGS) >= 5
 		with_checkpoint = true
 	else
 		with_checkpoint = false
@@ -144,8 +144,7 @@ else # 1st linear/parallel, 2nd case name, 3rd topology perturbation
 	println("Doing case: $network_name, perturbation: $topology_perturb, comp method: $comp_method")
 
 	# Set up folders
-	folder_path = joinpath(network_name, topology_perturb)
-	mkpath(folder_path)
+	folder_path = joinpath(data_dir, network_name, topology_perturb)
 	mkpath(joinpath(folder_path, "raw"))
 
 	# Start generation
