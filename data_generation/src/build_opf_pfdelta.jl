@@ -1,3 +1,4 @@
+# TODO: rename this function
 function build_opf_power_flow_delta(pm)
     variable_bus_voltage_pfdelta(pm)
     variable_gen_power_pfdelta(pm)
@@ -75,6 +76,8 @@ function variable_gen_power_pfdelta(pm; nw::Int=PM.nw_id_default)
         if !(gen["gen_bus"] in slack_bus)
             JuMP.set_lower_bound(pg[i], gen["pmin"])
             JuMP.set_upper_bound(pg[i], gen["pmax"])
+        else
+            JuMP.set_lower_bound(pg[i], 0)
         end
     end
 

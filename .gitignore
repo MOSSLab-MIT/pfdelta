@@ -5,6 +5,7 @@
 *.mat
 *.png
 *.out
+*.pkl
 
 .ipynb_checkpoints
 tutorial.ipynb
@@ -12,6 +13,7 @@ tutorial.ipynb
 data
 runs
 experiment_results
+case14
 case14_seeds
 case30_data
 case57_seeds
@@ -19,12 +21,17 @@ case118_seeds
 case500_seeds
 case2000_seeds
 case14_unif
+case30
 case30_data
+case57
 case57_seeds
 case57_unif
+case118
 case118_seeds
 case118_unif
+case500
 case500_seeds
 case500_unif
+case2000
 case2000_seeds
 case2000_unif

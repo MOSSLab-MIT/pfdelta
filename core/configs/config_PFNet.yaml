@@ -2,7 +2,7 @@ config_type: experiment
 dataset:
   datasets:
   - add_bus_type: false
-    case_name: case118_seeds
+    case_name: case14_seeds
     model: PFNet
     name: pfdeltaPFNet
     root_dir: data/pfdelta_data
@@ -10,7 +10,7 @@ dataset:
     task: 1.3
     transform: pfnet_data_mean0_var1
   - add_bus_type: false
-    case_name: case118_seeds
+    case_name: case14_seeds
     model: PFNet
     name: pfdeltaPFNet
     root_dir: data/pfdelta_data
