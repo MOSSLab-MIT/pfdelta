@@ -334,6 +334,8 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		# Perturb generator costs
 		perturb_costs!(net_perturbed; method=perturb_costs_method)
 
+		# Change bus type to PV if needed
+		change_bus_type!(net_perturbed)
 		#######################################
 
 		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Topology perturbed!")
