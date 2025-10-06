@@ -1,0 +1,6 @@
+README.md
+setup.py
+pfdelta.egg-info/PKG-INFO
+pfdelta.egg-info/SOURCES.txt
+pfdelta.egg-info/dependency_links.txt
+pfdelta.egg-info/top_level.txt
