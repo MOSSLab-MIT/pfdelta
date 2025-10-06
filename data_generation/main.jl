@@ -9,7 +9,6 @@ end
 @everywhere begin
 using JSON
 using Debugger
-using Plots
 using Statistics
 
 using PowerModels
