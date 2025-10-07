@@ -131,7 +131,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		if length(b) > n_certs
 			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Updating polytope center")
 			# Fully replace values in sample_chnl
-			center, radius = chebyshev_center(A, b; x0=center, r0=radius)
+			center, radius = chebyshev_center(A, b)
 			if reset_level > 1
 				x0 = (base_load_feasible * 0.1 + x0 * 0.9) * 0.9 + center' * 0.1
 			elseif reset_level > 0
