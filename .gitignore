@@ -9,6 +9,8 @@
 
 .ipynb_checkpoints
 tutorial.ipynb
+setup.py
+
 
 data
 runs
@@ -35,3 +37,6 @@ case500_unif
 case2000
 case2000_seeds
 case2000_unif
+notebooks
+tests
+pfdelta.egg-info
