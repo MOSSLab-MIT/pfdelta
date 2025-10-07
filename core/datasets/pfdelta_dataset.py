@@ -2,7 +2,7 @@ import json
 import os
 from tqdm import tqdm
 from functools import partial
-
+import glob
 import torch
 from torch_geometric.data import InMemoryDataset, HeteroData
 
@@ -21,6 +21,9 @@ class PFDeltaDataset(InMemoryDataset):
         self,
         root_dir="data",
         case_name="",
+        perturbation="",
+        feasibility_type="",
+        n_samples=-1,
         split="train",
         model="",
         task=1.3,
@@ -37,69 +40,88 @@ class PFDeltaDataset(InMemoryDataset):
         self.task = task
         self.model = model
         self.root = os.path.join(root_dir)
+
+        self.perturbation = perturbation  # n, n-1, n-2
+        self.feasibility_type = feasibility_type  # feasible, near_infeasible, approaching_infeasible, or empty
+        self.n_samples = n_samples
+
         if task in [3.2, 3.3]:
             self._custom_processed_dir = os.path.join(
                 self.root, "processed", f"combined_task_{task}_{model}_"
             )
+
+        elif task == "analysis":
+            self._custom_processed_dir = os.path.join(
+                self.root,
+                "processed",
+                f"task_{self.task}_{self.case_name}_{self.perturbation}_{self.feasibility_type}_{self.n_samples}",
+            )
+            self.split = "all"
         else:
             self._custom_processed_dir = os.path.join(
                 self.root, "processed", f"combined_task_{task}_{model}_{self.case_name}"
             )
 
         self.all_case_names = [
-            "case14_seeds",
-            "case30_seeds",
-            "case57_seeds",
-            "case118_seeds",
-            "case500_seeds",
-            "case2000_seeds",
+            "case14",
+            "case30",
+            "case57",
+            "case118",
+            "case500",
+            "case2000",
         ]
 
-        self.task_config = {
-            1.1: {"feasible": {"none": 54000, "n-1": 0, "n-2": 0}},
-            1.2: {"feasible": {"none": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible": {"none": 18000, "n-1": 18000, "n-2": 18000}},
-            2.1: {"feasible": {"none": 18000, "n-1": 18000, "n-2": 18000}},
-            2.2: {"feasible": {"none": 12000, "n-1": 12000, "n-2": 12000}},
-            2.3: {"feasible": {"none": 6000, "n-1": 6000, "n-2": 6000}},
-            3.1: {"feasible": {"none": 18000, "n-1": 18000, "n-2": 18000}},
-            3.2: {"feasible": {"none": 18000, "n-1": 18000, "n-2": 18000}},
-            3.3: {"feasible": {"none": 18000, "n-1": 18000, "n-2": 18000}},
+        self.task_config = {  # values here will have the number of train samples
+            1.1: {"feasible": {"n": 54000, "n-1": 0, "n-2": 0}},
+            1.2: {"feasible": {"n": 27000, "n-1": 27000, "n-2": 0}},
+            1.3: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
+            2.1: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
+            2.2: {"feasible": {"n": 12000, "n-1": 12000, "n-2": 12000}},
+            2.3: {"feasible": {"n": 6000, "n-1": 6000, "n-2": 6000}},
+            3.1: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
+            3.2: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
+            3.3: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
             4.1: {
-                "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800},
-                "feasible": {"none": 16200, "n-1": 16200, "n-2": 16200},
+                "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
+                "feasible": {"n": 16200, "n-1": 16200, "n-2": 16200},
             },
             4.2: {
-                "approaching infeasible": {"none": 7200, "n-1": 7200, "n-2": 7200},
-                "near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800},
-                "feasible": {"none": 9000, "n-1": 9000, "n-2": 9000},
+                "approaching infeasible": {"n": 7200, "n-1": 7200, "n-2": 7200},
+                "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
+                "feasible": {"n": 9000, "n-1": 9000, "n-2": 9000},
             },
-            4.3: {"near infeasible": {"none": 1800, "n-1": 1800, "n-2": 1800}},
+            4.3: {"near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800}},
+            "analysis": {
+                "feasible": {"n": 56000, "n-1": 29000, "n-2": 20000},
+                "near infeasible": {"n": 2000, "n-1": 2000, "n-2": 2000},
+                "approaching infeasible": {"n": 7200, "n-1": 7200, "n-2": 7200},
+            },
         }
 
-        if case_name == "case2000_seeds":
+        if case_name == "case2000":
             self.task_config = {
-                1.3: {"feasible": {"none": 10000, "n-1": 10000, "n-2": 10000}}
+                1.3: {"feasible": {"n": 10000, "n-1": 10000, "n-2": 10000}}
             }
 
         self.feasibility_config = {
             "feasible": {
-                "none": 56000,
+                "n": 56000,
                 "n-1": 29000,
                 "n-2": 20000,
-                "test": {"none": 2000, "n-1": 2000, "n-2": 2000},
+                "test": {"n": 2000, "n-1": 2000, "n-2": 2000},
             },
             "approaching infeasible": {
-                "none": 7200,
+                "n": 7200,
                 "n-1": 7200,
                 "n-2": 7200,
                 "test": None,  # no test set for this regime
+                "test": None,  # no test set for this regime
             },
             "near infeasible": {
-                "none": 2000,
+                "n": 2000,
                 "n-1": 2000,
                 "n-2": 2000,
-                "test": {"none": 200, "n-1": 200, "n-2": 200},
+                "test": {"n": 200, "n-1": 200, "n-2": 200},
             },
         }
 
@@ -110,14 +132,19 @@ class PFDeltaDataset(InMemoryDataset):
                 "test": self.all_case_names,
             },
             3.2: {
-                "train": ["case14_seeds", "case30_seeds", "case57_seeds"],
-                "val": ["case118_seeds", "case500_seeds"],
-                "test": ["case118_seeds", "case500_seeds"],
+                "train": ["case14", "case30", "case57"],
+                "val": ["case118", "case500"],
+                "test": ["case118", "case500"],
             },
             3.3: {
-                "train": ["case118_seeds", "case500_seeds"],
-                "val": ["case14_seeds", "case30_seeds", "case57_seeds"],
-                "test": ["case14_seeds", "case30_seeds", "case57_seeds"],
+                "train": ["case118", "case500"],
+                "val": ["case14", "case30", "case57"],
+                "test": ["case14", "case30", "case57"],
+            },
+            "analysis": {  # i maybe can get rid of this
+                "train": [self.case_name],
+                "val": self.all_case_names,
+                "test": self.all_case_names,
             },
         }
 
@@ -139,12 +166,15 @@ class PFDeltaDataset(InMemoryDataset):
 
     @property
     def processed_file_names(self):
+        if self.task == "analysis":
+            return ["all.pt"]  # Only require all.pt for analysis task
+
         return ["train.pt", "val.pt", "test.pt"]
 
-    def build_heterodata(self, pm_case, feasibility=False):
+    def build_heterodata(self, pm_case, is_cpf_sample=False):
         data = HeteroData()
 
-        if feasibility:
+        if is_cpf_sample:
             network_data = pm_case["solved_net"]
             solution_data = pm_case["solved_net"]
         else:
@@ -204,7 +234,7 @@ class PFDeltaDataset(InMemoryDataset):
                         pg += gen_sol["pg"]
                         qg += gen_sol["qg"]
                     else:
-                        if feasibility:
+                        if is_cpf_sample:
                             assert gen["pg"] == 0 and gen["qg"] == 0, (
                                 f"Expected gen {gen_id} to be off"
                             )
@@ -220,7 +250,7 @@ class PFDeltaDataset(InMemoryDataset):
 
             if bus_type_now == 2 and pg == 0.0 and qg == 0.0:
                 bus_type_now = 1  # PV bus with no gen --> becomes PQ
-                # maybe add an assert here to check if all gens were off.
+                # TODO: maybe add an assert here to check if all gens were off.
 
             bus_type.append(torch.tensor(bus_type_now))
 
@@ -276,7 +306,7 @@ class PFDeltaDataset(InMemoryDataset):
                 )
                 slack_gen.append(is_slack)
             else:
-                if feasibility:
+                if is_cpf_sample:
                     assert (
                         solution_data["gen"][gen_id]["pg"] == 0
                         and solution_data["gen"][gen_id]["qg"] == 0
@@ -322,7 +352,7 @@ class PFDeltaDataset(InMemoryDataset):
             )
 
             branch_sol = solution_data["branch"].get(branch_id_str)
-            if feasibility == None:
+            if not is_cpf_sample:
                 assert branch_sol is not None, (
                     f"Missing solution for active branch {branch_id_str}"
                 )
@@ -412,6 +442,55 @@ class PFDeltaDataset(InMemoryDataset):
 
         return data
 
+    def get_analysis_data(self, root):  # note that root here is the case folder
+        dataset_size = (
+            self.n_samples
+            if self.n_samples > 0
+            else self.task_config[self.task][self.sample_type][self.perturbation]
+        )
+        data_list = []
+
+        # TODO: could make this is a dict instead somewhere in the constructor.
+        if self.feasibility_type == "feasible":
+            raw_fnames = glob.glob(
+                os.path.join(root, self.perturbation, "raw", "*.json")
+            )
+
+        elif self.feasibility_type == "near infeasible":
+            raw_fnames = glob.glob(
+                os.path.join(root, self.perturbation, "nose", "train", "*.json")
+            )
+            raw_fnames.extend(
+                glob.glob(
+                    os.path.join(root, self.perturbation, "nose", "test", "*.json")
+                )
+            )
+
+        elif self.feasibility_type == "approaching infeasible":
+            raw_fnames = glob.glob(
+                os.path.join(root, self.perturbation, "around_nose", "train", "*.json")
+            )
+
+        data_list = []
+        is_cpf_sample = True if self.feasibility_type != "feasible" else False
+        for file in raw_fnames[:dataset_size]:
+            with open(file, "r") as f:
+                pm_case = json.load(f)
+            data = self.build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
+            data_list.append(data)
+
+        return data_list
+
+    def get_shuffle_file_path(self, grid_type, root):
+        if "case2000" in root:
+            return os.path.join(
+                self.root_dir, "shuffle_files", grid_type, "raw_shuffle_2000.json"
+            )
+        else:
+            return os.path.join(
+                self.root, "shuffle_files", grid_type, "raw_shuffle.json"
+            )
+
     def shuffle_split_and_save_data(self, root):
         # when being combined
         task, model = self.task, self.model
@@ -423,7 +502,7 @@ class PFDeltaDataset(InMemoryDataset):
         for feasibility, train_cfg_dict in task_config.items():
             feasibility_config = self.feasibility_config[feasibility]
 
-            for grid_type in ["none", "n-1", "n-2"]:
+            for grid_type in ["n", "n-1", "n-2"]:
                 train_size = train_cfg_dict[grid_type]
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
@@ -432,7 +511,7 @@ class PFDeltaDataset(InMemoryDataset):
                     continue
 
                 if feasibility == "feasible":
-                    shuffle_path = os.path.join(root, grid_type, "raw_shuffle.json")
+                    shuffle_path = self.get_shuffle_file_path(grid_type, root)
                     with open(shuffle_path, "r") as f:
                         shuffle_dict = json.load(f)
                     shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
@@ -453,7 +532,7 @@ class PFDeltaDataset(InMemoryDataset):
                             int(0.9 * train_size) : int(train_size)
                         ],  # this is optional!
                         "test": fnames_shuffled[-int(test_size) :],
-                    }
+                    }  # always takes the last test_size samples for test
 
                     for split, files in split_dict.items():
                         data_list = []
@@ -475,10 +554,6 @@ class PFDeltaDataset(InMemoryDataset):
                             f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
                         )
 
-                        if not os.path.exists(
-                            os.path.join(root, f"{grid_type}/processed")
-                        ):
-                            os.mkdir(os.path.join(root, f"{grid_type}/processed"))
                         if not os.path.exists(processed_path):
                             os.mkdir(processed_path)
 
@@ -493,11 +568,11 @@ class PFDeltaDataset(InMemoryDataset):
                         else "nose"
                     )
                     infeasible_train_path = os.path.join(
-                        root, grid_type, "close2inf_train", infeasibility_type
+                        root, grid_type, infeasibility_type, "train"
                     )
                     infeasible_test_path = os.path.join(
-                        root, grid_type, "close2inf_test", infeasibility_type
-                    )
+                        root, grid_type, infeasibility_type, "test"
+                    )  # paths have to be updated here
 
                     # Collect filenames
                     train_files = sorted(
@@ -536,7 +611,7 @@ class PFDeltaDataset(InMemoryDataset):
                         for fname in tqdm(files, desc=f"Building {split} data"):
                             with open(fname, "r") as f:
                                 pm_case = json.load(f)
-                            data = self.build_heterodata(pm_case, feasibility=True)
+                            data = self.build_heterodata(pm_case, is_cpf_sample=True)
                             data_list.append(data)
 
                         if len(data_list) == 0:
@@ -571,8 +646,26 @@ class PFDeltaDataset(InMemoryDataset):
             roots = [os.path.join(self.root, self.case_name)]
             casename = self.case_name
 
+        if task == "analysis":  # no need to combine anything here
+            print(f"Processing data for task {task}")
+            task_data_list = self.get_analysis_data(
+                os.path.join(self.root, self.case_name)
+            )
+            data, slices = self.collate(task_data_list)
+            processed_path = os.path.join(
+                self.root,
+                "processed",
+                f"task_{self.task}_{self.case_name}_{self.perturbation}_{self.feasibility_type}_{self.n_samples}",
+            )
+
+            if not os.path.exists(processed_path):
+                os.makedirs(processed_path)
+
+            torch.save((data, slices), os.path.join(processed_path, "all.pt"))
+            return
+
         # First, process each root and collect all data
-        for root in roots:
+        for root in roots:  # loops over cases
             print(f"Processing combined data for task {task}")
             task_data_lists = self.shuffle_split_and_save_data(root)
 
@@ -596,8 +689,6 @@ class PFDeltaDataset(InMemoryDataset):
                     self.root, f"processed/combined_task_{task}_{model}_{casename}"
                 )
 
-                if not os.path.exists(os.path.join(self.root, "processed")):
-                    os.makedirs(os.path.join(self.root, "processed"))
                 if not os.path.exists(concat_path):
                     os.makedirs(concat_path)
 
