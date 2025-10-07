@@ -8,38 +8,57 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
         # Linear projection for all node features
-        self.node_projections = nn.ModuleDict({
-            node_type: nn.Linear(data.num_node_features[node_type], hidden_size)
-            for node_type in data.num_node_features.keys()
-        })
+        self.node_projections = nn.ModuleDict(
+            {
+                node_type: nn.Linear(data.num_node_features[node_type], hidden_size)
+                for node_type in data.num_node_features.keys()
+            }
+        )
         # Linear projection for all edge features
-        self.edge_projections = nn.ModuleDict({
-            str(edge_type): nn.Linear(data.num_edge_features[edge_type], hidden_size)
-            for edge_type in data.num_edge_features.keys() if data.num_edge_features[edge_type] != 0
-            # not including subnode links which have no attributes.
-        })
-    
+        self.edge_projections = nn.ModuleDict(
+            {
+                str(edge_type): nn.Linear(
+                    data.num_edge_features[edge_type], hidden_size
+                )
+                for edge_type in data.num_edge_features.keys()
+                if data.num_edge_features[edge_type] != 0
+                # not including subnode links which have no attributes.
+            }
+        )
+
     def forward(self, data):
         device = data["bus"].x.device
         projected_nodes = {
-            node_type: self.node_projections[node_type](data[node_type].x) 
+            node_type: self.node_projections[node_type](data[node_type].x)
             for node_type in data.num_node_features.keys()
         }
 
         projected_edges = {}
         for edge_type in data.edge_types:
             if "edge_attr" in data[edge_type]:
-                projected_edges[str(edge_type)] = self.edge_projections[str(edge_type)](data[edge_type].edge_attr)
+                projected_edges[str(edge_type)] = self.edge_projections[str(edge_type)](
+                    data[edge_type].edge_attr
+                )
             elif edge_type[2] != "bus":
-                num_edges = data[edge_type]['edge_index'].shape[1]
-                projected_edges[str(edge_type)] = torch.zeros((num_edges, self.hidden_size), device=device)
+                num_edges = data[edge_type]["edge_index"].shape[1]
+                projected_edges[str(edge_type)] = torch.zeros(
+                    (num_edges, self.hidden_size), device=device
+                )
 
         return projected_nodes, projected_edges
 
 
 # Interaction Network Module
 class InteractionNetwork(nn.Module):
-    def __init__(self, edge_type_dict, node_type_dict, edge_dim, node_dim, hidden_dim, include_sent_messages=False):
+    def __init__(
+        self,
+        edge_type_dict,
+        node_type_dict,
+        edge_dim,
+        node_dim,
+        hidden_dim,
+        include_sent_messages=False,
+    ):
         """
         PyTorch implementation of the Interaction Network.
         Args:
@@ -53,7 +72,9 @@ class InteractionNetwork(nn.Module):
         super().__init__()
         self.include_sent_messages = include_sent_messages
         self.edge_update = EdgeUpdate(edge_dim, node_dim, hidden_dim, edge_type_dict)
-        self.node_update = NodeUpdate(node_dim, hidden_dim, node_type_dict, self.include_sent_messages)
+        self.node_update = NodeUpdate(
+            node_dim, hidden_dim, node_type_dict, self.include_sent_messages
+        )
 
     def forward(self, nodes, edges, data):
         """
@@ -69,8 +90,13 @@ class InteractionNetwork(nn.Module):
         # Apply marshalling and relational model phi_r (edge update)
         # phi_r is applied onto src node features, dst node features, and edges
         device = data["bus"].x.device
-        edge_hidden_dim = edges.get("('bus', 'ac_line', 'bus')", edges.get("('bus', 'branch', 'bus')")).shape[-1]
-        sent_received_node_type = {node_type: torch.zeros(n.shape[0], edge_hidden_dim, device=device) for node_type, n in nodes.items()}
+        edge_hidden_dim = edges.get(
+            "('bus', 'ac_line', 'bus')", edges.get("('bus', 'branch', 'bus')")
+        ).shape[-1]
+        sent_received_node_type = {
+            node_type: torch.zeros(n.shape[0], edge_hidden_dim, device=device)
+            for node_type, n in nodes.items()
+        }
         updated_nodes_dict = {}
         updated_edges_dict = {}
 
@@ -86,19 +112,27 @@ class InteractionNetwork(nn.Module):
             receiver_features = nodes[receiver_type][receivers]
 
             # Calculate edge updates
-            updated_edges = self.edge_update(edge_feats, sender_features, receiver_features, edge_type)
+            updated_edges = self.edge_update(
+                edge_feats, sender_features, receiver_features, edge_type
+            )
 
             # Pass messages
-            sent_received_node_type[receiver_type].scatter_add_(0, receivers.unsqueeze(-1).expand_as(updated_edges), updated_edges)
+            sent_received_node_type[receiver_type].scatter_add_(
+                0, receivers.unsqueeze(-1).expand_as(updated_edges), updated_edges
+            )
             if self.include_sent_messages:
-                sent_received_node_type[sender_type].scatter_add_(0, senders.unsqueeze(-1).expand_as(updated_edges), updated_edges)
+                sent_received_node_type[sender_type].scatter_add_(
+                    0, senders.unsqueeze(-1).expand_as(updated_edges), updated_edges
+                )
 
             updated_edges_dict[edge_type] = updated_edges + edge_feats
 
         # Apply the object model phi_o (node_update)
         # phi_o is applied to the aggregated edge features (with sent and recieved messages)
         for node_type, node_feats in nodes.items():
-            updated_nodes = self.node_update(node_feats, sent_received_node_type[node_type], node_type)
+            updated_nodes = self.node_update(
+                node_feats, sent_received_node_type[node_type], node_type
+            )
             updated_nodes_dict[node_type] = updated_nodes + node_feats
         return updated_nodes_dict, updated_edges_dict
 
@@ -115,12 +149,17 @@ class EdgeUpdate(nn.Module):
             out_dim (int): Output edge feature dimension.
         """
         super().__init__()
-        self.mlps = nn.ModuleDict({edge_type: nn.Sequential(
-            nn.Linear(edge_dim + 2 * node_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, edge_dim)
-        ) for edge_type in edge_type_dict.keys()})
+        self.mlps = nn.ModuleDict(
+            {
+                edge_type: nn.Sequential(
+                    nn.Linear(edge_dim + 2 * node_dim, hidden_dim),
+                    nn.LayerNorm(hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, edge_dim),
+                )
+                for edge_type in edge_type_dict.keys()
+            }
+        )
 
     def forward(self, edges, sender_features, receiver_features, edge_type):
         """
@@ -137,7 +176,9 @@ class EdgeUpdate(nn.Module):
 
 
 class NodeUpdate(nn.Module):
-    def __init__(self, node_dim, hidden_dim, node_type_dict, include_sent_messages=False):
+    def __init__(
+        self, node_dim, hidden_dim, node_type_dict, include_sent_messages=False
+    ):
         """
         Node update module for updating node features.
         Args:
@@ -147,12 +188,17 @@ class NodeUpdate(nn.Module):
         """
         super().__init__()
         self.include_sent_messages = include_sent_messages
-        self.mlps = nn.ModuleDict({node_type: nn.Sequential(
-            nn.Linear(node_dim * 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, node_dim)
-        ) for node_type in node_type_dict.keys()})
+        self.mlps = nn.ModuleDict(
+            {
+                node_type: nn.Sequential(
+                    nn.Linear(node_dim * 2, hidden_dim),
+                    nn.LayerNorm(hidden_dim),
+                    nn.ReLU(),
+                    nn.Linear(hidden_dim, node_dim),
+                )
+                for node_type in node_type_dict.keys()
+            }
+        )
 
     def forward(self, node_features, updated_messages, node_type):
         """
@@ -166,7 +212,7 @@ class NodeUpdate(nn.Module):
         """
         x = torch.cat([node_features, updated_messages], dim=-1)
         return self.mlps[node_type](x)
-    
+
 
 #  Decoder
 class DecoderOPF(nn.Module):
@@ -174,17 +220,20 @@ class DecoderOPF(nn.Module):
         super(DecoderOPF, self).__init__()
 
         # Linear projection for all node features
-        self.node_decodings = nn.ModuleDict({
-            node_type: nn.Sequential(nn.Linear(hidden_size, 256),
-                                     nn.LayerNorm(256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 256),
-                                     nn.LayerNorm(256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 2)
-                                     )
-            for node_type in ["bus", "generator"]
-        })
+        self.node_decodings = nn.ModuleDict(
+            {
+                node_type: nn.Sequential(
+                    nn.Linear(hidden_size, 256),
+                    nn.LayerNorm(256),
+                    nn.ReLU(),
+                    nn.Linear(256, 256),
+                    nn.LayerNorm(256),
+                    nn.ReLU(),
+                    nn.Linear(256, 2),
+                )
+                for node_type in ["bus", "generator"]
+            }
+        )
 
     def forward(self, node_dict, data):
         # pmin, pmax = data["generator"].x[:, 2:4].T
@@ -202,12 +251,16 @@ class DecoderOPF(nn.Module):
         # Passing vm, pg, qg through the sigmoid layer.
         output_va = output_nodes["bus"][:, 0]
         output_vm = torch.sigmoid(output_nodes["bus"][:, -1]) * (vmax - vmin) + vmin
-        output_pg = torch.sigmoid(output_nodes["generator"][:, 0]) * (pmax - pmin) + pmin
-        output_qg = torch.sigmoid(output_nodes["generator"][:, -1]) * (qmax - qmin) + qmin
+        output_pg = (
+            torch.sigmoid(output_nodes["generator"][:, 0]) * (pmax - pmin) + pmin
+        )
+        output_qg = (
+            torch.sigmoid(output_nodes["generator"][:, -1]) * (qmax - qmin) + qmin
+        )
 
         output_dict = {
             "bus": torch.stack([output_va, output_vm], dim=1),
-            "generator": torch.stack([output_pg, output_qg], dim=1)
+            "generator": torch.stack([output_pg, output_qg], dim=1),
         }
 
         return output_dict
@@ -218,20 +271,22 @@ class DecoderPF(nn.Module):
         super(DecoderPF, self).__init__()
 
         # Linear projection for all node features
-        self.node_decodings = nn.ModuleDict({
-            node_type: nn.Sequential(nn.Linear(hidden_size, 256),
-                                     nn.LayerNorm(256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 256),
-                                     nn.LayerNorm(256),
-                                     nn.ReLU(),
-                                     nn.Linear(256, 2)
-                                     )
-            for node_type in ["PV", "PQ", "slack"]
-        })
+        self.node_decodings = nn.ModuleDict(
+            {
+                node_type: nn.Sequential(
+                    nn.Linear(hidden_size, 256),
+                    nn.LayerNorm(256),
+                    nn.ReLU(),
+                    nn.Linear(256, 256),
+                    nn.LayerNorm(256),
+                    nn.ReLU(),
+                    nn.Linear(256, 2),
+                )
+                for node_type in ["PV", "PQ", "slack"]
+            }
+        )
 
     def forward(self, node_dict, data):
-        
         device = data["bus"].x.device
         output_dict = {
             node_type: self.node_decodings[node_type](node_dict[node_type])

@@ -1,7 +1,6 @@
 import os
 from functools import partial
 
-import torch
 from torch_geometric.datasets import OPFDataset
 
 from core.utils.registry import registry
@@ -16,8 +15,8 @@ def opfdata_mean0_var1(stats, data):
     def exception_transform(x, mean, std):
         r"""Transforms every value to mean 0, var 1 unless std is 0, in which
         case the value is just transformed to 0."""
-        ones_std = std == 0.
-        std[ones_std] = 1.
+        ones_std = std == 0.0
+        std[ones_std] = 1.0
         x = mean0_var1(x, mean, std)
         return x
 
@@ -27,10 +26,12 @@ def opfdata_mean0_var1(stats, data):
     data["generator"]["q_lims"] = data["generator"]["x"][:, 5:7]
 
     # Branch values
-    data["bus", "ac_line", "bus"]["branch_vals"] = \
-        data["bus", "ac_line", "bus"]["edge_attr"]
-    data["bus", "transformer", "bus"]["branch_vals"] = \
-        data["bus", "transformer", "bus"]["edge_attr"]
+    data["bus", "ac_line", "bus"]["branch_vals"] = data["bus", "ac_line", "bus"][
+        "edge_attr"
+    ]
+    data["bus", "transformer", "bus"]["branch_vals"] = data[
+        "bus", "transformer", "bus"
+    ]["edge_attr"]
 
     # Loads and shunts
     data["load"]["unnormalized"] = data["load"]["x"]
@@ -57,19 +58,20 @@ def opfdata_mean0_var1(stats, data):
 
     return data
 
+
 @registry.register_dataset("opfdata")
 class OPFData(OPFDataset):
     def __init__(
-            self,
-            split="train",
-            case_name="pglib_opf_case14_ieee",
-            num_groups=1,
-            topological_perturbations=False,
-            transform=None,
-            pre_transform=None,
-            pre_filter=None,
-            force_reload=False,
-        ):
+        self,
+        split="train",
+        case_name="pglib_opf_case14_ieee",
+        num_groups=1,
+        topological_perturbations=False,
+        transform=None,
+        pre_transform=None,
+        pre_filter=None,
+        force_reload=False,
+    ):
         self.root = os.path.join("data", "opfdata")
 
         if pre_transform is not None:

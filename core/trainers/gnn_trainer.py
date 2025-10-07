@@ -11,14 +11,15 @@ from core.utils.registry import registry
 
 @registry.register_trainer("gnn_trainer")
 class GNNTrainer(BaseTrainer):
-    def get_dataloader_class(self,):
+    def get_dataloader_class(
+        self,
+    ):
         return DataLoader
 
-
     def train_one_epoch(self, train_dataloader):
-        running_loss = [0.]*len(self.train_loss)
-        losses = [0.]*len(self.train_loss)
-        message = f"Epoch {self.epoch + 1} \U0001F3CB"
+        running_loss = [0.0] * len(self.train_loss)
+        losses = [0.0] * len(self.train_loss)
+        message = f"Epoch {self.epoch + 1} \U0001f3cb"
         for data in tqdm(train_dataloader, desc=message):
             # Copy data in case models overwrite inputs
             data = copy.deepcopy(data)
@@ -42,13 +43,12 @@ class GNNTrainer(BaseTrainer):
 
         return running_loss
 
-
     @torch.no_grad()
     def calc_one_val_error(self, val_dataloader, val_num):
         self.model.eval()
-        running_losses = [0.]*len(self.val_loss)
+        running_losses = [0.0] * len(self.val_loss)
         num_val_datasets = len(self.datasets[1:])
-        message = f"Processing validation set {val_num+1}/{num_val_datasets}"
+        message = f"Processing validation set {val_num + 1}/{num_val_datasets}"
         for data in tqdm(val_dataloader, desc=message):
             # Move data to device
             data = data.to(self.device)
@@ -61,8 +61,9 @@ class GNNTrainer(BaseTrainer):
 
         return running_losses
 
-
-    def modify_loss(self,):
+    def modify_loss(
+        self,
+    ):
         recycle_class = registry.get_loss_class("recycle_loss")
         # Add source to check if recycled is used in train
         losses = self.config["optim"]["train_params"]["train_loss"]
@@ -126,17 +127,14 @@ class GNNTrainer(BaseTrainer):
                 if found:
                     loss.source = source
 
-
     def customize_model_init_inputs(self, model_inputs):
         """We will use this method to pass data information to the model."""
         # First, verify that the model inputs are a dictionary
         assert type(model_inputs) == dict
         # Second, verify that the model is requiring data information
         ## This case is for the full training dataset
-        if "dataset" in model_inputs and \
-                model_inputs["dataset"] == "_include_":
+        if "dataset" in model_inputs and model_inputs["dataset"] == "_include_":
             model_inputs["dataset"] = self.datasets[0]
         ## This case is for a single data sample
-        if "data_sample" in model_inputs and \
-                model_inputs["data_sample"] == "_include_":
+        if "data_sample" in model_inputs and model_inputs["data_sample"] == "_include_":
             model_inputs["data_sample"] == self.datasets[0][0]

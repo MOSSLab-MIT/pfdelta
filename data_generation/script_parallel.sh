@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=n1_2000_nochpt
+#SBATCH --job-name=n-1_2000
 #SBATCH --time=7-00:00:00
 #SBATCH --cpus-per-task=72
 #SBATCH --output=%x-%j.out
