@@ -4,8 +4,10 @@ case14_data = PFDeltaDataset(
     root_dir="data",
     case_name="case14",
     perturbation="none",
-    task="analysis",
-    sample_type="feasible",
+    task=3.1,
+    feasibility_type="feasible",
+    n_samples=10,
+    force_reload=True,
 )
 
 print(case14_data[0])
