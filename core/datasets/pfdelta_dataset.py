@@ -434,7 +434,6 @@ class PFDeltaDataset(InMemoryDataset):
                 ("slack", "slack_link", "bus"): slack_to_bus,
             }.items():
                 edge_tensor = torch.stack(edges, dim=1)
-                edge_tensor = torch.stack(edges, dim=1)
                 data[link_name].edge_index = edge_tensor
                 data[
                     (link_name[2], link_name[1], link_name[0])
@@ -494,11 +493,9 @@ class PFDeltaDataset(InMemoryDataset):
     def shuffle_split_and_save_data(self, root):
         # when being combined
         task, model = self.task, self.model
-        task, model = self.task, self.model
         task_config = self.task_config[task]
 
         # create dicts to store all data lists per task for later concatenation
-        all_data_lists = {"train": [], "val": [], "test": []}
         all_data_lists = {"train": [], "val": [], "test": []}
 
         for feasibility, train_cfg_dict in task_config.items():
@@ -526,13 +523,6 @@ class PFDeltaDataset(InMemoryDataset):
                     fnames_shuffled = [
                         raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()
                     ]
-                    raw_fnames = [
-                        os.path.join(raw_path, f"sample_{i + 1}.json")
-                        for i in shuffle_map.keys()
-                    ]
-                    fnames_shuffled = [
-                        raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()
-                    ]
 
                     # extend the lists instead of overwriting
                     split_dict = {
@@ -545,9 +535,6 @@ class PFDeltaDataset(InMemoryDataset):
 
                     for split, files in split_dict.items():
                         data_list = []
-                        print(
-                            f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)"
-                        )
                         print(
                             f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)"
                         )
@@ -569,9 +556,6 @@ class PFDeltaDataset(InMemoryDataset):
                         if not os.path.exists(processed_path):
                             os.mkdir(processed_path)
 
-                        torch.save(
-                            (data, slices), os.path.join(processed_path, f"{split}.pt")
-                        )
                         torch.save(
                             (data, slices), os.path.join(processed_path, f"{split}.pt")
                         )
@@ -611,9 +595,6 @@ class PFDeltaDataset(InMemoryDataset):
                     # Create the split dictionary directly
                     split_idx = int(0.9 * len(train_files))
                     split_dict = {
-                        "train": train_files[:split_idx],
-                        "val": train_files[split_idx:],
-                        "test": test_files,
                         "train": train_files[:split_idx],
                         "val": train_files[split_idx:],
                         "test": test_files,
@@ -748,27 +729,6 @@ class PFDeltaDataset(InMemoryDataset):
                     f"task_{self.task}_{feasibility_str}_{self.model}",
                     f"{split_str}.pt",
                 )
-            _, casename_str, split_str, feasibility_str, grid_type_str = split.split(
-                "_"
-            )
-            if feasibility_str == "near infeasible":
-                processed_path = os.path.join(
-                    self.root,
-                    f"{casename_str}",
-                    f"{grid_type_str}",
-                    "processed",
-                    f"task_{4.1}_{feasibility_str}_{self.model}",
-                    f"{split_str}.pt",
-                )
-            else:
-                processed_path = os.path.join(
-                    self.root,
-                    f"{casename_str}",
-                    f"{grid_type_str}",
-                    "processed",
-                    f"task_{self.task}_{feasibility_str}_{self.model}",
-                    f"{split_str}.pt",
-                )
             print(f"Loading {split} dataset from {processed_path}")
             self.data, self.slices = torch.load(processed_path)
         else:
@@ -805,40 +765,9 @@ class PFDeltaGNS(PFDeltaDataset):
             force_reload,
         )
 
-
-class PFDeltaGNS(PFDeltaDataset):
-    def __init__(
-        self,
-        root_dir="data",
-        case_name="",
-        split="train",
-        model="GNS",
-        task=1.1,
-        add_bus_type=False,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-        force_reload=False,
-    ):
-        super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
-        )
-
     def build_heterodata(self, pm_case, feasibility=False):
         # call base version
         data = super().build_heterodata(pm_case, feasibility=feasibility)
-        num_buses = data["bus"].x.size(0)
-        num_gens = data["gen"].generation.size(0)
-        num_loads = data["load"].demand.size(0)
         num_buses = data["bus"].x.size(0)
         num_gens = data["gen"].generation.size(0)
         num_loads = data["load"].demand.size(0)
@@ -850,24 +779,13 @@ class PFDeltaGNS(PFDeltaDataset):
         qd_buses = torch.zeros(num_buses)
         pg_buses = torch.zeros(num_buses)
         qg_buses = torch.zeros(num_buses)
-        v_buses = torch.zeros(num_buses)
-        theta_buses = torch.zeros(num_buses)
-        pd_buses = torch.zeros(num_buses)
-        qd_buses = torch.zeros(num_buses)
-        pg_buses = torch.zeros(num_buses)
-        qg_buses = torch.zeros(num_buses)
 
         # Read bus types
-        bus_types = data["bus"].bus_type
         bus_types = data["bus"].bus_type
         x_gns = torch.zeros((num_buses, 2))
 
         for bus_idx in range(num_buses):
             bus_type = bus_types[bus_idx].item()
-            pf_x = data["bus"].x[bus_idx]
-            pf_y = data["bus"].x[bus_idx]
-            bus_demand = data["bus"].bus_demand[bus_idx]
-            bus_gen = data["bus"].bus_gen[bus_idx]
             pf_x = data["bus"].x[bus_idx]
             pf_y = data["bus"].x[bus_idx]
             bus_demand = data["bus"].bus_demand[bus_idx]
@@ -903,17 +821,6 @@ class PFDeltaGNS(PFDeltaDataset):
             qg_buses[bus_idx] = qg
 
         # Store in bus
-        data["bus"].x_gns = x_gns
-        data["bus"].v = v_buses
-        data["bus"].theta = theta_buses
-        data["bus"].pd = pd_buses
-        data["bus"].qd = qd_buses
-        data["bus"].pg = pg_buses
-        data["bus"].qg = qg_buses
-        data["bus"].delta_p = torch.zeros_like(v_buses)
-        data["bus"].delta_q = torch.zeros_like(v_buses)
-        data["gen"].num_nodes = num_gens
-        data["load"].num_nodes = num_loads
         data["bus"].x_gns = x_gns
         data["bus"].v = v_buses
         data["bus"].theta = theta_buses
@@ -1041,13 +948,6 @@ class PFDeltaPFNet(PFDeltaDataset):
         shunts = data["bus"].shunt
         num_gens = data["gen"].generation.size(0)
         num_loads = data["load"].demand.size(0)
-        num_buses = data["bus"].x.size(0)
-        bus_types = data["bus"].bus_type
-        pf_x = data["bus"].x
-        pf_y = data["bus"].y
-        shunts = data["bus"].shunt
-        num_gens = data["gen"].generation.size(0)
-        num_loads = data["load"].demand.size(0)
 
         # New node features for PFNet
         x_pfnet = []
@@ -1058,14 +958,11 @@ class PFDeltaPFNet(PFDeltaDataset):
             # One-hot encode bus type
             one_hot = torch.zeros(4)
             one_hot[bus_type - 1] = 1
-            one_hot = torch.zeros(4)
-            one_hot[bus_type - 1] = 1
             gs, bs = shunts[i]
 
             # Prediction mask
             if bus_type == 1:  # PQ
                 pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
-                va, vm = pf_y[i]
                 va, vm = pf_y[i]
                 pd, qd = pf_x[i]
                 input_mask = (1 - pred_mask).float()
@@ -1075,7 +972,6 @@ class PFDeltaPFNet(PFDeltaDataset):
             elif bus_type == 2:  # PV
                 pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
                 pg_pd, vm = pf_x[i]
-                pg_pd, vm = pf_x[i]
                 qg_qd, va = pf_y[i]
                 input_mask = (1 - pred_mask).float()
                 input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
@@ -1083,7 +979,6 @@ class PFDeltaPFNet(PFDeltaDataset):
                 y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
             elif bus_type == 3:  # Slack
                 pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
-                va, vm = pf_x[i]
                 va, vm = pf_x[i]
                 pg_pd, qg_qd = pf_y[i]
                 input_mask = (1 - pred_mask).float()
@@ -1099,11 +994,7 @@ class PFDeltaPFNet(PFDeltaDataset):
 
         data["bus"].x = x_pfnet
         data["bus"].y = y_pfnet
-        data["bus"].x = x_pfnet
-        data["bus"].y = y_pfnet
 
-        data["gen"].num_nodes = num_gens
-        data["load"].num_nodes = num_loads
         data["gen"].num_nodes = num_gens
         data["load"].num_nodes = num_loads
 
