@@ -1,18 +1,15 @@
 import os
 import sys
-import yaml
 import copy
 import argparse
 import IPython
 
-import torch
 
 # Change working directory to one above
 sys.path.append(os.getcwd())
 
 from scripts.utils import (
     find_run,
-    load_config_and_trainer,
     load_config,
     load_trainer,
 )
@@ -20,9 +17,15 @@ from scripts.utils import (
 
 def parser():
     parser = argparse.ArgumentParser(
-        description="Loads the trainer and the trainable weights.")
-    parser.add_argument('--run_name', type=str, default="", required=True,
-        help="Folder from which the best run is found.")
+        description="Loads the trainer and the trainable weights."
+    )
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        default="",
+        required=True,
+        help="Folder from which the best run is found.",
+    )
     args = parser.parse_args()
 
     return args

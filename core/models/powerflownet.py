@@ -61,19 +61,20 @@ class EdgeAggregation(MessagePassing):
         hidden_dim (int): Hidden dimension of the MLP.
         output_dim (int): Dimensionality of the output node features.
     """
+
     def __init__(self, nfeature_dim, efeature_dim, hidden_dim, output_dim):
-        super().__init__(aggr='add')
+        super().__init__(aggr="add")
         self.nfeature_dim = nfeature_dim
         self.efeature_dim = efeature_dim
         self.output_dim = output_dim
         self.edge_aggr = nn.Sequential(
-            nn.Linear(nfeature_dim*2 + efeature_dim, hidden_dim),
+            nn.Linear(nfeature_dim * 2 + efeature_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim)
+            nn.Linear(hidden_dim, output_dim),
         )
 
     def message(self, x_i, x_j, edge_attr):
-        '''
+        """
         Compute messages passed from source to target nodes in the graph.
         Params:
             x_i (torch.Tensor): Target node features (num_edges, nfeature_dim).
@@ -81,8 +82,8 @@ class EdgeAggregation(MessagePassing):
             edge_attr (torch.Tensor): Edge features (num_edges, efeature_dim).
         Returns:
             (torch.Tensor): Aggregated features for each edge (num_edges, output_dim).
-        '''
-        return self.edge_aggr(torch.cat([x_i, x_j, edge_attr], dim=-1)) # PNAConv style
+        """
+        return self.edge_aggr(torch.cat([x_i, x_j, edge_attr], dim=-1))  # PNAConv style
 
     def forward(self, x, edge_index, edge_attr):
         """
@@ -104,8 +105,8 @@ class EdgeAggregation(MessagePassing):
         row, col = edge_index
         deg = degree(col, x.size(0), dtype=x.dtype)
         deg_inv_sqrt = deg.pow(-0.5)
-        deg_inv_sqrt[deg_inv_sqrt == float('inf')] = 0.
-        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col] 
+        deg_inv_sqrt[deg_inv_sqrt == float("inf")] = 0.0
+        norm = deg_inv_sqrt[row] * deg_inv_sqrt[col]
 
         # Step 3: Feature transformation.
         # x = self.linear(x) # no feature transformation
@@ -133,7 +134,17 @@ class PowerFlowNet(nn.Module):
         K (int): Number of hops for the TAGConv layer.
         dropout_rate (float): Dropout rate for regularization.
     """
-    def __init__(self, nfeature_dim, efeature_dim, output_dim, hidden_dim, n_gnn_layers, K, dropout_rate):
+
+    def __init__(
+        self,
+        nfeature_dim,
+        efeature_dim,
+        output_dim,
+        hidden_dim,
+        n_gnn_layers,
+        K,
+        dropout_rate,
+    ):
         super().__init__()
         self.nfeature_dim = nfeature_dim
         self.efeature_dim = efeature_dim
@@ -145,27 +156,35 @@ class PowerFlowNet(nn.Module):
         self.layers = nn.ModuleList()
 
         self.mask_embd = nn.Sequential(
-                nn.Linear(nfeature_dim, hidden_dim),
+            nn.Linear(nfeature_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, nfeature_dim)
+            nn.Linear(hidden_dim, nfeature_dim),
         )
 
         if n_gnn_layers == 1:
-            self.layers.append(EdgeAggregation(nfeature_dim, efeature_dim, hidden_dim, hidden_dim))
+            self.layers.append(
+                EdgeAggregation(nfeature_dim, efeature_dim, hidden_dim, hidden_dim)
+            )
             self.layers.append(TAGConv(hidden_dim, output_dim, K=K))
         else:
-            self.layers.append(EdgeAggregation(nfeature_dim, efeature_dim, hidden_dim, hidden_dim))
+            self.layers.append(
+                EdgeAggregation(nfeature_dim, efeature_dim, hidden_dim, hidden_dim)
+            )
             self.layers.append(TAGConv(hidden_dim, hidden_dim, K=K))
 
-        for _ in range(n_gnn_layers-2):
-            self.layers.append(EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, hidden_dim))
+        for _ in range(n_gnn_layers - 2):
+            self.layers.append(
+                EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, hidden_dim)
+            )
             self.layers.append(TAGConv(hidden_dim, hidden_dim, K=K))
 
         # NO SLACK BUS OPERATIONS INCLUDED
         # self.layers.append(TAGConv(hidden_dim, output_dim, K=K))
         # self.slack_aggr = SlackAggregation(hidden_dim, hidden_dim, 'to_slack')
         # self.slack_propagate = SlackAggregation(hidden_dim, hidden_dim, 'from_slack')
-        self.layers.append(EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, output_dim))
+        self.layers.append(
+            EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, output_dim)
+        )
 
         self.dropout = nn.Dropout(self.dropout_rate, inplace=False)
 
@@ -181,7 +200,9 @@ class PowerFlowNet(nn.Module):
             # no edge at all, only single nodes. automatically undirected
             return False
         # if there is the reverse of the first edge does not exist, then directed.
-        return edge_index[0, 0] not in edge_index[1, edge_index[0, :] == edge_index[1, 0]]
+        return (
+            edge_index[0, 0] not in edge_index[1, edge_index[0, :] == edge_index[1, 0]]
+        )
 
     def undirect_graph(self, edge_index, edge_attr):
         """
@@ -194,17 +215,10 @@ class PowerFlowNet(nn.Module):
         """
         if self.is_directed(edge_index):
             edge_index_dup = torch.stack(
-                [edge_index[1, :], edge_index[0, :]],
-                dim=0
-            )   # (2, E)
-            edge_index = torch.cat(
-                [edge_index, edge_index_dup],
-                dim=1
-            )   # (2, 2*E)
-            edge_attr = torch.cat(
-                [edge_attr, edge_attr],
-                dim=0
-            )   # (2*E, fe)
+                [edge_index[1, :], edge_index[0, :]], dim=0
+            )  # (2, E)
+            edge_index = torch.cat([edge_index, edge_index_dup], dim=1)  # (2, 2*E)
+            edge_attr = torch.cat([edge_attr, edge_attr], dim=0)  # (2*E, fe)
 
             return edge_index, edge_attr
         else:
@@ -217,19 +231,18 @@ class PowerFlowNet(nn.Module):
         Hetero graphs, while the original powerflownet uses Homogeneous graphs.
         """
         if isinstance(data, HeteroData):
-            x = data["bus"].x[:, 4:4+self.nfeature_dim] # (N, 16)
-            mask = data["bus"].x[:, -self.nfeature_dim:]
+            x = data["bus"].x[:, 4 : 4 + self.nfeature_dim]  # (N, 16)
+            mask = data["bus"].x[:, -self.nfeature_dim :]
             edge_index = data["bus", "branch", "bus"].edge_index
             edge_features = data["bus", "branch", "bus"].edge_attr
         elif isinstance(data, Data):
             assert data.x.shape[-1] == self.nfeature_dim * 2 + 4
-            x = data.x[:, 4:4+self.nfeature_dim]
-            mask = data.x[:, -self.nfeature_dim:]
+            x = data.x[:, 4 : 4 + self.nfeature_dim]
+            mask = data.x[:, -self.nfeature_dim :]
             edge_index = data.edge_index
             edge_features = data.edge_attr
 
         return x, mask, edge_index, edge_features
-
 
     def forward(self, data):
         """
@@ -254,7 +267,7 @@ class PowerFlowNet(nn.Module):
 
         edge_index, edge_features = self.undirect_graph(edge_index, edge_features)
 
-        for i in range(len(self.layers)-1):
+        for i in range(len(self.layers) - 1):
             if isinstance(self.layers[i], EdgeAggregation):
                 x = self.layers[i](x=x, edge_index=edge_index, edge_attr=edge_features)
             else:

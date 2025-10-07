@@ -10,14 +10,14 @@ function sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, done_ch, s
 		for sample in eachcol(new_samples)
 			put!(sample_ch, sample)
 		end
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Batch produced")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Batch produced")
 	end
 end
 
 function sample_support(support_ch, sampler, sample_ch, done_ch)
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": SUPPORT SAMPLER STARTED")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": SUPPORT SAMPLER STARTED")
 	while !isready(done_ch)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Waiting for next batch...")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Waiting for next batch...")
 		if !isready(support_ch)
 			put!(support_ch, "Empty")
 			println("Anti blocking flag put!")
@@ -30,10 +30,10 @@ function sample_support(support_ch, sampler, sample_ch, done_ch)
 			continue
 		end
 		A, b, x0, num_samples, sampler_opts = out
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Sample being produced!")
 		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, done_ch, sampler)
 	end
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": SUPPORT SAMPLER ENDING")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": SUPPORT SAMPLER ENDING")
 end
 
 """ 
@@ -52,7 +52,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 						 final_ch, print_level, starting_k, support_ch)
 
 	now_str = Dates.format(Dates.now(), "mm-dd-yyy_HH.MM.SS")
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
 	println("SAMPLE PRODUCER PROC STARTED")
 	AC_inputs = results["inputs"]
     AC_outputs = results["outputs"]
@@ -71,9 +71,9 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	
 	# Put samples in channel
 	num_new_samples = 4*num_procs
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample started!")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Initial sample started!")
 	while num_new_samples > 0
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": About to put sample in support channel!")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": About to put sample in support channel!")
 		if num_new_samples > 40
 			put!(support_ch, (A, b, x0, 40, sampler_opts))
 		else
@@ -91,10 +91,10 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			break
 		end
 		A, b, x0, num_samples, sampler_opt = out
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Sample being produced!")
 		sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
 	end
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Initial sample done!")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Initial sample done!")
 
 	k = starting_k  # Count of feasible samples collected
     i = 0  # Count of samples generated
@@ -106,14 +106,18 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 	while (k < K + starting_k) & (u < (1 / U)) & (s < (1 / S)) & (v < 1 / V)	 & 
 		  (i < max_iter) & ((time() - start_time) < T)
 		sleep(5)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": Total count: $total_count.")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", Sys.free_memory() / 1e9, " GB free RAM")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Total count: $total_count.")
 		n_certs = length(b)
 		while isready(polytope_ch)
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Modifying polytope")
-			(print_level > 0) && println("ADDING SLICE")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Modifying polytope")
 			x_star, x = take!(polytope_ch)
-			
+			if size(A, 1) > 6500
+				println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Polytope too big!")
+				continue
+			end
+	
+			(print_level > 0) && println("ADDING SLICE")
 			A, b = add_infeasibility_certificate(A, b, x_star, x)
 			save_certs && (store_cert(results, A, b))
 			if save_while
@@ -121,13 +125,13 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			end
 			
 			x0 = x_star  #TASK: Should work since x_star always r-AC-OPF feasible
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Polytope modified")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Polytope modified")
 		end
 		
 		if length(b) > n_certs
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Updating polytope center")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Updating polytope center")
 			# Fully replace values in sample_chnl
-			center, radius = chebyshev_center(A, b)
+			center, radius = chebyshev_center(A, b; x0=center, r0=radius)
 			if reset_level > 1
 				x0 = (base_load_feasible * 0.1 + x0 * 0.9) * 0.9 + center' * 0.1
 			elseif reset_level > 0
@@ -135,7 +139,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 			else
 				x0 = center'
 			end
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Center updated")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Center updated")
 			# Replace values in sample queue
 			#TEST: Sometimes this seems to block and make the process halt
 			if replace_samples
@@ -193,7 +197,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 				results_pfdelta = nothing
 				# put!(save_ch, (k, net_perturbed, results_pfdelta, joinpath(save_path, "allseeds")))
 			elseif !isnothing(result)  # Infeasible
-				println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "This should never run")
+				println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "This should never run")
 				save_infeasible && store_infeasible_sample(infeasible_AC_inputs, x, result, 
 								save_while, net_name, now_str, save_order, dual_vars, save_path)
 			end
@@ -217,7 +221,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 		end
 
 		if num_new_samples > 0
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Time to sample!")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Time to sample!")
 			# Put samples in queue
 			while num_new_samples > 0
 				if num_new_samples > 40
@@ -228,7 +232,7 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 					total_count += num_new_samples
 				end
 				num_new_samples -= 40
-				println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample put in supp. $num_new_samples left!")
+				println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Sample put in supp. $num_new_samples left!")
 			end
 
 			# Produce them
@@ -239,32 +243,32 @@ function sample_producer(A, b, sampler, sampler_opts::Dict, base_load_feasible,
 					break
 				end
 				A, b, x0, num_samples, sampler_opts = out
-				println(Dates.format(Dates.now(), "HH.MM.SS"), ": Sample being produced!")
+				println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": Sample being produced!")
 				sample_batch(A, b, x0, num_samples, sampler_opts, sample_ch, final_ch, sampler)
 			end
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sampling done!")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Sampling done!")
 		end
 		GC.gc()
 	end
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "SAMPLER EXITED LOOP. Putting done flag")
 
 	# Put results objects into the final channel pipeline to get returned
 	put!(final_ch, "DONE FLAG")
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Draining sample channel")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Draining sample channel")
 	while isready(sample_ch)
 		take!(sample_ch)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Sample thrown")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Sample thrown")
 	end
 	while isready(support_ch)
 		take!(support_ch)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "PreSample thrown")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "PreSample thrown")
 	end
 	put!(support_ch, "DONE FLAG")
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Flooding sample channel with done")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Flooding sample channel with done")
 	for _ in 1:num_procs
 		put!(sample_ch, "DONE FLAG")
 	end
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Flooded")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Flooded")
 	
 	return results
 end
@@ -299,11 +303,11 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 
 	println("SAMPLE PROCESSOR PROC STARTED")
 	(print_level > 0) && println("Create FNFP Model...")
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Instantiating PM model")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Instantiating PM model")
 	pm = PowerModels.instantiate_model(net_r, model_type, build_opf_var_load)
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Model instantiated. Modifying model.")	
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Model instantiated. Modifying model.")	
 	fnfp_model = find_nearest_feasible_model(pm, print_level=print_level, solver=r_solver)
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Model modified")
+	println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Model modified")
 	
 	(print_level > 0) && println("Starting sample processing...")
     i = 1  # Count of iterations
@@ -311,13 +315,13 @@ function sample_processor(net, net_r, r_solver, opf_solver,
         iter_start_time = time()
 		(print_level > 0) && println("Iter: $(i)") #TEST: Printing samples every iteration
 
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Waiting to take sample")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Waiting to take sample")
 		# Gather sample from sample channel
 		x = take!(sample_ch)
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Took sample!")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Took sample!")
 
 		if typeof(x) == String && x == "DONE FLAG"
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "DONE FLAG SENT THROUGH SAMPLE CH. Returning")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "DONE FLAG SENT THROUGH SAMPLE CH. Returning")
 			return
 		end
 		######## ADDED FOR PFDELTA #############
@@ -334,9 +338,11 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		# Perturb generator costs
 		perturb_costs!(net_perturbed; method=perturb_costs_method)
 
+		# Change bus type to PV if needed
+		change_bus_type!(net_perturbed)
 		#######################################
 
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Topology perturbed!")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Topology perturbed!")
         # Solve OPF for the load sample
 		result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
         # result, feasible = run_ac_opf(net, solver=opf_solver)
@@ -346,13 +352,13 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		new_cert = false  # Default for iteration stat tracking
 		
 		if !feasible
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Finding nearest feasible")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Finding nearest feasible")
 			(print_level > 0) && println("FINDING NEAREST FEASIBLE")
             px = x[1:Integer(length(x)/2)]
             qx = x[Integer(length(x)/2) + 1:end]
 			
             r, pd, qd, solved = find_nearest_feasible(fnfp_model, px, qx, print_level=print_level)
-			println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Found nearest feasible")
+			println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Found nearest feasible")
 
 
 			r = sum((pd .- px).^2 + (qd .- qx).^2)
@@ -388,7 +394,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
                 # result, feasible = run_ac_opf(net, solver=opf_solver)
 				result, feasible, results_pfdelta = run_ac_opf_pfdelta(net_perturbed, print_level=print_level, solver=opf_solver)
 				if feasible
-					println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Projection found point in feasible region!")
+					println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Projection found point in feasible region!")
 				end
 			end
 		end
@@ -397,7 +403,7 @@ function sample_processor(net, net_r, r_solver, opf_solver,
 		if feasible
 			put!(result_ch, (x, result, feasible, new_cert, iter_elapsed_time, results_pfdelta, net_perturbed))
 		end
-		println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Put sample in result_ch")
+		println(Dates.format(Dates.now(), "dd HH.MM.SS"), ": ", "Put sample in result_ch")
 		results_pfdelta = nothing
 		result = nothing
 		net_perturbed = nothing
