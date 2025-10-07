@@ -10,7 +10,6 @@ from core.datasets.dataset_utils import (
     canos_pf_data_mean0_var1,
     canos_pf_slack_mean0_var1,
     pfnet_data_mean0_var1,
-    pfnet_data_mean0_var1,
 )
 from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
