@@ -416,17 +416,10 @@ class PFDeltaDataset(InMemoryDataset):
         for gen_id, gen in sorted(network_data["gen"].items(), key=lambda x: int(x[0])):
             if gen["gen_status"] == 1:
                 gen_bus = torch.tensor(gen["gen_bus"]) - 1
-        for gen_id, gen in sorted(network_data["gen"].items(), key=lambda x: int(x[0])):
-            if gen["gen_status"] == 1:
-                gen_bus = torch.tensor(gen["gen_bus"]) - 1
                 gen_to_bus_index.append(torch.tensor([int(gen_id) - 1, gen_bus]))
 
         # bus to load edges
         load_to_bus_index = []
-        for load_id, load in sorted(
-            network_data["load"].items(), key=lambda x: int(x[0])
-        ):
-            load_bus = torch.tensor(load["load_bus"]) - 1
         for load_id, load in sorted(
             network_data["load"].items(), key=lambda x: int(x[0])
         ):
