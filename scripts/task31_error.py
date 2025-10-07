@@ -3,24 +3,26 @@ import os
 import statistics
 import time
 import argparse
-import copy
 
 import IPython
 
 # Change working directory to one above
 sys.path.append(os.getcwd())
 
-from scripts.utils import (
-    find_run,
-    load_config,
-    load_trainer
-)
+from scripts.utils import find_run, load_config, load_trainer
+
 
 def parser():
     parser = argparse.ArgumentParser(
-        description="Loads the trainer and the trainable weights.")
-    parser.add_argument('--root', type=str, default="", required=True,
-        help="Folder from which to calculate test errors.")
+        description="Loads the trainer and the trainable weights."
+    )
+    parser.add_argument(
+        "--root",
+        type=str,
+        default="",
+        required=True,
+        help="Folder from which to calculate test errors.",
+    )
     args = parser.parse_args()
 
     return args
@@ -36,16 +38,13 @@ if __name__ == "__main__":
 
     # Set up additional losses
     losses_to_analyze_inputs = [
-        {
-            "name": "universal_power_balance",
-            "model": "GNS"
-        },
+        {"name": "universal_power_balance", "model": "GNS"},
         {
             "name": "recycle_loss",
             "loss_name": "PBL Max",
             "keyword": "pbl_pf",
-            "recycled_parameter": "power_balance_max"
-        }
+            "recycled_parameter": "power_balance_max",
+        },
     ]
     # Load trainers modified so that the val dataset is on the test split desired
     batch_size = 100
@@ -70,9 +69,11 @@ if __name__ == "__main__":
 
     # Average over the trainers and save in a dictionary
     seeds_losses = []
-    for running_losses, dataloader, trainer in zip(seeds_running_losses, seeds_dataloaders, seeds_trainers):
+    for running_losses, dataloader, trainer in zip(
+        seeds_running_losses, seeds_dataloaders, seeds_trainers
+    ):
         losses = {
-            loss_name: running_loss / len(dataloader) 
+            loss_name: running_loss / len(dataloader)
             for loss_name, running_loss in zip(trainer.val_loss_names, running_losses)
         }
         seeds_losses.append(losses)
@@ -98,7 +99,7 @@ if __name__ == "__main__":
             start = time.time()
             out = model(data)
             end = time.time()
-            times.append((end-start)*batch_size)
+            times.append((end - start) * batch_size)
         model_times.append(sum(times) / 6000)
         print("Seed 1: ", model_times[-1])
 

@@ -11,17 +11,26 @@ def setup_single_branch_features(ac_line_attr, trafo_attr):
     mask[2] = False
     mask[3] = False
     ac_line_attr_masked = ac_line_attr[:, mask]
-    tap_shift = torch.cat([torch.ones((ac_line_attr_masked.shape[0], 1)),
-                           torch.zeros((ac_line_attr_masked.shape[0], 1))], dim=-1).to(device)
+    tap_shift = torch.cat(
+        [
+            torch.ones((ac_line_attr_masked.shape[0], 1)),
+            torch.zeros((ac_line_attr_masked.shape[0], 1)),
+        ],
+        dim=-1,
+    ).to(device)
     ac_line_susceptances = ac_line_attr[:, 2:4]
-    ac_line_attr = torch.cat([ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1)
+    ac_line_attr = torch.cat(
+        [ac_line_attr_masked, tap_shift, ac_line_susceptances], dim=-1
+    )
     edge_attr = torch.cat([ac_line_attr, trafo_attr], dim=0)
     return edge_attr
 
 
 @registry.register_loss("opf_constraint_violation")
 class constraint_violations_loss:
-    def __init__(self, ):
+    def __init__(
+        self,
+    ):
         self.constraint_loss = None
         self.bus_real_mismatch = None
         self.bus_reactive_mismatch = None
@@ -39,27 +48,51 @@ class constraint_violations_loss:
         edge_pred = output_dict["edge_preds"]
 
         # Power balance mismatch
-        edge_indices = torch.cat((data["bus", "ac_line", "bus"].edge_index,
-                                  data["bus", "transformer", "bus"].edge_index), dim=-1)
-        edge_features = setup_single_branch_features(data["bus", "ac_line", "bus"].branch_vals,
-                                                     data["bus", "transformer", "bus"].branch_vals)
+        edge_indices = torch.cat(
+            (
+                data["bus", "ac_line", "bus"].edge_index,
+                data["bus", "transformer", "bus"].edge_index,
+            ),
+            dim=-1,
+        )
+        edge_features = setup_single_branch_features(
+            data["bus", "ac_line", "bus"].branch_vals,
+            data["bus", "transformer", "bus"].branch_vals,
+        )
 
         va, vm = bus_pred.T
-        complex_voltage = vm * torch.exp(1j* va)
+        complex_voltage = vm * torch.exp(1j * va)
 
         n = data["bus"].x.shape[0]
         sum_branch_flows = torch.zeros(n, dtype=torch.cfloat, device=device)
-        flows_rev = edge_pred[:,0] + 1j*edge_pred[:,1]
-        flows_fwd = edge_pred[:,2] + 1j*edge_pred[:,3]
+        flows_rev = edge_pred[:, 0] + 1j * edge_pred[:, 1]
+        flows_fwd = edge_pred[:, 2] + 1j * edge_pred[:, 3]
         sum_branch_flows.scatter_add_(0, edge_indices[0], flows_fwd)
         sum_branch_flows.scatter_add_(0, edge_indices[1], flows_rev)
 
         pg = gen_pred[:, 0]
         qg = gen_pred[:, 1]
 
-        gen_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j*qg)
-        demand_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "load_link", "load"].edge_index[0], data["load"]["unnormalized"][:, 0] + 1j*data["load"]["unnormalized"][:, 1])
-        shunt_flows = torch.abs(vm)**2 * torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(0, data["bus", "shunt_link", "shunt"].edge_index[0], data["shunt"]["unnormalized"][:, 1] + 1j*data["shunt"]["unnormalized"][:, 0]).conj()
+        gen_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(
+            0, data["bus", "generator_link", "generator"].edge_index[0], pg + 1j * qg
+        )
+        demand_flows = torch.zeros(n, dtype=torch.cfloat, device=device).scatter_add_(
+            0,
+            data["bus", "load_link", "load"].edge_index[0],
+            data["load"]["unnormalized"][:, 0]
+            + 1j * data["load"]["unnormalized"][:, 1],
+        )
+        shunt_flows = (
+            torch.abs(vm) ** 2
+            * torch.zeros(n, dtype=torch.cfloat, device=device)
+            .scatter_add_(
+                0,
+                data["bus", "shunt_link", "shunt"].edge_index[0],
+                data["shunt"]["unnormalized"][:, 1]
+                + 1j * data["shunt"]["unnormalized"][:, 0],
+            )
+            .conj()
+        )
 
         power_balance = gen_flows - demand_flows - shunt_flows - sum_branch_flows
         real_power_mismatch = torch.abs(torch.real(power_balance))
@@ -100,32 +133,45 @@ class constraint_violations_loss:
         sf = torch.abs(flows_fwd)
         st = torch.abs(flows_rev)
         smax = edge_features[:, 4]
-        flow_mismatch_fwd = relu(torch.abs(sf)**2 - smax**2)
-        flow_mismatch_rev = relu(torch.abs(st)**2 - smax**2)
+        flow_mismatch_fwd = relu(torch.abs(sf) ** 2 - smax**2)
+        flow_mismatch_rev = relu(torch.abs(st) ** 2 - smax**2)
         # violation_degree_flows = torch.cat([flow_mismatch_fwd, flow_mismatch_rev]).mean()
         violation_degree_flow_f = flow_mismatch_fwd.mean()
         violation_degree_flow_r = flow_mismatch_rev.mean()
 
         # branch flows: ground truth mismatch, real
-        p_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[:,-2] # this is from bus flow
-        p_flows_true_tr = data["bus", "transformer", "bus"].edge_label[:,-2] # this is from bus flow
+        p_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[
+            :, -2
+        ]  # this is from bus flow
+        p_flows_true_tr = data["bus", "transformer", "bus"].edge_label[
+            :, -2
+        ]  # this is from bus flow
         p_flows_true = torch.cat([p_flows_true_ac, p_flows_true_tr])
         p_flows_mismatch = torch.real(flows_fwd) - p_flows_true
         violation_degree_real_flow_mismatch = torch.abs(p_flows_mismatch).mean()
 
         # branch flows: ground truth mismatch, reactive
-        q_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[:,-1] # this is from bus flow
+        q_flows_true_ac = data["bus", "ac_line", "bus"].edge_label[
+            :, -1
+        ]  # this is from bus flow
         q_flows_true_tr = data["bus", "transformer", "bus"].edge_label[:, -1]
         q_flows_true = torch.cat([q_flows_true_ac, q_flows_true_tr])
         q_flows_mismatch = torch.imag(flows_fwd) - q_flows_true
         violation_degree_imag_flow_mismatch = torch.abs(q_flows_mismatch).mean()
 
         # loss
-        loss_c = (violation_degree_real_mismatch +  violation_degree_imag_mismatch +
-                    violation_degree_voltages + violation_degree_angles +
-                    violation_degree_real_flow_mismatch + violation_degree_imag_flow_mismatch +
-                    violation_degree_pg + violation_degree_qg + 
-                    violation_degree_flow_f + violation_degree_flow_r)
+        loss_c = (
+            violation_degree_real_mismatch
+            + violation_degree_imag_mismatch
+            + violation_degree_voltages
+            + violation_degree_angles
+            + violation_degree_real_flow_mismatch
+            + violation_degree_imag_flow_mismatch
+            + violation_degree_pg
+            + violation_degree_qg
+            + violation_degree_flow_f
+            + violation_degree_flow_r
+        )
 
         self.constraint_loss = loss_c
         self.bus_real_mismatch = violation_degree_real_mismatch
@@ -157,7 +203,9 @@ class RecycleLoss:
 
 @registry.register_loss("canos_mse")
 class CANOSMSE:
-    def __init__(self,):
+    def __init__(
+        self,
+    ):
         self.va = None
         self.vm = None
         self.pg = None
@@ -225,14 +273,14 @@ class CANOSMSE:
         gen_loss = self.gen_error(gen_pred, gen_target)
         ac_loss = self.ac_line_error(ac_line_pred, ac_line_target)
         transformer_loss = self.transformer_line_error(
-            transformer_line_pred, transformer_line_target)
+            transformer_line_pred, transformer_line_target
+        )
 
         # Normalize to average
         n_bus, n_gen = bus_pred.size(0), gen_pred.size(0)
         n_ac, n_transformer = ac_line_pred.size(0), transformer_line_pred.size(0)
-        total_loss = (bus_loss + gen_loss + ac_loss + transformer_loss)
+        total_loss = bus_loss + gen_loss + ac_loss + transformer_loss
 
         self.total_loss = total_loss
 
         return total_loss
-

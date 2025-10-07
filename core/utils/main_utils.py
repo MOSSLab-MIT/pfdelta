@@ -13,7 +13,7 @@ from core.utils.registry import registry
 
 def load_registry():
     r"""This method loads every method in the code base. The main objective is
-    to allow the registry to register all necessary items. It will load 
+    to allow the registry to register all necessary items. It will load
     everything starting from the working directory.
 
     It was inspired by
@@ -24,7 +24,6 @@ def load_registry():
     if loaded:
         print("Registry has already been loaded!")
         return None
-
 
     # We load all modules starting at root
     root = "core"
@@ -48,9 +47,9 @@ def load_registry():
 
 def merge_dicts(base, overwrite):
     """Recursively merge two dictionaries.
-    Values in override overwrites values in base. If base and overwrite 
+    Values in override overwrites values in base. If base and overwrite
     contain a dictionary as a value, this will call itself recursively to merge
-    these dictionaries. This does not modify the input dictionaries (creates 
+    these dictionaries. This does not modify the input dictionaries (creates
     an internal copy). Will not work recursively if dict is in a list.
     Adapted from https://github.com/TUM-DAML/seml/blob/master/seml/utils.py
     and https://github.com/RolnickLab/ocp/blob/disconnected_gnn/ocpmodels/common/utils.py
@@ -70,7 +69,9 @@ def merge_dicts(base, overwrite):
     if not isinstance(base, dict):
         raise ValueError(f"Expecting dict1 to be dict, found {type(base)} {base}.")
     if not isinstance(overwrite, dict):
-        raise ValueError(f"Expecting dict2 to be dict, found {type(overwrite)} {overwrite}.")
+        raise ValueError(
+            f"Expecting dict2 to be dict, found {type(overwrite)} {overwrite}."
+        )
 
     return_dict = copy.deepcopy(base)
 
@@ -81,8 +82,9 @@ def merge_dicts(base, overwrite):
             if isinstance(v, dict) and isinstance(base[k], dict):
                 return_dict[k] = merge_dicts(base[k], overwrite[k])
             elif isinstance(v, list):
-                assert isinstance(base[k], list),\
+                assert isinstance(base[k], list), (
                     "Expected in base dictionary a list, but found a {type(base[k])}."
+                )
                 return_dict[k] = copy.deepcopy(v)
             else:
                 return_dict[k] = overwrite[k]
@@ -104,9 +106,10 @@ def load_config(args, override_args=[]):
     config_location = "core/configs/" + config_location
 
     # Load config file
-    assert os.path.exists(config_location),\
+    assert os.path.exists(config_location), (
         f"Config file {config_location} doesn't exist!"
-    with open(config_location, 'r') as f:
+    )
+    with open(config_location, "r") as f:
         config = yaml.safe_load(f)
 
     # Handle single vs batched jobs
@@ -137,13 +140,14 @@ def single_config(config, args, override_args, i=None):
     if config["functional"].get("trainer_name", None) is None:
         config["functional"]["trainer_name"] = "base_trainer"
     trainer_name = config["functional"]["trainer_name"]
-    assert registry.get_trainer_class(trainer_name) is not None,\
+    assert registry.get_trainer_class(trainer_name) is not None, (
         f"Trainer {trainer_name} not found in registry!"
+    )
     # Set run name
     if "run_name" not in config["functional"]:
         config_name = config["functional"]["config"]
         config["functional"]["run_name"] = config_name
-    if i is not None: # If it is not none, then this is for job submission
+    if i is not None:  # If it is not none, then this is for job submission
         config["functional"]["run_name"] += "_" + str(i)
 
     # Verify config file has model, model registered in registry
@@ -151,15 +155,19 @@ def single_config(config, args, override_args, i=None):
     assert isinstance(config["model"], dict), "Model inputs need to be a dictionary!"
     assert "name" in config["model"], "Model name not found!"
     model_name = config["model"]["name"]
-    assert registry.get_model_class(model_name) is not None,\
+    assert registry.get_model_class(model_name) is not None, (
         f"Model {model_name} not found in registry!"
+    )
 
     # Verify config file has dataset
     assert "dataset" in config, "Dataset dictionary missing in config!"
-    assert isinstance(config["dataset"], dict), "Dataset inputs need to be a dictionary!"
+    assert isinstance(config["dataset"], dict), (
+        "Dataset inputs need to be a dictionary!"
+    )
     assert "datasets" in config["dataset"], "Datasets info not found!"
-    assert isinstance(config["dataset"]["datasets"], list),\
+    assert isinstance(config["dataset"]["datasets"], list), (
         "Datasets info needs to be passed as a list! First one is for trainning."
+    )
 
     # Verify dataset is in registry and add common arguments to the dataset classes
     for i, dataset in enumerate(config["dataset"]["datasets"]):
@@ -173,16 +181,15 @@ def single_config(config, args, override_args, i=None):
         # Add common arguments to the dataset dictionary
         common_arguments = copy.deepcopy(config["dataset"])
         del common_arguments["datasets"]
-        dataset = merge_dicts(
-            common_arguments, config["dataset"]["datasets"][i])
+        dataset = merge_dicts(common_arguments, config["dataset"]["datasets"][i])
         config["dataset"]["datasets"][i] = dataset
 
         # Confirm dataset name has been specified and it has been registered
         assert "name" in dataset, "Dataset name missing!"
         dataset_name = dataset["name"]
-        assert registry.get_dataset_class(dataset_name) is not None,\
+        assert registry.get_dataset_class(dataset_name) is not None, (
             f"Dataset {dataset_name} not found in registry!"
-
+        )
 
     # Create optim folder if not available
     default_optim = {
@@ -194,9 +201,9 @@ def single_config(config, args, override_args, i=None):
             "epochs": 10,
             "batch_size": 128,
             "train_loss": [
-                "MSELoss", # MSE
-                "L1Loss", # MAE
-            ]
+                "MSELoss",  # MSE
+                "L1Loss",  # MAE
+            ],
         },
         "val_params": {
             "report_every": 10,
@@ -205,7 +212,7 @@ def single_config(config, args, override_args, i=None):
                 "MSELoss",
                 "L1Loss",
             ],
-        }
+        },
     }
     if "optim" not in config:
         config["optim"] = default_optim
@@ -222,17 +229,13 @@ def single_config(config, args, override_args, i=None):
     train_params = config["optim"]["train_params"]
     val_params = config["optim"]["val_params"]
     # Verify it has important data
-    assert "epochs" in train_params or "train_steps" in train_params,\
+    assert "epochs" in train_params or "train_steps" in train_params, (
         "Number of epochs or number of train steps missing!"
-    assert "batch_size" in train_params,\
-        "Batch size of training dataset missing!"
-    assert "batch_size" in val_params,\
-        "Batch size of validation dataset(s) missing!"
-    assert "train_loss" in train_params,\
-        "Trainning dataset does not have a loss!"
-    assert "val_loss" in val_params,\
-        "Validation dataset(s) does not have a loss!"
-
+    )
+    assert "batch_size" in train_params, "Batch size of training dataset missing!"
+    assert "batch_size" in val_params, "Batch size of validation dataset(s) missing!"
+    assert "train_loss" in train_params, "Trainning dataset does not have a loss!"
+    assert "val_loss" in val_params, "Validation dataset(s) does not have a loss!"
 
     # Verify the number of batch sizes is correct
     num_datasets = len(config["dataset"]["datasets"])
@@ -240,12 +243,14 @@ def single_config(config, args, override_args, i=None):
         n_batch_size = 1 + len(val_params["batch_size"])
     else:
         # This case means that all val datasets get the same batch size
-        assert isinstance(val_params["batch_size"], int),\
-            f"Invalid type of batch size input!"
+        assert isinstance(val_params["batch_size"], int), (
+            "Invalid type of batch size input!"
+        )
         n_batch_size = num_datasets
-    assert n_batch_size == num_datasets,\
-        f"Only {n_batch_size} given, but there are {num_datasets} in total!" +\
-        " (train and val combined)."
+    assert n_batch_size == num_datasets, (
+        f"Only {n_batch_size} given, but there are {num_datasets} in total!"
+        + " (train and val combined)."
+    )
 
     # Load override arguments
     for arg in override_args:
@@ -258,8 +263,10 @@ def place_override(arg, config):
     """Allows user to modify config file from the termina. Note that
     this CANNOT be used for hyperparameter search methods like
     _manual_list."""
-    assert arg[:2] == "--", f"{arg} was read as an override argument." \
+    assert arg[:2] == "--", (
+        f"{arg} was read as an override argument."
         + " Override arguments should start with --!"
+    )
 
     # Parse argument override
     location, value_modified = arg[2:].split("=")
@@ -300,7 +307,6 @@ def parse_value(value):
             return value
 
 
-
 def batch_config(config, args, override_args):
     job_parameters = config.get("job_parameters", {})
     default_values = config.get("default_values", {})
@@ -335,8 +341,13 @@ def batch_config(config, args, override_args):
         expanded_jobs = expand_raw_job(raw_w_default)
         for job in expanded_jobs:
             process_one_job(
-                i, job, processed_configs,sbatch_locations,
-                sbatch_scripts, job_constants)
+                i,
+                job,
+                processed_configs,
+                sbatch_locations,
+                sbatch_scripts,
+                job_constants,
+            )
             i += 1
 
     config["jobs"] = processed_configs
@@ -378,24 +389,26 @@ def expand_raw_job(raw_job):
         # We go type by type
         if curr_func == "_manual_list":
             new_dicts = manual_list_expansion(
-                inputs, key, current_dict, search_result, end)
+                inputs, key, current_dict, search_result, end
+            )
             queue = new_dicts + queue
         if curr_func == "_connected_list":
-            assert len(inputs) >= 3, \
-                f"Connected list has a syntax of key -- value1, value2... | name1, name2..."
+            assert len(inputs) >= 3, (
+                "Connected list has a syntax of key -- value1, value2... | name1, name2..."
+            )
             new_dicts = connected_list_expansion(inputs, current_dict)
             queue = new_dicts + queue
-
 
     return expanded_jobs
 
 
 def connected_list_expansion(inputs, current_dict):
-    assert inputs[1] == "--", \
-        f"Connected list has a syntax of key -- value1, value2... | name1, name2..."
+    assert inputs[1] == "--", (
+        "Connected list has a syntax of key -- value1, value2... | name1, name2..."
+    )
 
-    connect_key = inputs[0]     # Key used to indicate lists are connected
-    connected_inputs = []       # Inputs of connect_keys
+    connect_key = inputs[0]  # Key used to indicate lists are connected
+    connected_inputs = []  # Inputs of connect_keys
     connected_keys = []
     end = 0
     starts = []
@@ -422,8 +435,9 @@ def connected_list_expansion(inputs, current_dict):
     # Make sure all lists have the same number of inputs
     num_inputs = len(connected_inputs[0])
     for inps in connected_inputs:
-        assert num_inputs == len(inps), \
+        assert num_inputs == len(inps), (
             "There's connected lists with a different number of inputs!"
+        )
 
     # Process run names if any and process instances
     connected_instances, connected_names = [], []
@@ -436,7 +450,7 @@ def connected_list_expansion(inputs, current_dict):
     new_dicts = []
     starts.reverse()
     ends.reverse()
-    # vamos a cambiar 
+    # vamos a cambiar
     num_cases = len(connected_instances[0])
     for i in range(num_cases):
         values = [instances[i] for instances in connected_instances]
@@ -450,8 +464,8 @@ def connected_list_expansion(inputs, current_dict):
             if parse_value(value) == value:
                 value = '"' + value + '"'
             # Construct new dictionary
-            start_of_dict = new_dict[:start - 1]
-            end_of_dict = new_dict[end + 2:]
+            start_of_dict = new_dict[: start - 1]
+            end_of_dict = new_dict[end + 2 :]
             new_dict = start_of_dict + value + end_of_dict
             # We modify run name if necessary
             run_name_idx = new_dict.find("run_name")
@@ -462,7 +476,9 @@ def connected_list_expansion(inputs, current_dict):
                 run_name = new_dict[run_name_start:run_name_end]
                 # Compute new run name
                 new_run_name = run_name.replace(f"%{key}", name)
-                new_dict = new_dict[:run_name_start] + new_run_name + new_dict[run_name_end:]
+                new_dict = (
+                    new_dict[:run_name_start] + new_run_name + new_dict[run_name_end:]
+                )
         new_dicts.append(new_dict)
 
     return new_dicts
@@ -472,13 +488,16 @@ def list_process_names(inputs):
     if "|" in inputs:
         idx = inputs.index("|")
         inputs.pop(idx)
-        assert (len(inputs) % 2) == 0, \
+        assert (len(inputs) % 2) == 0, (
             "In lists, the number of names needs to equal number of instances!"
-        num_instances = len(inputs)//2
+        )
+        num_instances = len(inputs) // 2
         instances = inputs[:num_instances]
-        instances = [instance[:-1] for instance in instances[:-1]] + [instances[-1]] # Delete comma at end
+        instances = [instance[:-1] for instance in instances[:-1]] + [
+            instances[-1]
+        ]  # Delete comma at end
         names = inputs[num_instances:]
-        names = [name[:-1] for name in names[:-1]] + [names[-1]] # Delete comma at end
+        names = [name[:-1] for name in names[:-1]] + [names[-1]]  # Delete comma at end
     # Default is the first 4 characters of the instance
     else:
         instances = inputs
@@ -489,8 +508,8 @@ def list_process_names(inputs):
 
 
 def manual_list_expansion(inputs, key, current_dict, search_result, end):
-    start_of_dict = current_dict[:search_result-1]
-    end_of_dict = current_dict[end+2:]
+    start_of_dict = current_dict[: search_result - 1]
+    end_of_dict = current_dict[end + 2 :]
 
     # Process run names if any and process instances
     instances, names = list_process_names(inputs)
@@ -512,13 +531,18 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
             run_name = new_dict[run_name_start:run_name_end]
             # Compute new run name
             new_run_name = run_name.replace(f"%{key}", name)
-            new_dict = new_dict[:run_name_start] + new_run_name + new_dict[run_name_end:]
+            new_dict = (
+                new_dict[:run_name_start] + new_run_name + new_dict[run_name_end:]
+            )
         new_dicts.append(new_dict)
 
     return new_dicts
 
+
 # This method assumes that all forms of grid search have been used already
-def process_one_job(i, job, processed_configs, sbatch_locations, sbatch_scripts, job_constants):
+def process_one_job(
+    i, job, processed_configs, sbatch_locations, sbatch_scripts, job_constants
+):
     # Gather job constants
     args = job_constants["args"]
     override_args = job_constants["override_args"]
@@ -537,7 +561,8 @@ def process_one_job(i, job, processed_configs, sbatch_locations, sbatch_scripts,
     job["config_type"] = "experiment"
     # Save slurm and config files
     sbatch_location, script = save_config_n_slurm(
-        job, this_job_parameters, i, batch_folder)
+        job, this_job_parameters, i, batch_folder
+    )
     sbatch_locations.append(sbatch_location)
     sbatch_scripts.append(script)
     processed_configs.append(job)
@@ -567,10 +592,12 @@ def create_job_folder(config, job_config_name):
     # Verify job folder does not exists and create it
     submissions_location = os.path.join("core", "configs")
     batch_folder = os.path.join(submissions_location, batch_name)
-    assert_message = "It seems like this batch of jobs has already been " + \
-        "submitted! Be careful not to submit the same jobs twice.\nIf this" + \
-        " is not the case, make sure to delete old config submissions OR " + \
-        " give your batch a new name with an entry under 'batch_name'."
+    assert_message = (
+        "It seems like this batch of jobs has already been "
+        + "submitted! Be careful not to submit the same jobs twice.\nIf this"
+        + " is not the case, make sure to delete old config submissions OR "
+        + " give your batch a new name with an entry under 'batch_name'."
+    )
     assert not os.path.exists(batch_folder), assert_message
     os.mkdir(batch_folder)
 
@@ -579,8 +606,8 @@ def create_job_folder(config, job_config_name):
 
 def load_other_configs(override_config, other_config):
     configs_location = os.path.join("core", "configs")
-    other_config_location = os.path.join(configs_location, other_config+".yaml")
-    with open(other_config_location, 'r') as f:
+    other_config_location = os.path.join(configs_location, other_config + ".yaml")
+    with open(other_config_location, "r") as f:
         other_config = yaml.safe_load(f)
     # Delete other config name
     if "config" in override_config:
@@ -595,7 +622,7 @@ def save_config_n_slurm(config, job_parameters, idx, batch_folder):
     batch_name = os.path.split(batch_folder)[1]
     # Save config file
     this_job = os.path.join(batch_folder, batch_name)
-    with open(this_job + "_" + str(idx) + ".yaml", 'w') as f:
+    with open(this_job + "_" + str(idx) + ".yaml", "w") as f:
         yaml.dump(config, f)
 
     # Create sbatch script
@@ -616,13 +643,13 @@ def save_config_n_slurm(config, job_parameters, idx, batch_folder):
     # Implement launch mechanism
     config_location = f"{batch_name}/{batch_name}_{idx}"
     launch_command = f"python main.py --config {config_location}"
-    default_body = f"source ~/.bashrc\n__launch__"
+    default_body = "source ~/.bashrc\n__launch__"
     body = job_parameters.get("body", "__launch__")
     body_processed = body.replace("__launch__", launch_command)
     sbatch_script += "\n" + body_processed
 
     # Save sbatch script
-    with open(this_job + f"_{str(idx)}.sh", 'w') as f:
+    with open(this_job + f"_{str(idx)}.sh", "w") as f:
         f.write(sbatch_script)
 
     return (this_job + f"_{str(idx)}.sh", sbatch_script)
