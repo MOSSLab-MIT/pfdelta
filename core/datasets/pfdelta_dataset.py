@@ -392,6 +392,7 @@ class PFDeltaDataset(InMemoryDataset):
         data["bus"].bus_voltages = torch.stack(bus_voltages)
         data["bus"].bus_type = torch.stack(bus_type)
         data["bus"].shunt = torch.stack(bus_shunts)
+
         data["gen"].limits = torch.stack(limits)
         data["gen"].generation = torch.stack(generation)
         data["gen"].slack_gen = torch.stack(slack_gen)
@@ -695,12 +696,10 @@ class PFDeltaDataset(InMemoryDataset):
                     (combined_data, combined_slices),
                     os.path.join(concat_path, f"{split}.pt"),
                 )
-
                 print(f"Saved combined {split} data with {len(data_list)} samples")
 
     def load(self, split):
         """Loads dataset for the specified split.
-
 
         Args:
             split (str): The split to load ('train', 'val', 'test', 'separate_{casename}_{split}_{feasibility}_{grid_type}') # specify a different type of string for 3.1
