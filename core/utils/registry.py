@@ -8,16 +8,18 @@ LICENSE file in the root directory of this source tree.
 # Copyright (c) Facebook, Inc. and its affiliates.
 # Borrowed from https://github.com/facebookresearch/pythia/blob/master/pythia/common/registry.py.
 
+
 class Registry:
     r"""Registry is a class that stores class types across the entire dataset.
     It makes coding very convenient and flexible. Should not be manually
     instantiated.
     """
+
     mapping = {
         "dataset_name_mapping": {},
         "model_name_mapping": {},
         "trainer_name_mapping": {},
-        "loss_name_mapping": {}
+        "loss_name_mapping": {},
     }
     loaded = False
 
@@ -184,5 +186,6 @@ class Registry:
         """
 
         return cls.mapping["loss_name_mapping"].get(name, None)
+
 
 registry = Registry()

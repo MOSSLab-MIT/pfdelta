@@ -3,17 +3,20 @@ import glob
 import json
 import argparse
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 
 
 parser = argparse.ArgumentParser(
-    description="Plot error values for a specific run and error key.")
-parser.add_argument('--run_name', type=str, required=True,
-    help="Name of the run to plot errors for.")
-parser.add_argument('--error', type=str, default="_first_one",
-    help="Error being plotted.")
-parser.add_argument('--log', action="store_true", default=False,
-    help="Change scale to log.")
+    description="Plot error values for a specific run and error key."
+)
+parser.add_argument(
+    "--run_name", type=str, required=True, help="Name of the run to plot errors for."
+)
+parser.add_argument(
+    "--error", type=str, default="_first_one", help="Error being plotted."
+)
+parser.add_argument(
+    "--log", action="store_true", default=False, help="Change scale to log."
+)
 args = parser.parse_args()
 
 
@@ -28,11 +31,14 @@ def find_run_folder(run_name):
         print(f"Error: No folder named '{run_name}' found in 'runs'.")
         return None
     elif len(matching_folders) > 1:
-        print(f"Error: Multiple folders with the name '{run_name}' found." \
-            + "Please ensure the name is unique.")
+        print(
+            f"Error: Multiple folders with the name '{run_name}' found."
+            + "Please ensure the name is unique."
+        )
         return None
     else:
         return matching_folders[0]  # Return the unique matching folder
+
 
 def plot_errors(run_folder, error_key):
     """Loads the train.json file and plots the errors for the given run and
@@ -40,16 +46,16 @@ def plot_errors(run_folder, error_key):
     max_ticks = 15
 
     # Build the path to the train.json file
-    train_path = os.path.join(run_folder, 'train.json')
-    with open(train_path, 'r') as f:
+    train_path = os.path.join(run_folder, "train.json")
+    with open(train_path, "r") as f:
         train_data = json.load(f)
 
-    val_path = os.path.join(run_folder, 'val.json')
-    with open(val_path, 'r') as f:
+    val_path = os.path.join(run_folder, "val.json")
+    with open(val_path, "r") as f:
         val_data = json.load(f)
 
-    summary_path = os.path.join(run_folder, 'summary.json')
-    with open(summary_path, 'r') as f:
+    summary_path = os.path.join(run_folder, "summary.json")
+    with open(summary_path, "r") as f:
         summary = json.load(f)
 
     if error_key == "_first_one":
@@ -58,9 +64,9 @@ def plot_errors(run_folder, error_key):
 
     # Set up figure
     plt.figure(figsize=(10, 6))
-    plt.xlabel('Training point')
-    plt.ylabel(f'{error_key}')
-    plt.title(f'{run_name} - {error_key}')
+    plt.xlabel("Training point")
+    plt.ylabel(f"{error_key}")
+    plt.title(f"{run_name} - {error_key}")
 
     ## Train values
     # Extract errors for each epoch
@@ -75,7 +81,7 @@ def plot_errors(run_folder, error_key):
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
     print(epochs)
     print_epochs = list(map(int, epochs))
-    plt.plot(print_epochs, errors, marker='o', linestyle='-', color='b', label="Train")
+    plt.plot(print_epochs, errors, marker="o", linestyle="-", color="b", label="Train")
 
     ## Val values
     epochs = sorted(val_data.keys(), key=int)  # Sort epochs numerically
@@ -90,11 +96,11 @@ def plot_errors(run_folder, error_key):
     for i in range(num_vals):
         errors = [val_data[epoch][i].get(error_key, None) for epoch in epochs]
         print_epochs = list(map(int, epochs))
-        plt.plot(print_epochs, errors, marker='o', linestyle='-', label=f"Val {i}")
+        plt.plot(print_epochs, errors, marker="o", linestyle="-", label=f"Val {i}")
 
     # Change to logscale if needed
     if args.log:
-        plt.yscale('log')
+        plt.yscale("log")
 
     # Print summary
     print(json.dumps(summary, indent=3))
@@ -115,4 +121,3 @@ if __name__ == "__main__":
 
     # Plot the errors for the given run and error key
     plot_errors(run_path, error_name)
-
