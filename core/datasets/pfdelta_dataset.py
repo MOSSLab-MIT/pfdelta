@@ -152,9 +152,6 @@ class PFDeltaDataset(InMemoryDataset):
         super().__init__(
             self.root, transform, pre_transform, pre_filter, force_reload=force_reload
         )
-        super().__init__(
-            self.root, transform, pre_transform, pre_filter, force_reload=force_reload
-        )
         self.load(self.split)
 
     def _split_to_idx(self):
