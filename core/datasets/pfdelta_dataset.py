@@ -1047,45 +1047,14 @@ class PFDeltaCANOS(PFDeltaDataset):
     ):
         if pre_transform is not None:
             if pre_transform == "canos_pf_data_mean0_var1":
-class PFDeltaCANOS(PFDeltaDataset):
-    def __init__(
-        self,
-        root_dir="data",
-        case_name="",
-        split="train",
-        model="CANOS",
-        task=1.1,
-        add_bus_type=True,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-        force_reload=False,
-    ):
-        if pre_transform is not None:
-            if pre_transform == "canos_pf_data_mean0_var1":
                 stats = canos_pfdelta_stats[case_name]
                 pre_transform = partial(canos_pf_data_mean0_var1, stats)
-
-        if transform is not None:
-            if transform == "canos_pf_slack_mean0_var1":
 
         if transform is not None:
             if transform == "canos_pf_slack_mean0_var1":
                 stats = canos_pfdelta_stats[case_name]
                 transform = partial(canos_pf_slack_mean0_var1, stats)
 
-        super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
-        )
         super().__init__(
             root_dir,
             case_name,
@@ -1136,20 +1105,6 @@ class PFDeltaPFNet(PFDeltaDataset):
         pre_filter=None,
         force_reload=False,
     ):
-class PFDeltaPFNet(PFDeltaDataset):
-    def __init__(
-        self,
-        root_dir="data",
-        case_name="",
-        split="train",
-        model="PFNet",
-        task=1.1,
-        add_bus_type=False,
-        transform=None,
-        pre_transform=None,
-        pre_filter=None,
-        force_reload=False,
-    ):
         if pre_transform:
             if pre_transform == "pfnet_data_mean0_var1":
                 stats = pfnet_pfdata_stats[case_name]
@@ -1157,24 +1112,9 @@ class PFDeltaPFNet(PFDeltaDataset):
 
         if transform is not None:
             if transform == "pfnet_data_mean0_var1":
-
-        if transform is not None:
-            if transform == "pfnet_data_mean0_var1":
                 stats = pfnet_pfdata_stats[case_name]
                 transform = partial(pfnet_data_mean0_var1, stats)
 
-        super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
-        )
         super().__init__(
             root_dir,
             case_name,
@@ -1222,7 +1162,6 @@ class PFDeltaPFNet(PFDeltaDataset):
 
             # Prediction mask
             if bus_type == 1:  # PQ
-            if bus_type == 1:  # PQ
                 pred_mask = torch.tensor([1, 1, 0, 0, 0, 0])
                 va, vm = pf_y[i]
                 va, vm = pf_y[i]
@@ -1232,7 +1171,6 @@ class PFDeltaPFNet(PFDeltaDataset):
                 features = torch.cat([one_hot, input_feats])
                 y = torch.tensor([vm, va, pd, qd, gs, bs])
             elif bus_type == 2:  # PV
-            elif bus_type == 2:  # PV
                 pred_mask = torch.tensor([0, 1, 0, 1, 0, 0])
                 pg_pd, vm = pf_x[i]
                 pg_pd, vm = pf_x[i]
@@ -1241,7 +1179,6 @@ class PFDeltaPFNet(PFDeltaDataset):
                 input_feats = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs]) * input_mask
                 features = torch.cat([one_hot, input_feats])
                 y = torch.tensor([vm, va, pg_pd, qg_qd, gs, bs])
-            elif bus_type == 3:  # Slack
             elif bus_type == 3:  # Slack
                 pred_mask = torch.tensor([0, 0, 1, 1, 0, 0])
                 va, vm = pf_x[i]
@@ -1270,13 +1207,11 @@ class PFDeltaPFNet(PFDeltaDataset):
 
         edge_attrs = []
         for attr in data["bus", "branch", "bus"].edge_attr:
-        for attr in data["bus", "branch", "bus"].edge_attr:
             r, x = attr[0], attr[1]
             b = attr[3] + attr[5]
             tau, angle = attr[6], attr[7]
             edge_attrs.append(torch.tensor([r, x, b, tau, angle]))
 
-        data["bus", "branch", "bus"].edge_attr = torch.stack(edge_attrs)
         data["bus", "branch", "bus"].edge_attr = torch.stack(edge_attrs)
 
         if self.pre_transform:
