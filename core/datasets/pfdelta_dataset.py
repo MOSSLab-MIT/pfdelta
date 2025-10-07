@@ -15,7 +15,6 @@ from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
 from core.utils.registry import registry
 
 
-
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
     def __init__(
@@ -286,7 +285,6 @@ class PFDeltaDataset(InMemoryDataset):
                 pf_x.append(torch.tensor([pg - pd, vm]))
                 pf_y.append(torch.tensor([qg - qd, va]))
 
-
                 PV_bus_x.append(torch.tensor([pg - pd, vm]))
                 PV_bus_y.append(torch.tensor([qg - qd, va]))
                 PV_demand.append(torch.tensor([pd, qd]))
@@ -443,43 +441,21 @@ class PFDeltaDataset(InMemoryDataset):
         data["bus"].bus_voltages = torch.stack(bus_voltages)
         data["bus"].bus_type = torch.stack(bus_type)
         data["bus"].shunt = torch.stack(bus_shunts)
-        data["bus"].x = torch.stack(pf_x)
-        data["bus"].y = torch.stack(pf_y)
-        data["bus"].bus_gen = torch.stack(bus_gen)  # aggregated
-        data["bus"].bus_demand = torch.stack(bus_demand)  # aggregated
-        data["bus"].bus_voltages = torch.stack(bus_voltages)
-        data["bus"].bus_type = torch.stack(bus_type)
-        data["bus"].shunt = torch.stack(bus_shunts)
-
-        data["gen"].limits = torch.stack(limits)
-        data["gen"].generation = torch.stack(generation)
-        data["gen"].slack_gen = torch.stack(slack_gen)
         data["gen"].limits = torch.stack(limits)
         data["gen"].generation = torch.stack(generation)
         data["gen"].slack_gen = torch.stack(slack_gen)
 
-        data["load"].demand = torch.stack(demand)
         data["load"].demand = torch.stack(demand)
 
         if self.add_bus_type:
             data["PQ"].x = torch.stack(PQ_bus_x)
             data["PQ"].y = torch.stack(PQ_bus_y)
-            data["PQ"].x = torch.stack(PQ_bus_x)
-            data["PQ"].y = torch.stack(PQ_bus_y)
 
             data["PV"].x = torch.stack(PV_bus_x)
             data["PV"].y = torch.stack(PV_bus_y)
             data["PV"].generation = torch.stack(PV_generation)
             data["PV"].demand = torch.stack(PV_demand)
-            data["PV"].x = torch.stack(PV_bus_x)
-            data["PV"].y = torch.stack(PV_bus_y)
-            data["PV"].generation = torch.stack(PV_generation)
-            data["PV"].demand = torch.stack(PV_demand)
 
-            data["slack"].x = torch.stack(slack_x)
-            data["slack"].y = torch.stack(slack_y)
-            data["slack"].generation = torch.stack(slack_generation)
-            data["slack"].demand = torch.stack(slack_demand)
             data["slack"].x = torch.stack(slack_x)
             data["slack"].y = torch.stack(slack_y)
             data["slack"].generation = torch.stack(slack_generation)
@@ -489,21 +465,9 @@ class PFDeltaDataset(InMemoryDataset):
             ("bus", "branch", "bus"): edge_index,
             ("gen", "gen_link", "bus"): gen_to_bus_index,
             ("load", "load_link", "bus"): load_to_bus_index,
-            ("bus", "branch", "bus"): edge_index,
-            ("gen", "gen_link", "bus"): gen_to_bus_index,
-            ("load", "load_link", "bus"): load_to_bus_index,
         }.items():
             edge_tensor = torch.stack(edges, dim=1)
-            edge_tensor = torch.stack(edges, dim=1)
             data[link_name].edge_index = edge_tensor
-            if link_name != ("bus", "branch", "bus"):
-                data[
-                    (link_name[2], link_name[1], link_name[0])
-                ].edge_index = edge_tensor.flip(0)
-            if link_name == ("bus", "branch", "bus"):
-                data[link_name].edge_attr = torch.stack(edge_attr)
-                data[link_name].edge_label = torch.stack(edge_label)
-
             if link_name != ("bus", "branch", "bus"):
                 data[
                     (link_name[2], link_name[1], link_name[0])
@@ -517,16 +481,10 @@ class PFDeltaDataset(InMemoryDataset):
                 ("PV", "PV_link", "bus"): PV_to_bus,
                 ("PQ", "PQ_link", "bus"): PQ_to_bus,
                 ("slack", "slack_link", "bus"): slack_to_bus,
-                ("PV", "PV_link", "bus"): PV_to_bus,
-                ("PQ", "PQ_link", "bus"): PQ_to_bus,
-                ("slack", "slack_link", "bus"): slack_to_bus,
             }.items():
                 edge_tensor = torch.stack(edges, dim=1)
                 edge_tensor = torch.stack(edges, dim=1)
                 data[link_name].edge_index = edge_tensor
-                data[
-                    (link_name[2], link_name[1], link_name[0])
-                ].edge_index = edge_tensor.flip(0)
                 data[
                     (link_name[2], link_name[1], link_name[0])
                 ].edge_index = edge_tensor.flip(0)
@@ -738,7 +696,6 @@ class PFDeltaDataset(InMemoryDataset):
                         )
                         all_data_lists[split].extend(data_list)
 
-
         return all_data_lists
 
     def process(self):
@@ -779,7 +736,6 @@ class PFDeltaDataset(InMemoryDataset):
             print(f"Processing combined data for task {task}")
             task_data_lists = self.shuffle_split_and_save_data(root)
 
-
             # Add data from this root to the combined lists
             for split in combined_data_lists.keys():
                 if task in [3.1, 3.2, 3.3]:
@@ -790,12 +746,10 @@ class PFDeltaDataset(InMemoryDataset):
                 else:
                     combined_data_lists[split].extend(task_data_lists[split])
 
-
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
                 print(f"Collating combined {split} data with {len(data_list)} samples")
                 combined_data, combined_slices = self.collate(data_list)
-
 
                 # Create a separate directory for the concatenated data
                 concat_path = os.path.join(
@@ -811,7 +765,6 @@ class PFDeltaDataset(InMemoryDataset):
                 )
 
                 print(f"Saved combined {split} data with {len(data_list)} samples")
-
 
     def load(self, split):
         """Loads dataset for the specified split.
@@ -900,6 +853,8 @@ class PFDeltaGNS(PFDeltaDataset):
             pre_filter,
             force_reload,
         )
+
+
 class PFDeltaGNS(PFDeltaDataset):
     def __init__(
         self,
