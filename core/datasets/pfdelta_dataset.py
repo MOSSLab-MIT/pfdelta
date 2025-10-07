@@ -204,17 +204,10 @@ class PFDeltaDataset(InMemoryDataset):
             bus_sol = solution_data["bus"][bus_id_str]
 
             va, vm = bus_sol["va"], bus_sol["vm"]
-            bus_sol = solution_data["bus"][bus_id_str]
-
-            va, vm = bus_sol["va"], bus_sol["vm"]
             bus_voltages.append(torch.tensor([va, vm]))
 
             # Shunts
             gs, bs = 0.0, 0.0
-            for shunt in network_data["shunt"].values():
-                if int(shunt["shunt_bus"]) == bus_id:
-                    gs += shunt["gs"]
-                    bs += shunt["bs"]
             for shunt in network_data["shunt"].values():
                 if int(shunt["shunt_bus"]) == bus_id:
                     gs += shunt["gs"]
@@ -227,23 +220,11 @@ class PFDeltaDataset(InMemoryDataset):
                 if int(load["load_bus"]) == bus_id:
                     pd += load["pd"]
                     qd += load["qd"]
-            for load in network_data["load"].values():
-                if int(load["load_bus"]) == bus_id:
-                    pd += load["pd"]
-                    qd += load["qd"]
 
             bus_demand.append(torch.tensor([pd, qd]))
 
             # Gen
             pg, qg = 0.0, 0.0
-            for gen_id, gen in sorted(
-                network_data["gen"].items(), key=lambda x: int(x[0])
-            ):
-                if int(gen["gen_bus"]) == bus_id:
-                    if gen["gen_status"] == 1:
-                        gen_sol = solution_data["gen"][gen_id]
-                        pg += gen_sol["pg"]
-                        qg += gen_sol["qg"]
             for gen_id, gen in sorted(
                 network_data["gen"].items(), key=lambda x: int(x[0])
             ):
@@ -315,17 +296,6 @@ class PFDeltaDataset(InMemoryDataset):
                     gen["qmax"],
                 )
                 pgen, qgen = gen_sol["pg"], gen_sol["qg"]
-        # Generator nodes
-        for gen_id, gen in sorted(network_data["gen"].items(), key=lambda x: int(x[0])):
-            if gen["gen_status"] == 1:
-                gen_sol = solution_data["gen"][gen_id]
-                pmin, pmax, qmin, qmax = (
-                    gen["pmin"],
-                    gen["pmax"],
-                    gen["qmin"],
-                    gen["qmax"],
-                )
-                pgen, qgen = gen_sol["pg"], gen_sol["qg"]
                 limits.append(torch.tensor([pmin, pmax, qmin, qmax]))
                 generation.append(torch.tensor([pgen, qgen]))
                 is_slack = torch.tensor(
@@ -365,8 +335,6 @@ class PFDeltaDataset(InMemoryDataset):
 
             from_bus = int(branch["f_bus"]) - 1
             to_bus = int(branch["t_bus"]) - 1
-            from_bus = int(branch["f_bus"]) - 1
-            to_bus = int(branch["t_bus"]) - 1
             edge_index.append(torch.tensor([from_bus, to_bus]))
             edge_attr.append(
                 torch.tensor(
@@ -390,16 +358,6 @@ class PFDeltaDataset(InMemoryDataset):
                 )
 
             if branch_sol:
-                edge_label.append(
-                    torch.tensor(
-                        [
-                            branch_sol["pf"],
-                            branch_sol["qf"],
-                            branch_sol["pt"],
-                            branch_sol["qt"],
-                        ]
-                    )
-                )
                 edge_label.append(
                     torch.tensor(
                         [
