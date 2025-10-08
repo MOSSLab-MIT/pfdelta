@@ -187,6 +187,7 @@ class PFDeltaDataset(InMemoryDataset):
         bus_type = []
         bus_shunts = []
         bus_gen, bus_demand = [], []
+        voltage_limits = []
 
         PQ_bus_x, PQ_bus_y = [], []
         PV_bus_x, PV_bus_y = [], []
@@ -205,6 +206,8 @@ class PFDeltaDataset(InMemoryDataset):
 
             va, vm = bus_sol["va"], bus_sol["vm"]
             bus_voltages.append(torch.tensor([va, vm]))
+            vmin, vmax = bus["vmin"], bus["vmax"]
+            voltage_limits.append(torch.tensor([vmin, vmax]))
 
             # Shunts
             gs, bs = 0.0, 0.0
@@ -326,7 +329,7 @@ class PFDeltaDataset(InMemoryDataset):
 
         # Edges
         # bus to bus edges
-        edge_index, edge_attr, edge_label = [], [], []
+        edge_index, edge_attr, edge_label, edge_limits = [], [], [], []
         for branch_id_str, branch in sorted(
             network_data["branch"].items(), key=lambda x: int(x[0])
         ):
@@ -350,6 +353,8 @@ class PFDeltaDataset(InMemoryDataset):
                     ]
                 )
             )
+
+            edge_limits.append(torch.tensor([branch["rate_a"]]))
 
             branch_sol = solution_data["branch"].get(branch_id_str)
             if not is_cpf_sample:
@@ -392,6 +397,7 @@ class PFDeltaDataset(InMemoryDataset):
         data["bus"].bus_voltages = torch.stack(bus_voltages)
         data["bus"].bus_type = torch.stack(bus_type)
         data["bus"].shunt = torch.stack(bus_shunts)
+        data["bus"].voltage_limits = torch.stack(voltage_limits)
 
         data["gen"].limits = torch.stack(limits)
         data["gen"].generation = torch.stack(generation)
@@ -427,6 +433,7 @@ class PFDeltaDataset(InMemoryDataset):
             if link_name == ("bus", "branch", "bus"):
                 data[link_name].edge_attr = torch.stack(edge_attr)
                 data[link_name].edge_label = torch.stack(edge_label)
+                data[link_name].edge_limits = torch.stack(edge_limits)
 
         if self.add_bus_type:
             for link_name, edges in {
@@ -446,7 +453,7 @@ class PFDeltaDataset(InMemoryDataset):
         dataset_size = (
             self.n_samples
             if self.n_samples > 0
-            else self.task_config[self.task][self.sample_type][self.perturbation]
+            else self.task_config[self.task][self.feasibility_type][self.perturbation]
         )
         data_list = []
 
@@ -473,7 +480,7 @@ class PFDeltaDataset(InMemoryDataset):
 
         data_list = []
         is_cpf_sample = True if self.feasibility_type != "feasible" else False
-        for file in raw_fnames[:dataset_size]:
+        for file in tqdm(raw_fnames[:dataset_size], desc="Building analysis data"):
             with open(file, "r") as f:
                 pm_case = json.load(f)
             data = self.build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
@@ -786,7 +793,7 @@ class PFDeltaGNS(PFDeltaDataset):
         for bus_idx in range(num_buses):
             bus_type = bus_types[bus_idx].item()
             pf_x = data["bus"].x[bus_idx]
-            pf_y = data["bus"].x[bus_idx]
+            pf_y = data["bus"].x[bus_idx]  # is this right?
             bus_demand = data["bus"].bus_demand[bus_idx]
             bus_gen = data["bus"].bus_gen[bus_idx]
 
