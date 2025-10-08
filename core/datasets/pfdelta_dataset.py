@@ -4,7 +4,7 @@ from tqdm import tqdm
 from functools import partial
 import glob
 import torch
-from torch_geometric.data import InMemoryDataset, HeteroData
+from torch_geometric.data import InMemoryDataset, HeteroData, download_url, extract_tar
 
 from core.datasets.dataset_utils import (
     canos_pf_data_mean0_var1,
@@ -79,8 +79,8 @@ class PFDeltaDataset(InMemoryDataset):
             2.2: {"feasible": {"n": 12000, "n-1": 12000, "n-2": 12000}},
             2.3: {"feasible": {"n": 6000, "n-1": 6000, "n-2": 6000}},
             3.1: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
-            3.2: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
-            3.3: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
+            3.2: {"feasible":{"none": 6000, "n-1": 6000, "n-2": 6000}},
+            3.3: {"feasible":{"none": 9000, "n-1": 9000, "n-2": 9000}},
             4.1: {
                 "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
                 "feasible": {"n": 16200, "n-1": 16200, "n-2": 16200},
@@ -170,6 +170,11 @@ class PFDeltaDataset(InMemoryDataset):
             return ["all.pt"]  # Only require all.pt for analysis task
 
         return ["train.pt", "val.pt", "test.pt"]
+
+    def download(self, url="https://huggingface.co/datasets/pfdelta/pfdelta/tree/main"):
+        archive_path = download_url(url, self.root, log=True)
+        extract_tar(archive_path, self.raw_dir)
+        os.unlink(archive_path)
 
     def build_heterodata(self, pm_case, is_cpf_sample=False):
         data = HeteroData()
@@ -639,12 +644,12 @@ class PFDeltaDataset(InMemoryDataset):
         # determine roots based on task
         if task in [3.1, 3.2, 3.3]:
             roots = [
-                os.path.join(self.root, case_name) for case_name in self.all_case_names
+                os.path.join(self.root, case_name) for case_name in self.all_case_names[:-1]
             ]
             casename = self.case_name if task == 3.1 else ""
         else:
             roots = [os.path.join(self.root, self.case_name)]
-            casename = self.case_name
+            casename = self.case_name   
 
         if task == "analysis":  # no need to combine anything here
             print(f"Processing data for task {task}")
