@@ -159,7 +159,15 @@ class PFDeltaDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        return sorted([f for f in os.listdir(self.raw_dir) if f.endswith(".json")])
+        task_dir = self.processed_dir
+        if not os.path.exists(task_dir):
+            return []  # This triggers download() # NOTE: check if this is correct
+
+        return sorted([
+            os.path.join(self.task, self.casename, f)
+            for f in os.listdir(task_dir)
+            if f.endswith(".json")
+        ])
 
     @property
     def processed_dir(self):
@@ -172,25 +180,52 @@ class PFDeltaDataset(InMemoryDataset):
 
         return ["train.pt", "val.pt", "test.pt"]
 
-    def _download(self):
-        files = self.files_missing()
+    def download(self):
+        print(f"Downloading files for task {self.task}...")
 
-        if files:
-            print(f"Files for task {self.task} already downloaded. Skipping download.")
-            return
+        # determine which case(s) to download
+        if self.task in [3.1, 3.2, 3.3, "analysis"]:
+            case_names = self.all_case_names  # a list of strings
+        else:
+            case_names = [self.case_name]
 
-        # format URLs to download + extract tar files
-        ipdb.set_trace()
-        archive_path = download_url(url, self.root, log=True)
-        extract_tar(archive_path, self.raw_dir)
-        os.unlink(archive_path)
+        base_url = "https://huggingface.co/datasets/pfdelta/pfdelta/resolve/main"
 
-    def files_missing(self):
-        # check for the specified task if all files exist
-        # download the partial files if only half the files asked -- checking folder names
-        # return a set of folder names to download based on the URL based on whats missing
-        # else return None
-        pass
+        # for each case, download all sub-archives
+        for case_name in case_names:
+            case_raw_dir = os.path.join(self.root, case_name) # NOTE: check if self.root_dir makes more sense here
+            os.makedirs(case_raw_dir, exist_ok=True)
+
+            # define the expected archive names for each case 
+            # NOTE: change this if needed based on new dir structure 
+            datasets = [
+                "raw.tar.gz",
+                "close2inf_train_nose.tar.gz",
+                "close2inf_train_around_nose.tar.gz",
+                "close2inf_test_nose.tar.gz",
+            ]
+
+            for data in datasets:
+                for perturbation in ["n", "n-1", "n-2"]:
+                    data_url = f"{base_url}/{case_name}/{perturbation}/{data}"
+                    data_path = os.path.join(self.root, data)
+
+                    # skip download if the archive already exists
+                    if os.path.exists(os.path.join(case_raw_dir, data.replace(".tar.gz", ""))):
+                        print(f"{data} already extracted for {case_name}. Skipping.")
+                        continue
+
+                    print(f"Downloading {data} from {data_url} ...")
+
+                    try:
+                        download_path = case_raw_dir+"/"+perturbation
+                        data_path = download_url(data_url, download_path, log=True)
+                        extract_tar(data_path, download_path)
+                        os.unlink(data_path)  # delete the archive after extraction
+                        print(f"Extracted {data} to {case_raw_dir}")
+
+                    except Exception as e:
+                        print(f"Failed to download or extract {data}: {e}")
 
     def build_heterodata(self, pm_case, is_cpf_sample=False):
         data = HeteroData()
