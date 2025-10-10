@@ -201,41 +201,41 @@ class PFDeltaDataset(InMemoryDataset):
 
         base_url = "https://huggingface.co/datasets/pfdelta/pfdelta/resolve/main"
 
+        # download the shuffle files if not already present
+        shuffle_download_path = os.path.join(self.root, "shuffle_files")
+        if os.path.exists(shuffle_download_path):
+            print("Shuffle files already exist. Skipping download.")
+        else:
+            print("Downloading shuffle files...")
+            file_url = f"{base_url}/shuffle_files/"
+
+            os.makedirs(shuffle_download_path, exist_ok=True)
+            shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
+            extract_tar(shuffle_files_path, shuffle_download_path)
+
         # for each case, download all sub-archives
         for case_name in case_names:
+            data_url = f"{base_url}/{case_name}"
             case_raw_dir = os.path.join(self.root, case_name)
             os.makedirs(case_raw_dir, exist_ok=True)
 
-            # define the expected archive names for each case 
-            # TODO: change this if needed based on new dir structure 
-            datasets = [
-                "raw.tar.gz",
-                "close2inf_train_nose.tar.gz",
-                "close2inf_train_around_nose.tar.gz",
-                "close2inf_test_nose.tar.gz",
-            ]
+            # skip download if the archive already exists
+            if os.path.exists(os.path.join(case_raw_dir, case_name.replace(".tar.gz", ""))):
+                print(f"{case_name} data already extracted. Skipping.")
+                continue
 
-            for data in datasets:
-                for perturbation in ["n", "n-1", "n-2"]:
-                    data_url = f"{base_url}/{case_name}/{perturbation}/{data}"
-                    data_path = os.path.join(self.root, data)
+            print(f"Downloading {case_name} data from {data_url} ...")
 
-                    # skip download if the archive already exists
-                    if os.path.exists(os.path.join(case_raw_dir, data.replace(".tar.gz", ""))):
-                        print(f"{data} already extracted for {case_name}. Skipping.")
-                        continue
+            try:
+                download_path = case_raw_dir
+                data_path = download_url(data_url, download_path, log=True)
+                extract_tar(data_path, download_path)
+                os.unlink(data_path)  # delete the archive after extraction
+                print(f"Extracted {case_name} data to {case_raw_dir}")
 
-                    print(f"Downloading {data} from {data_url} ...")
+            except Exception as e:
+                print(f"Failed to download or extract {case_name} data: {e}")
 
-                    try:
-                        download_path = case_raw_dir+"/"+perturbation
-                        data_path = download_url(data_url, download_path, log=True)
-                        extract_tar(data_path, download_path)
-                        os.unlink(data_path)  # delete the archive after extraction
-                        print(f"Extracted {data} to {case_raw_dir}")
-
-                    except Exception as e:
-                        print(f"Failed to download or extract {data}: {e}")
 
     def build_heterodata(self, pm_case, is_cpf_sample=False):
         data = HeteroData()
