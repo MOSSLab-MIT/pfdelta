@@ -159,13 +159,23 @@ class PFDeltaDataset(InMemoryDataset):
 
     @property
     def raw_file_names(self):
-        task_dir = self.processed_dir
-        if not os.path.exists(task_dir):
-            return []  # This triggers download() # NOTE: check if this is correct
+
+        # determine which case(s) to download
+        if self.task in [3.1, 3.2, 3.3, "analysis"]:
+            case_names = self.all_case_names  # a list of strings
+        else:
+            case_names = [self.case_name]
+
+        # for each case, download all sub-archives
+        for case_name in case_names:
+            case_raw_dir = os.path.join(self.root, case_name) 
+            # check if this exists 
+            if not os.path.exists(case_raw_dir):
+                return []  # this triggers download()
 
         return sorted([
             os.path.join(self.task, self.casename, f)
-            for f in os.listdir(task_dir)
+            for f in os.listdir(case_raw_dir)
             if f.endswith(".json")
         ])
 
@@ -193,11 +203,11 @@ class PFDeltaDataset(InMemoryDataset):
 
         # for each case, download all sub-archives
         for case_name in case_names:
-            case_raw_dir = os.path.join(self.root, case_name) # NOTE: check if self.root_dir makes more sense here
+            case_raw_dir = os.path.join(self.root, case_name)
             os.makedirs(case_raw_dir, exist_ok=True)
 
             # define the expected archive names for each case 
-            # NOTE: change this if needed based on new dir structure 
+            # TODO: change this if needed based on new dir structure 
             datasets = [
                 "raw.tar.gz",
                 "close2inf_train_nose.tar.gz",
