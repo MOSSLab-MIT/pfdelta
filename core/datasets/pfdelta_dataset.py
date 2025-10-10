@@ -202,21 +202,18 @@ class PFDeltaDataset(InMemoryDataset):
         base_url = "https://huggingface.co/datasets/pfdelta/pfdelta/resolve/main"
 
         # download the shuffle files if not already present
-        shuffle_download_path = os.path.join(self.root, "shuffle_files")
-        if os.path.exists(shuffle_download_path):
-            print("Shuffle files already exist. Skipping download.")
-        else:
-            print("Downloading shuffle files...")
-            file_url = f"{base_url}/shuffle_files/"
+        shuffle_download_path = self.root
+        print("Downloading shuffle files...")
+        file_url = f"{base_url}/shuffle_files.tar"
 
-            os.makedirs(shuffle_download_path, exist_ok=True)
-            shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
-            extract_tar(shuffle_files_path, shuffle_download_path)
+        # os.makedirs(shuffle_download_path, exist_ok=True)
+        shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
+        extract_tar(shuffle_files_path, shuffle_download_path, mode="r:")
 
         # for each case, download all sub-archives
         for case_name in case_names:
-            data_url = f"{base_url}/{case_name}"
-            case_raw_dir = os.path.join(self.root, case_name)
+            data_url = f"{base_url}/{case_name}.tar.gz"
+            case_raw_dir = self.root
             os.makedirs(case_raw_dir, exist_ok=True)
 
             # skip download if the archive already exists
@@ -819,21 +816,21 @@ class PFDeltaGNS(PFDeltaDataset):
         force_reload=False,
     ):
         super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
+            root_dir=root_dir,
+            case_name=case_name,
+            split=split,
+            model=model,
+            task=task,
+            add_bus_type=add_bus_type,
+            transform=transform,
+            pre_transform=pre_transform,
+            pre_filter=pre_filter,
+            force_reload=force_reload,
         )
 
-    def build_heterodata(self, pm_case, feasibility=False):
+    def build_heterodata(self, pm_case, is_cpf_sample=False):
         # call base version
-        data = super().build_heterodata(pm_case, feasibility=feasibility)
+        data = super().build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
         num_buses = data["bus"].x.size(0)
         num_gens = data["gen"].generation.size(0)
         num_loads = data["load"].demand.size(0)
@@ -931,21 +928,21 @@ class PFDeltaCANOS(PFDeltaDataset):
                 transform = partial(canos_pf_slack_mean0_var1, stats)
 
         super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
+            root_dir=root_dir,
+            case_name=case_name,
+            split=split,
+            model=model,
+            task=task,
+            add_bus_type=add_bus_type,
+            transform=transform,
+            pre_transform=pre_transform,
+            pre_filter=pre_filter,
+            force_reload=force_reload,
         )
 
-    def build_heterodata(self, pm_case, feasibility=False):
+    def build_heterodata(self, pm_case, is_cpf_sample=False):
         # call base version
-        data = super().build_heterodata(pm_case, feasibility=feasibility)
+        data = super().build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
 
         # Now prune the data to only keep bus, PV, PQ, slack
         keep_nodes = {"bus", "PV", "PQ", "slack"}
@@ -991,21 +988,21 @@ class PFDeltaPFNet(PFDeltaDataset):
                 transform = partial(pfnet_data_mean0_var1, stats)
 
         super().__init__(
-            root_dir,
-            case_name,
-            split,
-            model,
-            task,
-            add_bus_type,
-            transform,
-            pre_transform,
-            pre_filter,
-            force_reload,
+            root_dir=root_dir,
+            case_name=case_name,
+            split=split,
+            model=model,
+            task=task,
+            add_bus_type=add_bus_type,
+            transform=transform,
+            pre_transform=pre_transform,
+            pre_filter=pre_filter,
+            force_reload=force_reload,
         )
 
-    def build_heterodata(self, pm_case, feasibility=False):
+    def build_heterodata(self, pm_case, is_cpf_sample=False):
         # call base version
-        data = super().build_heterodata(pm_case, feasibility=feasibility)
+        data = super().build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
 
         num_buses = data["bus"].x.size(0)
         bus_types = data["bus"].bus_type
