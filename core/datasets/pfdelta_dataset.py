@@ -203,12 +203,16 @@ class PFDeltaDataset(InMemoryDataset):
 
         # download the shuffle files if not already present
         shuffle_download_path = self.root
-        print("Downloading shuffle files...")
-        file_url = f"{base_url}/shuffle_files.tar"
+        shuffle_files_dir = os.path.join(shuffle_download_path, "shuffle_files")
 
-        # os.makedirs(shuffle_download_path, exist_ok=True)
-        shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
-        extract_tar(shuffle_files_path, shuffle_download_path, mode="r:")
+        # Only download and extract if shuffle_files directory doesn't exist
+        if os.path.exists(shuffle_files_dir):
+            print("Shuffle files already exist. Skipping download.")
+        else:
+            print("Downloading shuffle files...")
+            file_url = f"{base_url}/shuffle_files.tar"
+            shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
+            extract_tar(shuffle_files_path, shuffle_download_path, mode="r:")
 
         # for each case, download all sub-archives
         for case_name in case_names:
@@ -218,7 +222,7 @@ class PFDeltaDataset(InMemoryDataset):
 
             # skip download if the archive already exists
             if os.path.exists(os.path.join(case_raw_dir, case_name.replace(".tar.gz", ""))):
-                print(f"{case_name} data already extracted. Skipping.")
+                print(f"{case_name} data already exists. Skipping download.")
                 continue
 
             print(f"Downloading {case_name} data from {data_url} ...")
@@ -616,9 +620,7 @@ class PFDeltaDataset(InMemoryDataset):
                             root,
                             f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
                         )
-
-                        if not os.path.exists(processed_path):
-                            os.mkdir(processed_path)
+                        os.makedirs(processed_path, exist_ok=True)
 
                         torch.save(
                             (data, slices), os.path.join(processed_path, f"{split}.pt")
