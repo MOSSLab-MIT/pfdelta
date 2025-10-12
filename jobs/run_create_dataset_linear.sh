@@ -12,8 +12,9 @@ module purge
 module load julia/1.9.1
 
 # # Pick argument by array index
-PERTS=(none n-1 n-2)
-PERT="${PERTS[$SLURM_ARRAY_TASK_ID]}"
+# PERTS=(none)
+# PERT="${PERTS[$SLURM_ARRAY_TASK_ID]}"
+PERT="none"
 
 cd "$HOME/pfdelta/data_generation"
-julia main.jl linear case118 $PERT /home/akrivera/orcd/scratch/pfdelta_data
+julia main.jl linear case500 $PERT /home/akrivera/orcd/scratch/pfdelta_data
