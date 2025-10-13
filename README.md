@@ -80,6 +80,44 @@ python main.py --config config_<model_name>
 
 Replace <model_name> with the specific model you want to train (e.g., CANOS, GNS, PFNet.). If you’d like to train on a different task, open the corresponding config file (located in `core/configs/`) and modify the lines: `task: 1.3`.
 
+How to Use PF$\Delta$:
+----------------------
+### Using the Data
+
+We provide a PyTorch dataset class to download and preprocess the raw data stored in HuggingFace. This dataset class can be prompted to load the train/val/test set for a given task in the benchmark and it preprocesses the data to enable both supervised and unsupervised methods. Each dataset item is preprocessed as a graph that contains the sufficient network data to run a standard Newton-Raphson algorithm, and to calculate Power Balance Loss, as well as a single solution that can be used as ground truth by supervised losses. An in-depth description of the data structure is located in Appendix A.6 of the PF$\Delta$ paper, and is replicated below:
+
+    HeteroData(
+      bus={
+        x=[14, 2],
+        y=[14, 2],
+        bus_gen=[14, 2],
+        bus_demand=[14, 2],
+        bus_voltages=[14, 2],
+        bus_type=[14],
+        shunt=[14, 2],
+        limits=[14, 2],
+      },
+      gen={
+        limits=[5, 4],
+        generation=[5, 2],
+        slack_gen=[5],
+      },
+      load={ demand=[11, 2] },
+      (bus, branch, bus)={
+        edge_index=[2, 20],
+        edge_attr=[20, 8],
+        edge_label=[20, 4],
+        edge_limits=[20, 1],
+      },
+      (gen, gen_link, bus)={ edge_index=[2, 5] },
+      (bus, gen_link, gen)={ edge_index=[2, 5] },
+      (load, load_link, bus)={ edge_index=[2, 11] },
+      (bus, load_link, load)={ edge_index=[2, 11] }
+    )
+
+
+The dataset class is located in `core/datasets/pfdelta_dataset.py`, saved under the name PFDeltaDataset. A thorough description of how to use the dataset class is included in the docstrings of the class. In addition to this, we have included a notebook with examples of how to use the dataset class. This includes an example for how to modify the class to adapt the preprocessing to different models’ needs, such as homogeneous GNNs and standard feedforward networks.
+
 Notes:
 ------
 - All values are in per-unit (p.u.).
