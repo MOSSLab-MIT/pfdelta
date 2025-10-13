@@ -1,10 +1,40 @@
+# This code is a PyTorch implementation of the Encoder, Interaction Network 
+# and the Decoder components of the CANOS model originally proposed in the 
+# following papers: 
+# 
+#   Piloto, L., Liguori, S., Madjiheurem, S., Zgubic, M., Lovett, S., 
+#   Tomlinson, H., … Witherspoon, S. (2024). CANOS: A Fast and Scalable 
+#   Neural AC-OPF Solver Robust To N-1 Perturbations. arXiv [Cs.LG]. 
+#   Retrieved from http://arxiv.org/abs/2403.17660
+#
+#   Battaglia, P. W., Pascanu, R., Lai, M., Rezende, D., & Kavukcuoglu, K. 
+#   (2016). Interaction Networks for Learning about Objects, Relations and 
+#   Physics. arXiv [Cs.AI]. Retrieved from http://arxiv.org/abs/1612.00222
+# 
+# Code was implemented by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
+# in April 2025.
+
 import torch
 import torch.nn as nn
 
 
-# Encoder
 class Encoder(nn.Module):
+    """
+    Encoder module for projecting raw node and edge features into latent space.
+    """
     def __init__(self, data, hidden_size: int):
+        """ 
+        This component performs type-specific linear projections for each node and edge
+        feature set in a heterogeneous graph, preparing them for message passing
+        in the Interaction Network.
+
+        Params
+        ----------
+        data : HeteroData
+            A PyTorch Geometric `HeteroData` object defining node/edge feature dimensions.
+        hidden_size : int
+            Dimensionality of the latent embedding space.
+        """
         super(Encoder, self).__init__()
         self.hidden_size = hidden_size
         # Linear projection for all node features
@@ -27,6 +57,21 @@ class Encoder(nn.Module):
         )
 
     def forward(self, data):
+        """
+        Forward pass for the encoder.
+
+        Parameters
+        ----------
+        data : HeteroData
+            Input graph containing `x` and `edge_attr` attributes for each node/edge type.
+
+        Returns
+        -------
+        projected_nodes : dict[str, Tensor]
+            Dictionary of each node type mapped to its high dimensional features 
+        projected_edges : dict[str, Tensor]
+            Dictionary of each edge edge type mapped to its high dimensional features
+        """
         device = data["bus"].x.device
         projected_nodes = {
             node_type: self.node_projections[node_type](data[node_type].x)
@@ -48,8 +93,10 @@ class Encoder(nn.Module):
         return projected_nodes, projected_edges
 
 
-# Interaction Network Module
 class InteractionNetwork(nn.Module):
+    """
+    Core message-passing module implementing the Interaction Network architecture.
+    """
     def __init__(
         self,
         edge_type_dict,
@@ -60,14 +107,27 @@ class InteractionNetwork(nn.Module):
         include_sent_messages=False,
     ):
         """
-        PyTorch implementation of the Interaction Network.
-        Args:
-            projected_edges (dict): Dictionary of projected edge features.
-            projected_nodes (dict): Dictionary of projected node features.
-            edge_dim (int): Dimension of edge features.
-            node_dim (int): Dimension of node features.
-            hidden_dim (int): Hidden layer size.
-            include_sent_messages (bool): Whether to include messages from sender edges in node update.
+        Each forward pass updates both edge and node features based on the latent
+        representations produced by the `Encoder`. The update functions are defined
+        by the `EdgeUpdate` (relation model φ_r) and `NodeUpdate` (object model φ_o)
+        submodules.
+
+        Parameters
+        ----------
+        edge_type_dict : dict
+            Mapping of edge types to bool indicating whether to constructing 
+            edge-specific MLPs for this edge type.
+        node_type_dict : dict
+            Mapping of node types to bool indicating whether to constructing 
+            node-specific MLPs for this node type.
+        edge_dim : int
+            Dimensionality of edge embeddings.
+        node_dim : int
+            Dimensionality of node embeddings.
+        hidden_dim : int
+            Hidden layer dimensionality for all MLPs.
+        include_sent_messages : bool, optional
+            Whether to aggregate outgoing edge messages in node updates.
         """
         super().__init__()
         self.include_sent_messages = include_sent_messages
@@ -79,13 +139,22 @@ class InteractionNetwork(nn.Module):
     def forward(self, nodes, edges, data):
         """
         Forward pass of the Interaction Network.
-        Args:
-            nodes (Dict): !!!!
-            edges (Dict): !!!!
-            senders (Tensor): Indices of sender nodes [num_edges].
-            receivers (Tensor): Indices of receiver nodes [num_edges].
-        Returns:
-            Updated nodes and edges.
+
+        Parameters
+        ----------
+        nodes : dict[str, Tensor]
+            Node embeddings by type, each of shape [num_nodes, node_dim].
+        edges : dict[str, Tensor]
+            Edge embeddings by type, each of shape [num_edges, edge_dim].
+        data : HeteroData
+            PyTorch Geometric graph with `edge_index` mappings between node types.
+
+        Returns
+        -------
+        updated_nodes_dict : dict[str, Tensor]
+            Updated node embeddings for each type.
+        updated_edges_dict : dict[str, Tensor]
+            Updated edge embeddings for each type.
         """
         # Apply marshalling and relational model phi_r (edge update)
         # phi_r is applied onto src node features, dst node features, and edges
@@ -137,16 +206,26 @@ class InteractionNetwork(nn.Module):
         return updated_nodes_dict, updated_edges_dict
 
 
-# Relational and Object models (phi_r and phi_o)
+# relational and object models (phi_r and phi_o)
 class EdgeUpdate(nn.Module):
+    """
+    Relational model (φ_r) for updating edge features based 
+    on sender and receiver node embeddings.
+    """
     def __init__(self, edge_dim, node_dim, hidden_dim, edge_type_dict):
         """
         Edge update function for updating edge features.
-        Args:
-            edge_dim (int): Dimension of edge features.
-            node_dim (int): Dimension of node features.
-            hidden_dim (int): Hidden layer size.
-            out_dim (int): Output edge feature dimension.
+
+        Parameters:
+        ----------
+        edge_dim: int
+            Dimension of edge features.
+        node_dim: int 
+            Dimension of node features.
+        hidden_dim: int 
+            Hidden layer size.
+        out_dim: int
+            Output edge feature dimension.
         """
         super().__init__()
         self.mlps = nn.ModuleDict(
@@ -164,27 +243,44 @@ class EdgeUpdate(nn.Module):
     def forward(self, edges, sender_features, receiver_features, edge_type):
         """
         Compute updated edge features.
-        Args:
-            edges (Tensor): Shape [num_edges, edge_feat_dim].
-            sender_features (Tensor): Shape [num_edges, node_feat_dim].
-            receiver_features (Tensor): Shape [num_edges, node_feat_dim].
+
+        Parameters:
+        ----------
+        edges: torch.Tensor
+            Shape [num_edges, edge_feat_dim].
+        sender_features: torch.Tensor
+            Shape [num_edges, node_feat_dim].
+        receiver_features: torch.Tensor 
+            Shape [num_edges, node_feat_dim].
+
         Returns:
-            Tensor: Updated edge features of shape [num_edges, out_dim].
+        -------
+        Tensor: 
+            Edge-specific MLPs applied to compute updated edge 
+            features of shape [num_edges, edge_dim].
         """
         x = torch.cat([edges, sender_features, receiver_features], dim=-1)
         return self.mlps[edge_type](x)
 
 
 class NodeUpdate(nn.Module):
+    """
+    Object model (φ_o) for updating node features using aggregated edge messages.
+    """
     def __init__(
         self, node_dim, hidden_dim, node_type_dict, include_sent_messages=False
     ):
         """
         Node update module for updating node features.
-        Args:
-            input_dim (int): Dimension of node features.
-            output_dim (int): Output node feature dimension.
-            include_sent_messages (bool): Whether to include messages from sender edges
+
+        Parameters:
+        ----------
+        input_dim: int
+            Dimension of node features.
+        output_dim: int 
+            Output node feature dimension.
+        include_sent_messages: bool 
+            Whether to include messages from sender edges
         """
         super().__init__()
         self.include_sent_messages = include_sent_messages
@@ -203,20 +299,41 @@ class NodeUpdate(nn.Module):
     def forward(self, node_features, updated_messages, node_type):
         """
         Compute updated node features.
-        Args:
-            node_features (Tensor): Shape [num_nodes, node_feat_dim].
-            received_messages (Tensor): Shape [num_nodes, node_feat_dim].
-            sent_messages (Tensor, optional): Shape [num_nodes, node_feat_dim].
+
+        Parameters
+        ----------
+        node_features (Tensor): 
+            Shape [num_nodes, node_feat_dim].
+        received_messages (Tensor): 
+            Shape [num_nodes, node_feat_dim].
+        sent_messages (Tensor, optional): 
+            Shape [num_nodes, node_feat_dim].
+
         Returns:
-            Tensor: Updated node features of shape [num_nodes, output_dim].
+        -------
+        Tensor: 
+            Node-specific MLPs applied to compute updated node
+            features of shape [num_nodes, node_dim].
         """
         x = torch.cat([node_features, updated_messages], dim=-1)
         return self.mlps[node_type](x)
 
 
-#  Decoder
 class DecoderOPF(nn.Module):
+    """
+    Decoder for the AC-OPF task.
+    """
     def __init__(self, hidden_size: int):
+        """ 
+        Maps latent bus and generator embeddings to 
+        physical quantities (voltage magnitude, 
+        voltage angle, active/reactive power).
+
+        Parameters
+        ----------
+        hidden_size : int
+            Dimensionality of the latent embedding space.
+        """
         super(DecoderOPF, self).__init__()
 
         # Linear projection for all node features
@@ -236,6 +353,25 @@ class DecoderOPF(nn.Module):
         )
 
     def forward(self, node_dict, data):
+        """
+        Decode latent node embeddings to OPF quantities.
+
+        Parameters
+        ----------
+        node_dict : dict[str, Tensor]
+            Latent node embeddings by type.
+        data : HeteroData
+            Graph containing voltage and power bounds.
+
+        Returns
+        -------
+        output_dict : dict
+            Dictionary containing model predictions:
+            - output_dict["bus"] : torch.Tensor of shape (n_bus, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["generator"] torch.Tensor of shape (n_gen, 2)
+              Predicted active and reactive power generation values. 
+        """
         # pmin, pmax = data["generator"].x[:, 2:4].T
         # qmin, qmax = data["generator"].x[:, 5:7].T
         # vmin, vmax = data["bus"].x[:, 2:].T
@@ -267,7 +403,20 @@ class DecoderOPF(nn.Module):
 
 
 class DecoderPF(nn.Module):
+    """
+    Decoder for the AC-OPF task.
+    """
     def __init__(self, hidden_size: int):
+        """ 
+        Maps latent PV, PQ, slack embeddings to 
+        physical quantities (voltage magnitude, 
+        voltage angle, active/reactive power).
+
+        Parameters
+        ----------
+        hidden_size : int
+            Dimensionality of the latent embedding space.
+        """
         super(DecoderPF, self).__init__()
 
         # Linear projection for all node features
@@ -287,6 +436,29 @@ class DecoderPF(nn.Module):
         )
 
     def forward(self, node_dict, data):
+        """
+        Decode latent node embeddings to reconstruct bus-level state.
+
+        Parameters
+        ----------
+        node_dict : dict[str, Tensor]
+            Latent node embeddings for PV, PQ, and slack buses.
+        data : HeteroData
+            Graph defining bus-link relations.
+
+        Returns
+        -------
+        output_dict : dict
+            Dictionary containing model predictions:
+            - output_dict["bus"] : torch.Tensor of shape (n_bus, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["PV"] : torch.Tensor of shape (n_PV, 2)
+              Predicted bus voltage angle [rad] and reactive power generation
+            - output_dict["PQ"] : torch.Tensor of shape (n_PQ, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["slack"] : torch.Tensor of shape (1, 2)
+              Net active/reactive power generation at the slack bus [p.u.].
+        """
         device = data["bus"].x.device
         output_dict = {
             node_type: self.node_decodings[node_type](node_dict[node_type])
