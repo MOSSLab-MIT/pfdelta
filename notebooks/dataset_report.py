@@ -1,0 +1,107 @@
+import marimo
+
+__generated_with = "0.16.5"
+app = marimo.App(width="medium")
+
+
+@app.cell
+def _(mo):
+    mo.md(
+        r"""
+    # PF$\Delta$ Dataset Validation Report
+    **Purpose:** Verify that the dataset exhibits the claimed properties and characteristics.  
+    **Dataset version:** v1.0  
+    **Generated on:** Monday, October 13th, 2025
+    """
+    )
+    return
+
+
+@app.cell
+def _():
+    import marimo as mo
+    from notebooks.dataset_validation_utils import all_samples_have_k_contingencies, add_ids_to_base, plot_grouped_outage_histograms
+    from core.datasets.pfdelta_dataset import PFDeltaDataset
+    return (
+        PFDeltaDataset,
+        add_ids_to_base,
+        all_samples_have_k_contingencies,
+        mo,
+        plot_grouped_outage_histograms,
+    )
+
+
+@app.cell
+def _(PFDeltaDataset):
+    # Load datasets to evaluate
+    case_name = "case118"
+    root_dir = "data"
+    case_n = PFDeltaDataset(
+        root_dir = root_dir,
+        case_name = case_name,
+        perturbation = "n",
+        task = "analysis"
+    )
+    case_n_1 = PFDeltaDataset(
+        root_dir = root_dir,
+        case_name = case_name,
+        perturbation = "n-1",
+        task = "analysis"
+    )
+
+    case_n_2 = PFDeltaDataset(
+        root_dir = root_dir,
+        case_name = case_name,
+        perturbation = "n-2",
+        task = "analysis"
+    )
+    return case_n, case_n_1, case_n_2
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""## Feasible samples""")
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""### N-1, and N-2 topological perturbations""")
+    return
+
+
+@app.cell
+def _(all_samples_have_k_contingencies, case_n, case_n_1):
+    # Check if all N-1 samples have exactly 1 contingencies
+    all_samples_have_k_contingencies(case_n[0], case_n_1, k=1)
+    return
+
+
+@app.cell
+def _(all_samples_have_k_contingencies, case_n, case_n_2):
+    # Check if all N-2 samples have exactly 2 contingencies
+    all_samples_have_k_contingencies(case_n[0], case_n_2, k=2)
+    return
+
+
+@app.cell
+def _(
+    add_ids_to_base,
+    case_n,
+    case_n_1,
+    case_n_2,
+    plot_grouped_outage_histograms,
+):
+    base_case = add_ids_to_base(case_n[0])
+    plot_grouped_outage_histograms(
+        base_case,
+        samples_n1=case_n_1,
+        samples_n2=case_n_2,
+        title_prefix="",
+        normalize=False,  # set True to show outage frequency instead of raw counts
+    )
+    return
+
+
+if __name__ == "__main__":
+    app.run()
