@@ -140,13 +140,12 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
 
     # Initialize counters
     successful_files = 0
-    i = 0
+    i = 1
     p = Progress(n_nose_samples; desc="Creating train samples", dt=0.5)
 
     while successful_files < n_nose_samples
 
-        i += 1 # shuffle file keys are 1-indexed
-        current_sample_idx = selected_cases_idx_train[i]
+        current_sample_idx = selected_cases_idx_train[i] + 1 # because the .json files are 1-indexed, but the shuffled indices are 0-indexed.
 
         # Convert current sample from PowerModels to MATPOWER format
         current_net_path  = create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
@@ -187,6 +186,7 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
                 end
             end
         end
+        i += 1 # move on to the next sample
     end
     finish!(p)
 end
@@ -202,13 +202,12 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
 
     # Initialize counters
     successful_files = 0
-    i = 0
+    i = 1
     p = Progress(N_SAMPLES_NOSE_TEST; desc="Creating test samples", dt=5)
 
     while successful_files < N_SAMPLES_NOSE_TEST
 
-        i += 1 # shuffle file keys are 1-indexed 
-        current_sample_idx = selected_cases_idx_test[i]
+        current_sample_idx = selected_cases_idx_test[i] + 1 # because the .json files are 1-indexed, but the shuffled indices are 0-indexed.
 
         # Convert current sample from PowerModels to MATPOWER format
         current_net_path  = create_matpower_file(solved_cases_path, mpc_save_path, current_sample_idx)
@@ -243,6 +242,7 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
                 end
             end
         end
+        i += 1 # move on to the next sample
     end
     finish!(p)
 end
@@ -324,6 +324,7 @@ function create_file_tuples(sample_cpf_save_path)
     return file_tuples
 end
 
+# TODO: this is not used anywhere
 function validate_samples()
     files_nose = Glob.glob("sample_*.json", joinpath(close2inf_path, "nose")) # TODO: not defined
     @assert length(files_nose) == n_samples_nose_train "Got $(length(files_nose)) instead of $(n_samples_nose_train)" # TODO: not defined
@@ -333,8 +334,6 @@ function validate_samples()
         @assert length(files_around) == n_samples_nose_train * n_samples_around_nose_train "Got $(length(files_around)) instead of $(n_samples_nose_train * n_samples_around_nose_train)" # TODO: not defined
     end
 end
-
-# Old helper functions
 
 function create_matpower_file(solved_cases_path, mpc_save_path, idx)
     json_file = "sample_$(idx).json"
@@ -347,7 +346,6 @@ function create_matpower_file(solved_cases_path, mpc_save_path, idx)
     PM.export_matpower(joinpath(mpc_save_path, "sample_$(idx).m"), net)
     return joinpath(mpc_save_path, "sample_$(idx).m")
 end
-
 
 function empty_folder(path::String)
     isdir(path) || return
@@ -385,6 +383,8 @@ function fix_branch_flows!(net)
         end
     end
 end
+
+# TODO: i don't think these are used
 
 function get_condition_num_and_NR(results, raw_path, sample_idx, pv_curve_data)
     pattern = "sample_$(sample_idx)_lam_*.m"
