@@ -1,4 +1,4 @@
-const N_SAMPLES_NOSE_TRAIN = 1800 # TODO: double-check
+const N_SAMPLES_NOSE_TRAIN = 3600 # TODO: double-check
 const N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
 const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
 

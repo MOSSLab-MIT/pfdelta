@@ -1,3 +1,17 @@
+# This code is a PyTorch implementation of the Graph Neural Solver
+# architecture originally proposed in the following paper: 
+# 
+#   Balthazar Donon, Rémy Clément, Benjamin Donnot, Antoine Marot, 
+#   Isabelle Guyon, et al.. Neural Networks for Power Flow : Graph Neural 
+#   Solver. Electric Power Systems Research, 2020, 189, pp.106547. 
+#   ff10.1016/j.epsr.2020.106547ff. ffhal-02372741f
+# 
+# It is compatible with PFDeltaDataset.
+# 
+# Code was implemented by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
+# in April 2025.
+
+
 import torch
 import torch.nn as nn
 
@@ -7,7 +21,34 @@ from core.utils.registry import registry
 
 @registry.register_model("graph_neural_solver")
 class GraphNeuralSolver(nn.Module):
+    """
+    Graph Neural Solver (GNS) for AC power flow and optimal power flow tasks.
+
+    This model performs iterative message-passing updates on a power grid graph,
+    enforcing power balance through physics-aware constraints while learning
+    to correct node voltages and angles.
+
+    At each iteration:
+        1. Global active power compensation is applied at the system level.
+        2. Local reactive power balance is computed per node.
+        3. A neural message-passing block updates node features.
+
+    The architecture couples a learned component (neural updates) with
+    physically motivated updates (power balance and slack bus adjustments).
+    """
     def __init__(self, K, hidden_dim, gamma):
+        """ 
+        Initialize the GNS model. 
+
+        Parameters
+        ----------
+        K: int
+            Number of message-passing / update iterations.
+        hidden_dim: int 
+            Dimension of node and message embeddings.
+        gamma: float
+            Discount factor for weighting layer-wise imbalance losses.
+        """
         super().__init__()
         self.K = K
         self.gamma = gamma
@@ -26,7 +67,29 @@ class GraphNeuralSolver(nn.Module):
         self.power_balance = GNSPowerBalanceLoss()
 
     def forward(self, data, return_data=False):
-        """ """
+        """
+        Forward pass of the GNS model.
+
+        Performs K iterative updates on the graph, applying global
+        power compensation, local imbalance correction, and neural updates.
+
+        Parameters
+        ----------
+        data: HeteroData 
+            Graph data containing node (bus), edge (branch),
+            and generator information.
+        return_data: bool, optional
+            If True, returns modified `data` object.
+
+        Returns
+        -------
+        out_dict: dict
+            dict: {
+                "last_loss" (Tensor): Power imbalance loss after final layer.
+                "total_layer_loss" (Tensor): Weighted sum of imbalance losses across layers.
+                "data" (HeteroData): Updated graph data object (if return_data=True).
+            }
+        """
         device = data["bus"].x.device
 
         # Instantiate message vectors for each bus
@@ -55,7 +118,20 @@ class GraphNeuralSolver(nn.Module):
         return out_dict
 
     def global_active_compensation(self, data):
-        """ """
+        """
+        Apply global active power balance across the network.
+
+        This step enforces active power conservation by:
+            1. Computing per-graph Joule losses.
+            2. Aggregating total active demand and shunt losses.
+            3. Adjusting the slack bus generation (Pg) to match global demand.
+            4. Computing reactive power generation (Qg) via the power balance loss.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Input graph data object (in-place update).
+        """
         # Compute global power demand
         p_joule = self.compute_p_joule(data)
         p_global = self.compute_p_global(data, p_joule)
@@ -71,7 +147,19 @@ class GraphNeuralSolver(nn.Module):
         data["bus"].qg[bus_types != 1] = qg[bus_types != 1]
 
     def compute_p_joule(self, data):
-        """ """
+        """
+        Compute per-graph Joule losses due to line resistances.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Graph data with branch parameters and node states.
+
+        Returns:
+        -------
+        p_joule_per_graph: Tensor
+            Per-graph vector of Joule losses [num_graphs] (batched)
+        """
         # Extract edge index and attributes
         edge_index = data[("bus", "branch", "bus")].edge_index
         edge_attr = data[("bus", "branch", "bus")].edge_attr
@@ -120,7 +208,21 @@ class GraphNeuralSolver(nn.Module):
         return p_joule_per_graph
 
     def compute_p_global(self, data, p_joule):
-        """ """
+        """
+        Compute per-graph global active power demand including Joule losses.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Input graph data.
+        p_joule: torch.Tensor
+            Per-graph Joule losses.
+
+        Returns:
+        -------
+        p_global: torch.Tensor
+            Per-graph total active power demand [num_graphs]. (batched)
+        """
         # Per-bus data
         pd = data["bus"].pd
         v = data["bus"].v
@@ -143,7 +245,25 @@ class GraphNeuralSolver(nn.Module):
         return p_global
 
     def compute_pg_slack(self, p_global, data):
-        """ """
+        """
+        Compute active power generation (Pg) for slack buses to 
+        satisfy power balance.
+
+        The slack bus adjusts its generation within defined limits to match
+        total system demand and losses, ensuring that ∑Pg = ∑Pd + losses.
+
+        Parameters
+        ----------
+        p_global: torch.Tensor
+            Per-graph global demand including losses.
+        data: HeteroData 
+            Input graph data with generator info.
+
+        Returns:
+        --------
+        pg_slack: torch.Tensor
+            Slack bus Pg values [num_graphs].
+        """
         pg_setpoints = data["gen"].generation[:, 0]
         pg_max_vals = data["gen"].limits
         pg_min_vals = data["gen"].limits
@@ -205,14 +325,45 @@ class GraphNeuralSolver(nn.Module):
         return pg_slack
 
     def local_power_imbalance(self, data, layer_loss):
-        """ """
+        """
+        Compute local power imbalance (ΔP, ΔQ) at each bus.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Graph data containing bus-level states.
+        layer_loss: bool
+            If True, returns the scalar imbalance magnitude
+            for use in training loss.
+
+        Returns:
+        --------
+        delta_s: torch.Tensor
+            Total imbalance magnitude (ΔS) or per-bus imbalance values.
+        """
         delta_p, delta_q, delta_s = self.power_balance(data, layer_loss)
         data["bus"].delta_p = delta_p
         data["bus"].delta_q = delta_q
         return delta_s
 
     def message_passing_update(self, data):
-        """ """
+        """
+        Compute and aggregate messages along network branches.
+
+        For each edge (i,j), a message is generated from the source node i
+        based on its embedding and line parameters, and aggregated at the
+        destination node j.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Graph data with node and edge features.
+
+        Returns:
+        --------
+        agg_msg_i: torch.Tensor 
+            Aggregated messages for each node [num_nodes, hidden_dim].
+        """
         edge_index = data[("bus", "branch", "bus")].edge_index
         edge_attr = data[("bus", "branch", "bus")].edge_attr
         src, dst = edge_index
@@ -240,13 +391,39 @@ class GraphNeuralSolver(nn.Module):
         return agg_msg_i
 
     def apply_nn_update(self, data, k):
-        """ """
+        """
+        Apply the neural update block for iteration k.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Graph data (updated in-place).
+        k: int 
+            Current iteration index.
+        """
         messages = self.message_passing_update(data)
         self.layers[k](data, messages)
 
 
 class NNUpdate(nn.Module):
+    """
+    Neural update block applied per iteration in the GNS architecture.
+
+    Given current node states (v, θ), local power imbalances (ΔP, ΔQ),
+    and aggregated messages, this module updates:
+        - voltage magnitudes (v),
+        - voltage angles (θ),
+        - node memory embeddings (m).
+    """
     def __init__(self, input_dim, hidden_dim):
+        """ 
+        Parameters
+        ----------
+        input_dim: int
+            Dimensionality of concatenated input vector.
+        hidden_dim: int
+            Dimension of hidden and output embeddings.
+        """
         super().__init__()
         self.L_theta = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
@@ -268,7 +445,16 @@ class NNUpdate(nn.Module):
         )
 
     def forward(self, data, messages):
-        """ """
+        """
+        Apply per-node updates for voltage, angle, and embedding.
+
+        Parameters
+        ----------
+        data: HeteroData
+            Graph data containing bus-level states.
+        messages: torch.Tensor
+            Aggregated node messages [num_nodes, hidden_dim].
+        """
         v = data["bus"].v.unsqueeze(1)
         theta = data["bus"].theta.unsqueeze(1)
         delta_p = data["bus"].delta_p.unsqueeze(1)

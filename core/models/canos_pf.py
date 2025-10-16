@@ -1,3 +1,18 @@
+# This code is a PyTorch implementation of a modified version of the
+# CANOS architecture tailored to the power flow (PF) problem instead of the 
+# optimal power flow (OPF) problem. The original architecture was proposed 
+# in the following paper: 
+# 
+#   Piloto, L., Liguori, S., Madjiheurem, S., Zgubic, M., Lovett, S., 
+#   Tomlinson, H., … Witherspoon, S. (2024). CANOS: A Fast and Scalable 
+#   Neural AC-OPF Solver Robust To N-1 Perturbations. arXiv [Cs.LG]. 
+#   Retrieved from http://arxiv.org/abs/2403.17660
+#
+# This model is compatible with PFDeltaDataset.
+# 
+# Code was implemented by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
+# in April 2025.
+
 import torch
 import torch.nn as nn
 
@@ -8,7 +23,26 @@ from core.utils.registry import registry
 # CANOS Architecture
 @registry.register_model("canos_pf")
 class CANOS_PF(nn.Module):
+    """
+    This model is a modified version of CANOS(Constraint-Aware Neural OPF Solver) 
+    for AC Power Flow (PF) prediction using Interaction Networks. 
+    """
     def __init__(self, dataset, hidden_dim, include_sent_messages, k_steps):
+        """
+        Initialize the CANOS-PF model.
+
+        Parameters
+        ----------
+        dataset : torch_geometric.data.Dataset
+            Dataset containing graph-structured power network data, with `HeteroData` objects
+            defining node and edge types (e.g., PV, PQ, slack, slack_link).
+        hidden_dim : int
+            Dimensionality of hidden node and edge embeddings.
+        include_sent_messages : bool
+            Whether to include self-messages (sent messages) in the InteractionNetwork layers.
+        k_steps : int
+            Number of message-passing iterations (interaction steps).
+        """
         super().__init__()
         edge_feat_dim = node_feat_dim = hidden_dim
 
@@ -44,6 +78,35 @@ class CANOS_PF(nn.Module):
         self.k_steps = k_steps
 
     def forward(self, data):
+        """
+        Forward pass of the CANOS-PF model.
+
+        Parameters
+        ----------
+        data : torch_geometric.data.HeteroData
+            Heterogeneous graph representing the power network.
+            Must contain node types (e.g., 'bus') and edge types such as
+            ('bus', 'branch', 'bus') and ('slack', 'slack_link', 'bus').
+
+        Returns
+        -------
+        output_dict : dict
+            Dictionary containing model predictions:
+            
+            - output_dict["bus"] : torch.Tensor of shape (n_bus, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["PV"] : torch.Tensor of shape (n_PV, 2)
+              Predicted bus voltage angle [rad] and reactive power generation
+            - output_dict["PQ"] : torch.Tensor of shape (n_PQ, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["slack"] : torch.Tensor of shape (1, 2)
+              Net active/reactive power generation at the slack bus [p.u.].
+            - output_dict["edge_preds"] : torch.Tensor of shape (n_branch, 4)
+              Predicted real/reactive branch power flows:
+              [p_fr, q_fr, p_to, q_to].
+            - output_dict["casename"] : str
+              Case name for the dataset (copied from `dataset.case_name`).
+        """
         # Encoding
         projected_nodes, projected_edges = self.encoder(data)
 
@@ -68,6 +131,45 @@ class CANOS_PF(nn.Module):
         return output_dict
 
     def derive_branch_flows(self, output_dict, data):
+        """
+        Compute complex branch power flows from predicted bus voltages.
+
+        This method reconstructs branch power flows using predicted bus
+        voltage magnitudes and angles together with branch electrical
+        parameters (resistance, reactance, tap ratio, phase shift, etc.).
+
+        Parameters
+        ----------
+        output_dict : dict
+            Dictionary containing model predictions:
+            - output_dict["bus"] : torch.Tensor of shape (n_bus, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["PV"] : torch.Tensor of shape (n_PV, 2)
+              Predicted bus voltage angle [rad] and reactive power generation
+            - output_dict["PQ"] : torch.Tensor of shape (n_PQ, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["slack"] : torch.Tensor of shape (1, 2)
+              Net active/reactive power generation at the slack bus [p.u.].
+            - output_dict["edge_preds"] : torch.Tensor of shape (n_branch, 4)
+              Predicted real/reactive branch power flows:
+              [p_fr, q_fr, p_to, q_to].
+            - output_dict["casename"] : str
+              Case name for the dataset (copied from `dataset.case_name`).
+        data : torch_geometric.data.HeteroData
+            Graph data containing branch electrical parameters in
+            edge_attr for edge type ('bus', 'branch', 'bus').
+
+        Returns
+        -------
+        p_fr : torch.Tensor
+            Real power flow [p.u.] from the "from" bus of each branch.
+        q_fr : torch.Tensor
+            Reactive power flow [p.u.] from the "from" bus of each branch.
+        p_to : torch.Tensor
+            Real power flow [p.u.] into the "to" bus of each branch.
+        q_to : torch.Tensor
+            Reactive power flow [p.u.] into the "to" bus of each branch.
+        """
         # Create complex voltage
         va = output_dict["bus"][:, 0]
         vm = output_dict["bus"][:, -1]
@@ -113,6 +215,43 @@ class CANOS_PF(nn.Module):
         return p_fr, q_fr, p_to, q_to
 
     def derive_slack_output(self, output_dict, data):
+        """
+        Compute net active and reactive power generation at the slack bus.
+
+        The slack generation is derived from Kirchhoffs Current Law (KCL)
+        at the slack node, summing incoming and outgoing branch flows and
+        shunt power injections to yield the net slack power.
+
+        Parameters
+        ----------
+        output_dict : dict
+            Dictionary containing model predictions:
+            - output_dict["bus"] : torch.Tensor of shape (n_bus, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["PV"] : torch.Tensor of shape (n_PV, 2)
+              Predicted bus voltage angle [rad] and reactive power generation
+            - output_dict["PQ"] : torch.Tensor of shape (n_PQ, 2)
+              Predicted bus voltage angle [rad] and magnitude [p.u.].
+            - output_dict["slack"] : torch.Tensor of shape (1, 2)
+              Net active/reactive power generation at the slack bus [p.u.].
+            - output_dict["edge_preds"] : torch.Tensor of shape (n_branch, 4)
+              Predicted real/reactive branch power flows:
+              [p_fr, q_fr, p_to, q_to].
+            - output_dict["casename"] : str
+              Case name for the dataset (copied from `dataset.case_name`).
+        data : torch_geometric.data.HeteroData
+            Graph data containing:
+            - Bus shunt parameters (data["bus"].shunt)
+            - Slack bus mapping (data["slack", "slack_link", "bus"].edge_index)
+            - Branch edge indices (data["bus", "branch", "bus"].edge_index)
+
+        Returns
+        -------
+        p_slack_net : torch.Tensor
+            Net real power generation [p.u.] at the slack bus.
+        q_slack_net : torch.Tensor
+            Net reactive power generation [p.u.] at the slack bus.
+        """
         device = data["bus"].x.device
         n = data["bus"].x.shape[0]
         bus_shunts = data["bus"].shunt.to(device)
