@@ -67,7 +67,8 @@ class GraphNeuralSolver(nn.Module):
 
         # Compute qg values for each bus
         qg = self.power_balance(data, layer_loss=False)
-        data["bus"].qg = qg
+        bus_types = data["bus"].bus_type
+        data["bus"].qg[bus_types != 1] = qg[bus_types != 1]
 
     def compute_p_joule(self, data):
         """ """
