@@ -2,13 +2,14 @@
 # https://github.com/StavrosOrf/PowerFlowNet/tree/main (GitHub: StavrosOrf)
 #
 # Original work is described in the following publication:
+# 
 #   Nan Lin, Stavros Orfanoudakis, Nathan Ordonez Cardenas, Juan S. Giraldo,
 #   and Pedro P. Vergara, "PowerFlowNet: Power flow approximation using
 #   message passing Graph Neural Networks," International Journal of Electrical
 #   Power & Energy Systems, vol. 160, pp. 110112, 2024.
 #   https://doi.org/10.1016/j.ijepes.2024.110112
 #
-# Code was modified by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera
+# Code was modified by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
 # in January 2025.
 
 import torch
