@@ -1,7 +1,7 @@
 import torch
 
 from torch.nn.functional import mse_loss
-from torch_geometric.nn import global_add_pool
+from torch_geometric.nn import global_add_pool, global_mean_pool
 
 from core.utils.registry import registry
 from core.datasets.data_stats import pfnet_pfdata_stats
@@ -10,29 +10,39 @@ from core.datasets.data_stats import pfnet_pfdata_stats
 @registry.register_loss("universal_power_balance")
 class PowerBalanceLoss:
     """
-    Compute the power balance loss.
-
-    Parameters:
-        predictions (torch.Tensor): Model predictions (num_nodes, 4)
-                                    where each row represents[V, θ, Pg, Qg]
-        targets (torch.Tensor): Ground truth values (num_nodes, 4) where
-                                each row represents [V, θ, Pd, Qd]
-        bus_type (torch.Tensor): Tensor (num_nodes,) that indicates bus type.
-        edge_index (torch.Tensor): Graph connectivity in COO format (2, num_edges).
-        edge_attr (torch.Tensor): Edge features (num_edges, edge_dim).
-
-    Returns:
-        torch.Tensor: Loss value; sum of squared power mismatches.
+    Compute the power balance loss. calculate_PBL can be used for calculating
+    the PBL independently of class initialization. The class can be initialized
+    to facilitate standardized model output processing and reusing values in
+    losses.
     """
 
     def __init__(self, model):
+        """
+        A model can be specified to standardized model output processing.
+        """
         self.power_balance_mean = None
         self.power_balance_max = None
         self.power_balance_l2 = None
         self.model = model
         self.loss_name = "PBL Mean"
 
+
     def __call__(self, outputs, data):
+        """
+        Parameters
+        ----------
+            outputs
+                A data structure containing the outputs of the model. Its details vary per model.
+            data : torch_geometric.data.batch.HeteroDataBatch
+                A Pytorch Geometric hetero graph batch with network data.
+
+        Returns
+        -------
+            power_balance_mean : torch.Tensor
+                Mean power balance mismatch given the model's predictions.
+        """
+        # 1. Gather predictions in standard format
+
         power_balance_model_preds = self.collect_model_predictions(
             self.model, data, outputs
         )
@@ -40,17 +50,92 @@ class PowerBalanceLoss:
         edge_attr = power_balance_model_preds["edge_attr"]
         edge_index = data["bus", "branch", "bus"].edge_index
 
+        # 2. Unpack values for PBL calculations
+
+        # Unpack shunt values
         shunt_g = data["bus"].shunt[:, 0]
         shunt_b = data["bus"].shunt[:, 1]
         # Unpack node feature and edge feature values values
         V_pred, theta_pred, Pnet, Qnet = predictions
         r, x, bs, tau, theta_shift = edge_attr
-
-        # Compute bus-level power injections based on predictions
-        Pbus_pred = torch.zeros_like(V_pred)
-        Qbus_pred = torch.zeros_like(V_pred)
         src, dst = edge_index
 
+        # 3. Calculate complex mismatch power per bus
+
+        delta_P, delta_Q = PowerBalanceLoss.calculate_PBL(
+            V_pred, theta_pred, Pnet, Qnet,     # predictions
+            r, x, bs, tau, theta_shift,         # line attributes
+            shunt_g, shunt_b,                   # shunt values
+            src, dst,                           # line connections 
+        )
+
+        # 4. Use complex mismatch to calculate PBL losses
+
+        # Calculate PBL Mean
+        delta_PQ_2 = delta_P**2 + delta_Q**2
+        delta_PQ_magn = torch.sqrt(delta_PQ_2)
+        batch_idx = data["bus"].batch
+        delta_PQ_magn_per_batch = global_mean_pool(delta_PQ_magn, batch_idx)
+        self.power_balance_mean = delta_PQ_magn_per_batch.mean()
+
+        # Calculate PBL L2
+        batched_power_balance_l2 = torch.sqrt(global_add_pool(delta_PQ_2, batch_idx))
+        self.power_balance_l2 = batched_power_balance_l2.mean()
+
+        # Calculate PBL Max
+        self.power_balance_max = delta_PQ_magn.max()
+
+        return self.power_balance_mean
+
+
+    @staticmethod
+    def calculate_PBL(
+        V_pred, theta_pred, Pnet, Qnet,     # predictions
+        r, x, bs, tau, theta_shift,         # line attributes
+        shunt_g, shunt_b,                   # shunt values
+        src, dst,                           # line connections
+    ):
+        """
+        Calculate the complex real and reactive power mismatch (delta_P and
+        delta_Q) using predicted voltage magnitudes and angles, along with
+        network parameters.
+
+        Parameters
+        ----------
+        V_pred : torch.tensor
+            Predicted voltage magnitudes at each bus (shape: [n_buses]).
+        theta_pred : torch.tensor
+            Predicted voltage angles at each bus, in radians (shape: [n_buses]).
+        Pnet : torch.tensor
+            Net active power injections at each bus (generation - load), in per unit (shape: [n_buses]).
+        Qnet : torch.tensor
+            Net reactive power injections at each bus, in per unit (shape: [n_buses]).
+        r : torch.tensor
+            Line resistance values (shape: [n_lines]).
+        x : torch.tensor
+            Line reactance values (shape: [n_lines]).
+        bs : torch.tensor
+            Line total line charging susceptance (shape: [n_lines]).
+        tau : torch.tensor
+            Transformer tap ratios (1 if no transformer), (shape: [n_lines]).
+        theta_shift : torch.tensor
+            Phase shift angles for lines with phase-shifting transformers, in radians (shape: [n_lines]).
+        shunt_g : torch.tensor
+            Shunt conductance at each bus (shape: [n_buses]).
+        shunt_b : torch.tensor
+            Shunt susceptance at each bus (shape: [n_buses]).
+        src : torch.tensor
+            Indices of source buses for each line (shape: [n_lines]).
+        dst : torch.tensor  
+            Indices of destination buses for each line (shape: [n_lines]).
+
+        Returns
+        -------
+        delta_P : torch.tensor
+            Active power mismatch at each bus, in per unit (shape: [n_buses]).
+        delta_Q : torch.tensor
+            Reactive power mismatch at each bus (Q_model - Qnet), in per unit (shape: [n_buses]).
+        """
         Y_real = torch.real(1 / (r + 1j * x))
         Y_imag = torch.imag(1 / (r + 1j * x))
         suscept = bs
@@ -103,7 +188,10 @@ class PowerBalanceLoss:
             - (Y_imag + suscept / 2) * V_pred[dst] ** 2
         )
 
-        # Aggregate contributions for all nodes
+        # Aggregate contributions for all nodes based on predictions
+        Pbus_pred = torch.zeros_like(V_pred)
+        Qbus_pred = torch.zeros_like(V_pred)
+
         Pbus_pred = torch.zeros_like(V_pred).scatter_add_(0, src, P_flow_src)
         Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
 
@@ -114,28 +202,7 @@ class PowerBalanceLoss:
         delta_P = Pnet - Pbus_pred - V_pred**2 * shunt_g
         delta_Q = Qnet - Qbus_pred + V_pred**2 * shunt_b
 
-        # Compute the loss as the sum of squared mismatches
-        delta_PQ_2 = delta_P**2 + delta_Q**2
-
-        # Calculate PBL Mean
-        delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
-        self.power_balance_mean = delta_PQ_magnitude.mean()
-
-        # Calculate PBL L2
-        batch_idx = data["bus"].batch
-        batched_power_balance_l2 = torch.sqrt(global_add_pool(delta_PQ_2, batch_idx))
-        self.power_balance_l2 = batched_power_balance_l2.mean()
-
-        # Calculate PBL Max
-        self.power_balance_max = delta_PQ_magnitude.max()
-
-        # new_max = delta_PQ_magnitude.max()
-        # if self.power_balance_max is None:
-        #     self.power_balance_max = new_max
-        # else:
-        #     self.power_balance_max = delta_PQ_magnitude.max() # TODO: fix this
-
-        return self.power_balance_mean
+        return delta_P, delta_Q
 
     def collect_model_predictions(self, model_name, data, output=None):
         """ """
