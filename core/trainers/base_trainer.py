@@ -465,7 +465,7 @@ class BaseTrainer:
         time_to_stop = False
 
         # Only calculate early stop if included and if it is a report_every epoch
-        if "early_stop" not in val_params:
+        if "early_stop" not in val_params or self.training_ending():
             return time_to_stop
 
         # Gather early stop information
@@ -528,9 +528,7 @@ class BaseTrainer:
         """
         pass
 
-    def is_val_error_time(
-        self,
-    ):
+    def training_ending(self,):
         # Get status for either epoch or train step limit
         if self.max_epoch is None:
             current_point = self.train_step - 1
@@ -539,13 +537,20 @@ class BaseTrainer:
             current_point = self.epoch
             max_point = self.max_epoch
 
-        # Create validation error conditions
-        report_every = self.config["optim"]["val_params"]["report_every"]
-        is_report_time = (current_point + 1) % report_every == 0
         training_about_to_end = current_point == (max_point - 1)
 
+        return training_about_to_end
+
+    def is_val_error_time(
+        self,
+    ):
+        # Create validation error conditions
+        curr_point = self.epoch if self.max_epoch else self.train_step - 1
+        report_every = self.config["optim"]["val_params"]["report_every"]
+        is_report_time = (curr_point + 1) % report_every == 0
+
         # Check if it is time to calculate val errors
-        if is_report_time and not training_about_to_end:
+        if is_report_time and not self.training_ending():
             self.calc_val_errors()
             print("\nCONTINUE TRAINING!\U0001f9bf\n")
 
