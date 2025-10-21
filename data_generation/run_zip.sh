@@ -7,8 +7,8 @@ cases=(
     # case30
     # case57
     # case118
-    case500
-    # case2000
+    # case500
+    case2000
 )
 
 for case in "${cases[@]}"; do
