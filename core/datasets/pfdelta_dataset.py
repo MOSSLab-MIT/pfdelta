@@ -102,15 +102,42 @@ class PFDeltaDataset(InMemoryDataset):
         ]
 
         self.task_config = {  # values here will have the number of train samples
-            1.1: {"feasible": {"n": 54000, "n-1": 0, "n-2": 0}},
-            1.2: {"feasible": {"n": 27000, "n-1": 27000, "n-2": 0}},
-            1.3: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
-            2.1: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
-            2.2: {"feasible": {"n": 12000, "n-1": 12000, "n-2": 12000}},
-            2.3: {"feasible": {"n": 6000, "n-1": 6000, "n-2": 6000}},
-            3.1: {"feasible": {"n": 18000, "n-1": 18000, "n-2": 18000}},
-            3.2: {"feasible": {"n": 6000, "n-1": 6000, "n-2": 6000}},
-            3.3: {"feasible": {"n": 9000, "n-1": 9000, "n-2": 9000}},
+            1.1: {
+                "feasible": {"n": 54000, "n-1": 0, "n-2": 0},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            1.2: {
+                "feasible": {"n": 27000, "n-1": 27000, "n-2": 0},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            1.3: {
+                "feasible": {"n": 18000, "n-1": 18000, "n-2": 18000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            2.1: {
+                "feasible": {"n": 18000, "n-1": 18000, "n-2": 18000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            2.2: {
+                "feasible": {"n": 12000, "n-1": 12000, "n-2": 12000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            2.3: {
+                "feasible": {"n": 6000, "n-1": 6000, "n-2": 6000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            3.1: {
+                "feasible": {"n": 18000, "n-1": 18000, "n-2": 18000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            3.2: {
+                "feasible": {"n": 6000, "n-1": 6000, "n-2": 6000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
+            3.3: {
+                "feasible": {"n": 9000, "n-1": 9000, "n-2": 9000},
+                "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
+            },
             4.1: {
                 "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
                 "feasible": {"n": 16200, "n-1": 16200, "n-2": 16200},

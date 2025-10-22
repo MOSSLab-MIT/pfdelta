@@ -9,8 +9,10 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
 
     # Resolve the path to the solved cases
     solved_cases_path = joinpath(data_dir, case_name, topology_perturb)
+
+    case_2000_flag = case_name == "case2000"
     
-    selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(data_dir, topology_perturb)
+    selected_cases_idx_train, selected_cases_idx_test, selected_cases_idx_analysis = parse_shuffle_file(data_dir, topology_perturb; case_2000_flag)
     
     # Set up dirs to save files
     dirs = create_dirs(solved_cases_path; analysis=run_analysis_mode)
@@ -27,8 +29,12 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
 end
 
 # Helper functions
-function parse_shuffle_file(data_dir, topology_perturb)
-    raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
+function parse_shuffle_file(data_dir, topology_perturb; case_2000_flag=false)
+    if case_2000_flag
+        raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle_case2000.json")
+    else
+        raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
+    end
     if isfile(raw_shuffle_path)
         shuffled_idx = JSON.parsefile(raw_shuffle_path) # TODO: not sure this is a good name for this given the strucuture of the json file.
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx)))) # TODO: why are you even doing this?
