@@ -15,7 +15,7 @@ const OUT_DIR = "runtimes_results"
 const TOPO_PERTURB = ["n", "n-1", "n-2"]
 const LOG_FILE = ""
 
-include("runtimes_utils.jl")
+include("scripts/runtimes_utils.jl")
 
 function init_logger(case_name)
     mkpath(joinpath(OUT_DIR, "logs"))
