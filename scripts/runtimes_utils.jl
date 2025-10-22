@@ -1,6 +1,6 @@
 function parse_shuffle_file(data_dir, topology_perturb; case_2000_flag=false)
     if case_2000_flag
-        raw_shuffle_path = joinpath(DATA_DIR, "shuffle_files", topology_perturb, "raw_shuffle_case2000.json")
+        raw_shuffle_path = joinpath(DATA_DIR, "shuffle_files", topology_perturb, "raw_shuffle_2000.json")
     else
         raw_shuffle_path = joinpath(DATA_DIR, "shuffle_files", topology_perturb, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
     end
@@ -18,7 +18,7 @@ function run_warm_up(test_networks, warm_up_runs)
     for sample_idx in Iterators.take(sort(collect(keys(test_networks))), warm_up_runs)
         network = test_networks[sample_idx]
         try
-            PM.compute_ac_pf(network; flat_start=true)
+            PM.compute_ac_pf(network; flat_start=false)
         catch e
             @warn "Warm-up failed on sample $sample_idx: $e"
         end
@@ -38,6 +38,8 @@ function create_test_networks(test_samples_idx, case_name, topological_perturb; 
                 # Fix vg and branch flows (unclear if needed but it can't hurt). Note how this is only needed for feasible samples.
                 update_vg!(sample_data["network"], sample_data["solution"]["solution"])
                 fix_branch_flows!(sample_data["network"])
+
+                set_warm_start!(sample_data["network"], sample_data["solution"]["solution"])
 
                 # Update test networks dictionary
                 test_networks[idx] = sample_data["network"]
@@ -73,7 +75,7 @@ function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
             network = test_networks[sample_idx]
 
             try
-                pf_solution = PM.compute_ac_pf(network; flat_start=true)
+                pf_solution = PM.compute_ac_pf(network; flat_start=false)
                 converged = pf_solution["termination_status"] == true
                 push!(current_run_data, (Int(sample_idx), pf_solution["solve_time"], converged))
 
@@ -94,7 +96,7 @@ function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
                 change_bus_type!(network_retry)
 
                 try
-                    pf_solution = PM.compute_ac_pf(network_retry; flat_start=true)
+                    pf_solution = PM.compute_ac_pf(network_retry; flat_start=false)
                     converged = pf_solution["termination_status"] == true
 
                     # Save power flow solution if converged
@@ -244,6 +246,20 @@ function fix_branch_flows!(net)
                      branch[key] = 0
                 end
             end
+        end
+    end
+end
+
+function set_warm_start!(net, solution)
+    for (i,bus) in net["bus"]
+        bus["va_start"] = solution["bus"][i]["va"]
+        bus["vm_start"] = solution["bus"][i]["vm"]
+    end
+
+    for (i,gen) in net["gen"]
+        if gen["gen_status"] == 1
+            gen["pg_start"] = solution["gen"][i]["pg"]
+            gen["qg_start"] = solution["gen"][i]["qg"]
         end
     end
 end

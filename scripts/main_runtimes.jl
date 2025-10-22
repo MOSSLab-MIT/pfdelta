@@ -10,12 +10,12 @@ using CSV
 using Logging
 
 const DATA_DIR = "data"
-const WARM_UP_RUNS = 50
+const WARM_UP_RUNS = 5
 const OUT_DIR = "runtimes_results"
 const TOPO_PERTURB = ["n", "n-1", "n-2"]
 const LOG_FILE = ""
 
-include("runtimes_utils.jl")
+include("scripts/runtimes_utils.jl")
 
 function init_logger(case_name)
     mkpath(joinpath(OUT_DIR, "logs"))
@@ -43,7 +43,7 @@ function main()
     end
 
     @info "Analyzing runtimes..."
-    analyze_runtimes(case_name, near_infeasible_flag; topologies=TOPO_PERTURB)
+    analyze_runtimes(case_name, near_infeasible_flag; topologies=["n", "n-1", "n-2"])
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
