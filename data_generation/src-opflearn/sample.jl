@@ -1,6 +1,3 @@
-# This file is copied verbatim from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-
 """ 
 Translated to Python and modified based on:
 https://www.mathworks.com/matlabcentral/fileexchange/34208-uniform-distribution-over-a-convex-polytope

@@ -1,10 +1,3 @@
-# This file is adapted from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-#
-# Modifications for PFDelta:
-#   - Added functions to store results in JSON format
-
 # Stores AC OPF Samples and statistics in result objects
 
 "Stores AC OPF input data in a dictionary with keys of the desired input_vars"
@@ -108,48 +101,6 @@ end
 function gt_eps(l, eps_val=EPS)  # Determine what value to use for eps?
     l = abs.(l)
     return [x > eps_val for x in l]
-end
-
-function store_feasible_sample_json(k, net::Dict, result::Dict, save_path::String; seed_id=-1)
-    if seed_id==-1
-        sample = Dict(
-            "network" => net, 
-            "solution" => result,
-			"parent_seed"=> -1
-        )
-    else
-        sample = Dict(
-            "network" => net, 
-            "solution" => result,
-            "parent_seed" => seed_id,
-        )
-    end
-
-    filepath = joinpath(save_path, "sample_$(k).json")
-    open(filepath, "w") do io
-        write(io, JSON.json(sample))
-    end
-end
-
-
-function store_infeasible_sample_json(w, net, result, save_path)
-
-	sample = Dict(
-		"network" => net, 
-		"solution" => result
-	)
-
-    # Ensure the raw folder exists
-    raw_path = joinpath(save_path, "infeasible")
-    mkpath(raw_path)
-
-    filepath = joinpath(raw_path, "infeasible_sample_$(w).json")
-
-	open(filepath, "w") do io
-		write(io, JSON.json(sample))
-	end
-	w = w + 1
-	return w
 end
 
 

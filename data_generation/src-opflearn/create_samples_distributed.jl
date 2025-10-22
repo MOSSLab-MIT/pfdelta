@@ -1,12 +1,3 @@
-# This file is adapted from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-#
-# Modifications for PFDelta:
-#   - Added arguments to dist_create_samples for perturbations considered in PFDelta
-#   - TODO: Alvaro
-
-using Distributed
 """
 Loads in PowerModels network data given the name of a network case file, 
 then starts creating samples with distributed processing
@@ -18,8 +9,7 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							save_max_load=false, save_certs=false,
 							print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 							model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), 
-							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
-							perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
+							opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
 	net, net_path = load_net(net, net_path, print_level)
 	
 	return dist_create_samples(net, K::Integer; U=U, S=S, V=V, max_iter=max_iter, T=T, discard=discard, variance=variance,
@@ -29,8 +19,7 @@ function dist_create_samples(net::String, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=I
 							  save_certs=save_certs, save_max_load=save_max_load,
 							  print_level=print_level, stat_track=stat_track, save_while=save_while,
 							  save_infeasible=save_infeasible, save_path=save_path, net_path=net_path,
-							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver, returnAnb=false,
-							  perturb_topology_method=perturb_topology_method, perturb_costs_method=perturb_costs_method, starting_k=starting_k)
+							  model_type=model_type, r_solver=r_solver, opf_solver=opf_solver)
 end
 
 
@@ -58,7 +47,7 @@ Takes options to determine how to sample points, what information to save, and w
 - 'pf_lagging::Bool': indicating if load power factors can be only lagging (True), or both lagging or leading (False).
 - 'reset_level::Integer': determines how to reset the load point to be inside the polytope before sampling. 2: Reset closer to nominal load & chebyshev center, 1: Reset closer to chebyshev center, 0: Reset at chebyshev center.
 - 'save_certs::Bool': specifies whether the sampling space, Ax<=b (A & b matrices) are saved to the results dictionary.
-- 'save_max_load::Bool': specifies whether the max active load demands used are saved to the results dictionary.
+- 'save\\_max_load::Bool': specifies whether the max active load demands used are saved to the results dictionary.
 - 'model_type::Type': an abstract PowerModels type indicating the network model to use for the relaxed AC-OPF formulations (Max Load & Nearest Feasible)
 - 'r_solver': an optimizer constructor used for solving the relaxed AC-OPF optimization problems.
 - 'opf_solver': an optimizer constructor used to find the AC-OPF optimal solution for each sample.
@@ -83,39 +72,29 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 								save_max_load=false, save_certs=false, 
 								print_level=0, stat_track=false, save_while=false, save_infeasible=false, save_path="", net_path="",
 								model_type=PM.QCLSPowerModel, r_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL),
-								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL), returnAnb=false,
-								perturb_topology_method="none", perturb_costs_method="none", starting_k=0)
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "STARTING WITH ", Sys.free_memory() / 1e9, " GB free RAM")
+								opf_solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
 	# Create channels for transfering data between processes
 	isnothing(nproc) && (nproc = Distributed.nprocs())
-	@assert nproc > 4 "Not enough processors available, nprocs:$(nproc). Need 5+ CPUs for improved runtimes."
+	@assert nproc > 3 "Not enough processors available, nprocs:$(nproc). Need 4+ CPUs for improved runtimes."
 	@assert nproc <= Distributed.nprocs() "Number of distributed processors added, $(Distributed.nprocs()), must be greater than specified nproc, $(nproc)"
 	pid = Distributed.myid()
-	sample_chnl = Distributed.Channel{Any}(4 * nproc)
-	polytope_chnl = Distributed.Channel{Any}(4 * nproc)
-	result_chnl = Distributed.Channel{Any}(4 * nproc)
+	sample_chnl = Distributed.Channel{Any}(4 * nproc) 
+	polytope_chnl = Distributed.Channel{Any}(4 * nproc)  
+	result_chnl = Distributed.Channel{Any}(4 * nproc) 
 	final_chnl = Distributed.Channel{Any}(1)
-	save_chnl = Distributed.Channel{Any}(4 * nproc)
-	support_chnl = Distributed.Channel{Any}(4 * nproc)
 	sample_ch = Distributed.RemoteChannel(()->sample_chnl, pid)
 	polytope_ch = Distributed.RemoteChannel(()->polytope_chnl, pid)
 	result_ch = Distributed.RemoteChannel(()->result_chnl, pid)
 	final_ch = Distributed.RemoteChannel(()->final_chnl, pid)
-	support_ch = Distributed.RemoteChannel(()->support_chnl, pid)
-	procs = Distributed.workers()
-
+	
 	num_procs = nproc - 2  #TASK: Determine why the producer gets stuck running on the main proc
-
+	
 	net_name = net["name"]
 	save_order = vcat(input_vars, output_vars, dual_vars)
     if net_path == ""  # Set net path to save path if not specified for saving network max loads
 		net_path = save_path
 	end
-
-	producer_proc = procs[1] # Proc 2 will also be used for sampling
-	support_procs = [procs[2]]
-	processor_procs = procs[3:end]
-
+	
 	# Gather network information used during processing
 	A, b, x, results, fnfp_model, base_load_feasible, net_r = initialize(net, pf_min, pf_lagging, pd_max, pd_min,
 																		 input_vars, output_vars, dual_vars,
@@ -126,28 +105,22 @@ function dist_create_samples(net::Dict, K=Inf; U=0.0, S=0.0, V=0.0, max_iter=Inf
 																		 reset_level, print_level)
 	
 	(print_level > 0) && println("Starting sampling...")
-	for proc in support_procs
-		support_producers = Distributed.remotecall(sample_support, proc, support_ch, sampler, sample_ch, final_ch)
-	end
-	producer = Distributed.remotecall(sample_producer, producer_proc,
+	procs = Distributed.workers()
+	producer = Distributed.remotecall(sample_producer, procs[1], 
 						  A, b, sampler, sampler_opts, base_load_feasible, K, U, S, V, max_iter, T, num_procs, 
 						  results, discard, variance, reset_level, save_while, save_infeasible, 
 						  stat_track, save_certs, net_name, dual_vars, save_order, replace_samples,
-						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level, starting_k, support_ch)
-	for proc in processor_procs
-		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver,
-							   sample_ch, final_ch, polytope_ch, result_ch, perturb_topology_method, 
-							   perturb_costs_method, print_level, model_type)
+						  save_path, sample_ch, polytope_ch, result_ch, final_ch, print_level)
+	for proc in procs[2:end]
+		a = Distributed.remotecall(sample_processor, proc, net, net_r, r_solver, opf_solver, 
+							   sample_ch, final_ch, polytope_ch, result_ch,
+							   print_level, model_type)
 	end
 
 	results = Distributed.fetch(producer)
-	println(Dates.format(Dates.now(), "HH.MM.SS"), ": ", "Results fetched!!")
-
 	# Need to convert the unique active sets Set to and Array, due to a bug with PyJulia
 	results["duals"]["unique_active_sets"] = collect(results["duals"]["unique_active_sets"])
-	Anb = (A, b)
-
-	return results, Anb
+	return results
 end
 
 

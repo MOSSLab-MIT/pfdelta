@@ -1,16 +1,6 @@
-# This file is adapted from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-#
-# Modifications for PFDelta:
-#   - Added PM.silence()
-#   - Integrated pf_delta_perturbations.jl, build_opf_pfdelta.jl, run_ac_opf_pfdelta.jl
-#   - Imports and structural updates for dataset generation
-
 module OPFLearn
 
 import Dates
-import JSON
 using DelimitedFiles: readdlm, writedlm
 import Distributed
 import LinearAlgebra: diag, eigvals, I, cholesky, norm, Hermitian, dot, norm, logdet
@@ -25,7 +15,7 @@ const MOI = MathOptInterface
 import PowerModels
 import PowerModels: ref, ids, var
 const PM = PowerModels
-PM.silence()
+
 import Random
 
 import Ipopt
@@ -42,11 +32,6 @@ include("results.jl")
 include("io.jl")
 include("sample.jl")
 include("export.jl")
-
-include("pf_delta_perturbations.jl")
-include("build_opf_pfdelta.jl")
-include("run_ac_opf_pfdelta.jl")
-# include("create_seed_samples.jl")
 
 const TOL = 1e-6
 const INFEASIBILITY_CERT_SHIFT = 0.0  # Tune this parameter based on willingness to cut out large loads
