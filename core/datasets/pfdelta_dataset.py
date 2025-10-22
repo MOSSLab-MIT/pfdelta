@@ -120,7 +120,7 @@ class PFDeltaDataset(InMemoryDataset):
                 "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
                 "feasible": {"n": 9000, "n-1": 9000, "n-2": 9000},
             },
-            4.3: {"near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800}},
+            4.3: {"near infeasible": {"n": 3600, "n-1": 3600, "n-2": 3600}},
             "analysis": {
                 "feasible": {"n": 56000, "n-1": 29000, "n-2": 20000},
                 "near infeasible": {"n": 2000, "n-1": 2000, "n-2": 2000},
@@ -128,6 +128,7 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
+        # TODO: update the task config for case 2000
         if case_name == "case2000":
             self.task_config = {
                 1.3: {"feasible": {"n": 10000, "n-1": 10000, "n-2": 10000}}
@@ -650,6 +651,7 @@ class PFDeltaDataset(InMemoryDataset):
         processed .pt files. It also returns combined lists for later
         concatenation when building cross-case datasets.
         """
+        # TODO: figure out how to load test files for close-to-infeasible separately
         # when being combined
         task, model = self.task, self.model
         task_config = self.task_config[task]
@@ -737,7 +739,7 @@ class PFDeltaDataset(InMemoryDataset):
                             for f in os.listdir(infeasible_train_path)
                             if f.endswith(".json")
                         ]
-                    )
+                    )[:train_size]
                     if infeasibility_type == "nose":
                         test_files = sorted(
                             [
@@ -745,7 +747,7 @@ class PFDeltaDataset(InMemoryDataset):
                                 for f in os.listdir(infeasible_test_path)
                                 if f.endswith(".json")
                             ]
-                        )
+                        )[:test_size]
                     else:
                         test_files = None
 
