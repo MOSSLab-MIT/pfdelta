@@ -5,6 +5,7 @@ import json
 import argparse
 from typing import Any, Dict, Optional
 from collections import defaultdict
+from torch_geometric.data import HeteroData
 import pandas as pd
 
 import torch
@@ -12,20 +13,113 @@ from tqdm import tqdm
 
 # ---- Repo imports ----
 from core.datasets.pfdelta_dataset import PFDeltaDataset
-
-try:
-    from core.utils.pf_losses_utils import PowerBalanceLoss
-except Exception as e:
-    raise ImportError(
-        "Could not import PowerBalanceLoss from core.utils.pf_losses_utils. "
-        "Please verify the module path or adjust the import in this script."
-    ) from e
-
+from core.utils.pf_losses_utils import PowerBalanceLoss
 
 TOPOLOGIES = ["none", "n-1", "n-2"]
 RUNS = [1, 2, 3]
 FNAME_RE = re.compile(r"solved_sample[_-](\d+)\.json$")
 
+
+class PowerBalanceAnalysis(PowerBalanceLoss):
+    def __init__(self):
+        super().__init__("")
+
+    def __call__(self, data: HeteroData) -> float:
+        # Physical quantities from ground truth
+        V = data["bus"].bus_voltages[:, 1]  # vm
+        theta = data["bus"].bus_voltages[:, 0]  # va
+        Pnet = data["bus"].bus_gen[:, 0] - data["bus"].bus_demand[:, 0]
+        Qnet = data["bus"].bus_gen[:, 1] - data["bus"].bus_demand[:, 1]
+
+        shunt_g = data["bus"].shunt[:, 0]
+        shunt_b = data["bus"].shunt[:, 1]
+
+        edge_index = data["bus", "branch", "bus"].edge_index
+        edge_attr = data["bus", "branch", "bus"].edge_attr
+
+        r = edge_attr[:, 0]
+        x = edge_attr[:, 1]
+        g_fr = edge_attr[:, 2]
+        b_fr = edge_attr[:, 3]
+        g_to = edge_attr[:, 4]
+        b_to = edge_attr[:, 5]
+        tau = edge_attr[:, 6]
+        theta_shift = edge_attr[:, 7]
+
+        src, dst = edge_index
+
+        Y = 1 / (r + 1j * x)
+        Y_real = torch.real(Y)
+        Y_imag = torch.imag(Y)
+
+        delta_theta1 = theta[src] - theta[dst]
+        delta_theta2 = theta[dst] - theta[src]
+
+        # Active power flow
+        P_flow_src = (
+            V[src]
+            * V[dst]
+            / tau
+            * (
+                -Y_real * torch.cos(delta_theta1 - theta_shift)
+                - Y_imag * torch.sin(delta_theta1 - theta_shift)
+            )
+            + Y_real * (V[src] / tau) ** 2
+        )
+
+        P_flow_dst = (
+            V[dst]
+            * V[src]
+            / tau
+            * (
+                -Y_real * torch.cos(delta_theta2 - theta_shift)
+                - Y_imag * torch.sin(delta_theta2 - theta_shift)
+            )
+            + Y_real * V[dst] ** 2
+        )
+
+        # Reactive power flow
+        Q_flow_src = (
+            V[src]
+            * V[dst]
+            / tau
+            * (
+                -Y_real * torch.sin(delta_theta1 - theta_shift)
+                + Y_imag * torch.cos(delta_theta1 - theta_shift)
+            )
+            - (Y_imag + b_fr) * (V[src] / tau) ** 2
+        )
+
+        Q_flow_dst = (
+            V[dst]
+            * V[src]
+            / tau
+            * (
+                -Y_real * torch.sin(delta_theta2 - theta_shift)
+                + Y_imag * torch.cos(delta_theta2 - theta_shift)
+            )
+            - (Y_imag + b_to) * V[dst] ** 2
+        )
+
+        # Aggregate to buses
+        Pbus_pred = torch.zeros_like(V).scatter_add_(0, src, P_flow_src)
+        Pbus_pred = Pbus_pred.scatter_add_(0, dst, P_flow_dst)
+
+        Qbus_pred = torch.zeros_like(V).scatter_add_(0, src, Q_flow_src)
+        Qbus_pred = Qbus_pred.scatter_add_(0, dst, Q_flow_dst)
+
+        # Power mismatch
+        delta_P = Pnet - Pbus_pred - V**2 * shunt_g
+        delta_Q = Qnet - Qbus_pred + V**2 * shunt_b
+
+        # Compute the loss as the sum of squared mismatches
+        delta_PQ_2 = delta_P**2 + delta_Q**2
+
+        # Calculate PBL Mean
+        delta_PQ_magnitude = torch.sqrt(delta_PQ_2)
+        self.power_balance_mean = delta_PQ_magnitude.mean()
+
+        return self.power_balance_mean
 
 def _parse_sample_idx(filename: str) -> Optional[int]:
     m = FNAME_RE.search(filename)
