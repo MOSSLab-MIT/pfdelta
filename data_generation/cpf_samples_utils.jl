@@ -1,6 +1,6 @@
-const N_SAMPLES_NOSE_TRAIN = 3600 # TODO: double-check
-const N_SAMPLES_AROUND_NOSE_TRAIN = 4  # TODO: double-check
-const N_SAMPLES_NOSE_TEST = 200 # TODO: double-check
+const N_SAMPLES_NOSE_TRAIN = 3600 
+const N_SAMPLES_AROUND_NOSE_TRAIN = 4
+const N_SAMPLES_NOSE_TEST = 200
 
 function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false, run_analysis_mode=false)
 
@@ -19,13 +19,16 @@ function create_close2infeasible(data_dir, case_name, topology_perturb; delete_i
 
     # Create samples
     @info "Creating samples for case $case_name, $topology_perturb"
-    selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"]; delete_int_files=delete_int_files)
-
-    selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"]; delete_int_files=delete_int_files)
 
     if run_analysis_mode
+        println("Running in analysis mode.")
         selected_cases_idx_analysis !== nothing && create_train_samples(selected_cases_idx_analysis, dirs["analysis"]; delete_int_files=false, n_nose_samples=100)
+        return
     end
+
+    selected_cases_idx_train !== nothing && create_train_samples(selected_cases_idx_train, dirs["train"]; delete_int_files=delete_int_files)
+    selected_cases_idx_test !== nothing && create_test_samples(selected_cases_idx_test, dirs["test"]; delete_int_files=delete_int_files)
+
 end
 
 # Helper functions
@@ -40,10 +43,7 @@ function parse_shuffle_file(data_dir, topology_perturb; case_2000_flag=false)
         sorted_keys = sort(parse.(Int, collect(keys(shuffled_idx)))) # TODO: why are you even doing this?
         selected_cases_idx_train = [shuffled_idx[string(k)] for k in sorted_keys[1:end-2000]] # TODO: do not hard code the 2000 here
         selected_cases_idx_test = [shuffled_idx[string(k)] for k in sorted_keys[end-2000+1:end]] # TODO: do not hard code the 2000 here
-        return (selected_cases_idx_train, selected_cases_idx_test, nothing)
-    else
-        @info "raw_shuffle.json not found, considering 2000 samples for analysis mode."
-        return nothing, nothing, collect(1:2000)
+        return (selected_cases_idx_train, selected_cases_idx_test, collect(1:2000))
     end
 end
 
@@ -122,7 +122,7 @@ function create_dirs(solved_cases_path::AbstractString; analysis=false)
 
     if analysis
         paths["analysis"] = (
-            base        = analysis_dir,
+            base        = solved_cases_path,
             raw_cpf     = raw_cpf_a,
             around_nose = around_nose_a,
             nose        = nose_a,
