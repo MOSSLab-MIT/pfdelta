@@ -26,6 +26,13 @@ def parser():
         required=True,
         help="Folder from which to calculate test errors.",
     )
+    parser.add_argument(
+        "--case_name",
+        type=str,
+        default="",
+        required=True,
+        help="Folder from which to calculate test errors.",
+    )
     args = parser.parse_args()
 
     return args
@@ -35,6 +42,7 @@ if __name__ == "__main__":
     # Load run paths and configs
     args = parser()
     root = os.path.join("runs", args.root)
+    case_name = args.case_name
     seeds = os.listdir(root)
     seeds_paths = [find_run(seed) for seed in seeds]
     seeds_configs = [load_config(run) for run in seeds_paths]
@@ -57,26 +65,32 @@ if __name__ == "__main__":
 
         # Modify datasets
         base_dataset = config["dataset"]["datasets"][0]
-        case_name = base_dataset["case_name"]
-        base_dataset["task"] = 4.1
-        split = f"separate_{case_name}_test_"
+        base_dataset["task"] = 1.3
+        base_dataset["case_name"] = case_name
         datasets = [
             {
                 **copy.deepcopy(base_dataset),
-                "split": split+"feasible_n"
+                "split": f"separate_{case_name}_test_feasible_n"
             },
             {
                 **copy.deepcopy(base_dataset),
-                "split": split+"feasible_n-1"
+                "split": f"separate_{case_name}_test_feasible_n-1"
             },
             {
                 **copy.deepcopy(base_dataset),
-                "split": split+"feasible_n-2"
+                "split": f"separate_{case_name}_test_feasible_n-2"
             },
             {
                 **copy.deepcopy(base_dataset),
-                "split": "test",
-                "task": 4.3
+                "split": f"separate_{case_name}_test_near infeasible_n"
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": f"separate_{case_name}_test_near infeasible_n-1"
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": f"separate_{case_name}_test_near infeasible_n-2"
             },
         ]
         config["dataset"] = {
@@ -85,6 +99,8 @@ if __name__ == "__main__":
         config["optim"]["train_params"]["batch_size"] = 2000
         config["optim"]["val_params"]["batch_size"] = 2000
 
+    import ipdb
+    ipdb.set_trace()
     seeds_trainers = [load_trainer(config) for config in seeds_configs]
     seeds_losses = []
     for i, trainer in enumerate(seeds_trainers):
@@ -103,18 +119,16 @@ if __name__ == "__main__":
             }
         seeds_losses.append(losses)
 
-    keys = ["n", "n-1", "n-2", "close2inf"]
+    keys = ["n", "n-1", "n-2"]
     pbl_means = {
         "n": [],
         "n-1": [],
         "n-2": [],
-        "close2inf": [],
     }
     pbl_maxs = {
         "n": [],
         "n-1": [],
         "n-2": [],
-        "close2inf": [],
     }
     for losses in seeds_losses:
         for key in keys:
