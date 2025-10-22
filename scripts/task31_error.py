@@ -1,13 +1,16 @@
 import sys
 import os
+import json
 import statistics
-import time
 import argparse
+import copy
 
 import IPython
 
 # Change working directory to one above
 sys.path.append(os.getcwd())
+
+import torch
 
 from scripts.utils import find_run, load_config, load_trainer
 
@@ -36,74 +39,109 @@ if __name__ == "__main__":
     seeds_paths = [find_run(seed) for seed in seeds]
     seeds_configs = [load_config(run) for run in seeds_paths]
 
-    # Set up additional losses
-    losses_to_analyze_inputs = [
-        {"name": "universal_power_balance", "model": "GNS"},
-        {
-            "name": "recycle_loss",
-            "loss_name": "PBL Max",
-            "keyword": "pbl_pf",
-            "recycled_parameter": "power_balance_max",
-        },
-    ]
-    # Load trainers modified so that the val dataset is on the test split desired
-    batch_size = 100
+    # Process config files
     for config in seeds_configs:
-        val_dataset = config["dataset"]["datasets"][1]
-        val_dataset["task"] = 1.3
-        val_dataset["split"] = "test"
-        val_dataset["case_name"] = "case500_seeds"
-        case_name = val_dataset["case_name"]
-        val_params = config["optim"]["val_params"]
-        val_params["batch_size"] = batch_size
-        val_params["val_loss"].extend(losses_to_analyze_inputs)
+        # Modify loss calculations
+        losses = config["optim"]["train_params"]["train_loss"]
+        for loss in losses:
+            if loss["name"] == "universal_power_balance":
+                pbl_model_name = loss["model"]
+                break
+        losses = [
+            {
+                "name": "universal_power_balance",
+                "model": pbl_model_name
+            }
+        ]
+        config["optim"]["val_params"]["val_loss"] = losses
+
+        # Modify datasets
+        base_dataset = config["dataset"]["datasets"][0]
+        case_name = base_dataset["case_name"]
+        base_dataset["task"] = 4.1
+        split = f"separate_{case_name}_test_"
+        datasets = [
+            {
+                **copy.deepcopy(base_dataset),
+                "split": split+"feasible_n"
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": split+"feasible_n-1"
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": split+"feasible_n-2"
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": "test",
+                "task": 4.3
+            },
+        ]
+        config["dataset"] = {
+            "datasets": datasets
+        }
+        config["optim"]["train_params"]["batch_size"] = 2000
+        config["optim"]["val_params"]["batch_size"] = 2000
 
     seeds_trainers = [load_trainer(config) for config in seeds_configs]
-
-    # Calculate running losses
-    seeds_dataloaders = [trainer.dataloaders[1] for trainer in seeds_trainers]
-    seeds_running_losses = [
-        trainer.calc_one_val_error(dataloader, 0)
-        for dataloader, trainer in zip(seeds_dataloaders, seeds_trainers)
-    ]
-
-    # Average over the trainers and save in a dictionary
     seeds_losses = []
-    for running_losses, dataloader, trainer in zip(
-        seeds_running_losses, seeds_dataloaders, seeds_trainers
-    ):
-        losses = {
-            loss_name: running_loss / len(dataloader)
-            for loss_name, running_loss in zip(trainer.val_loss_names, running_losses)
-        }
+    for i, trainer in enumerate(seeds_trainers):
+        print("\nWorking on seed", i)
+        print("-"*20)
+        losses = {}
+        for dataset_type, dataloader in zip(
+            ["n", "n-1", "n-2", "close2inf"],
+            trainer.dataloaders
+        ):
+            print("Calculating", dataset_type)
+            pbl_mean = trainer.calc_one_val_error(dataloader, i)
+            losses[dataset_type] = {
+                "PBL Mean": pbl_mean[0],
+                "PBL Max": trainer.val_loss[0].power_balance_max.item()
+            }
         seeds_losses.append(losses)
 
-    # Calculate mean and error bars
-    losses_to_analyze = ["PBL Mean", "PBL Max"]
-    for loss_name in losses_to_analyze:
-        losses = [seed_loss[loss_name] for seed_loss in seeds_losses]
-        print(f"{case_name}, {loss_name}, mean: {statistics.mean(losses)}")
-        print(f"{case_name}, {loss_name}, std: {statistics.stdev(losses)}")
-        print(f"{case_name}, {loss_name}, points: {losses}")
-    print("\n\n")
+    keys = ["n", "n-1", "n-2", "close2inf"]
+    pbl_means = {
+        "n": [],
+        "n-1": [],
+        "n-2": [],
+        "close2inf": [],
+    }
+    pbl_maxs = {
+        "n": [],
+        "n-1": [],
+        "n-2": [],
+        "close2inf": [],
+    }
+    for losses in seeds_losses:
+        for key in keys:
+            pbl_means[key].append(losses[key]["PBL Mean"])
+            pbl_maxs[key].append(losses[key]["PBL Max"])
 
-    device = "cuda"
-    model_times = []
-    for trainer in seeds_trainers:
-        print("Calculating a model")
-        model = trainer.model.to(device)
-        loader = trainer.dataloaders[1]
-        times = []
-        for data in loader:
-            data = data.to(device)
-            start = time.time()
-            out = model(data)
-            end = time.time()
-            times.append((end - start) * batch_size)
-        model_times.append(sum(times) / 6000)
-        print("Seed 1: ", model_times[-1])
+    print(f"\nPRINTING AVERAGES FOR {root} +- 1SD")
+    print("-"*50)
+    for test_type, losses in pbl_means.items():
+        mean = torch.tensor(losses).mean()
+        std = torch.tensor(losses).std()
+        print(f"PBL Mean {test_type}: {mean.item()} +- {std.item()}")
 
-    print(f"{case_name}, runtime, mean: {statistics.mean(model_times)}")
-    print(f"{case_name}, runtime, std: {statistics.stdev(model_times)}")
+    for test_type, losses in pbl_maxs.items():
+        mean = torch.tensor(losses).mean()
+        std = torch.tensor(losses).std()
+        print(f"PBL Max {test_type}: {mean.item()} +- {std.item()}")
 
-    IPython.embed()
+    # Save specific values
+    if os.path.exists("test_errors_p_seeds.json"):
+        with open("test_errors_p_seeds.json", "r") as f:
+            results = json.load(f)
+    else:
+        results = {}
+    results[root] = {
+        "PBL Mean": pbl_means,
+        "PBL Max": pbl_maxs
+    }
+    with open("test_errors_p_seeds.json", "w") as f:
+        json.dump(results, f, indent=2)
