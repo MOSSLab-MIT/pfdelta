@@ -20,12 +20,14 @@ def _(mo):
 @app.cell
 def _():
     import marimo as mo
-    from notebooks.dataset_validation_utils import all_samples_have_k_contingencies, add_ids_to_base, plot_grouped_outage_histograms
+    from notebooks.dataset_validation_utils import all_samples_have_k_contingencies, add_ids_to_base, plot_grouped_outage_histograms, check_power_balance, build_outage_panels
     from core.datasets.pfdelta_dataset import PFDeltaDataset
     return (
         PFDeltaDataset,
         add_ids_to_base,
         all_samples_have_k_contingencies,
+        build_outage_panels,
+        check_power_balance,
         mo,
         plot_grouped_outage_histograms,
     )
@@ -34,26 +36,30 @@ def _():
 @app.cell
 def _(PFDeltaDataset):
     # Load datasets to evaluate
-    case_name = "case118"
+    case_name = "case500"
+    feasibility_type = "near infeasible" # "feasible", "near infeasible"
     root_dir = "data"
     case_n = PFDeltaDataset(
         root_dir = root_dir,
         case_name = case_name,
         perturbation = "n",
-        task = "analysis"
+        task = "analysis",
+        feasibility_type=feasibility_type
     )
     case_n_1 = PFDeltaDataset(
         root_dir = root_dir,
         case_name = case_name,
         perturbation = "n-1",
-        task = "analysis"
+        task = "analysis",
+        feasibility_type=feasibility_type
     )
 
     case_n_2 = PFDeltaDataset(
         root_dir = root_dir,
         case_name = case_name,
         perturbation = "n-2",
-        task = "analysis"
+        task = "analysis",
+        feasibility_type=feasibility_type
     )
     return case_n, case_n_1, case_n_2
 
@@ -85,6 +91,18 @@ def _(all_samples_have_k_contingencies, case_n, case_n_2):
 
 
 @app.cell
+def _(build_outage_panels, case_n, case_n_1, case_n_2):
+    br_chart, gen_chart = build_outage_panels(
+        case_n[0], case_n_1, case_n_2,
+        normalize=False,
+        title_prefix=" "
+    )
+
+    br_chart & gen_chart
+    return
+
+
+@app.cell
 def _(
     add_ids_to_base,
     case_n,
@@ -100,6 +118,36 @@ def _(
         title_prefix="",
         normalize=False,  # set True to show outage frequency instead of raw counts
     )
+    return
+
+
+@app.cell
+def _(mo):
+    mo.md(r"""### Power Balance""")
+    return
+
+
+@app.cell
+def _(case_n, check_power_balance):
+    # Check power balance on N samples
+    stats_n = check_power_balance(case_n)
+    stats_n
+    return
+
+
+@app.cell
+def _(case_n_1, check_power_balance):
+    # Check power balance on N-1 samples
+    stats_n_1 = check_power_balance(case_n_1)
+    stats_n_1
+    return
+
+
+@app.cell
+def _(case_n_2, check_power_balance):
+    # Check power balance on N-2 samples
+    stats_n_2 = check_power_balance(case_n_2)
+    stats_n_2
     return
 
 
