@@ -318,9 +318,9 @@ class PFDeltaDataset(InMemoryDataset):
             print("Shuffle files already exist. Skipping download.")
         else:
             print("Downloading shuffle files...")
-            file_url = f"{base_url}/shuffle_files.tar"
+            file_url = f"{base_url}/shuffle_files.tar.gz"
             shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
-            extract_tar(shuffle_files_path, shuffle_download_path, mode="r:")
+            extract_tar(shuffle_files_path, shuffle_download_path)
 
         # For each case, download all sub-archives
         for case_name in case_names:
@@ -1080,7 +1080,7 @@ class PFDeltaDataset(InMemoryDataset):
                     f"{casename_str}",
                     f"{grid_type_str}",
                     "processed",
-                    f"task_{4.1}_{feasibility_str}_{self.model}",
+                    f"task_{self.task}_{feasibility_str}_{self.model}",
                     f"{split_str}.pt",
                 )
             else:
