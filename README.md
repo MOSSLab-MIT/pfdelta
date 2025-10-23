@@ -1,90 +1,52 @@
-PFDelta Dataset
-=================================================================
 
-This dataset contains JSON-formatted AC power flow samples generated under topological perturbations, generator cost permulations and varying  load conditions. It includes both just-feasible and close-to-infeasible cases.
+# PFΔ Dataset
+PFΔ is a benchmark dataset for power flow that captures diverse variations in load, generation, and topology. It contains 850,500 solved power flow instances spanning six different bus system sizes, capturing three types of contingency scenarios (N, N-1, and N-2), and including close-to-infeasible cases near steady-state voltage stability limits. Our dataset is available at: https://huggingface.co/datasets/pfdelta/pfdelta/tree/main. Our paper is available at: INSERT LINK HERE. 
 
-Directory Structure:
+The dataset includes the following IEEE test cases: 14-bus, 30-bus, 57-bus, 118-bus, 500-bus, and 2000-bus systems (with a reduced dataset size for the 2000-bus case).
+For each test case, we provide multiple topological configurations:
+
+- N: original (unperturbed) topology
+- N-1: single-component outage scenarios
+- N-2: double-component outage scenarios
+
+---
+
+<p align="center" style="background-color:white; padding:10px;">
+  <img src="figures/data_generation.png" alt="Data Generation Pipeline" width="700"/>
+</p>
+
+---
+
+# PFΔ Usage Guide 
+
+### Requirements 
 --------------------
 
-```
-case_name/
-└── topology_perturb/
-    ├── raw.tar.gz
-    ├── raw_shuffle.json
-    ├── close2inf_train_nose.tar.gz
-    ├── close2inf_train_around_nose.tar.gz
-    ├── close2inf_test_nose.tar.gz
-```
-
-Available Cases and Perturbations:
-----------------------------------
-The following base cases and topological perturbation types are included:
-
-Cases:
-- case14
-- case30
-- case57
-- case118
-- case500
-- case2000 Note: for case2000 only raw.tar.gz and its corresponding shuffle file is included.
-
-Topological Perturbations:
-- none      : Original topology (no line removed)
-- n-1       : Single-component outage scenarios
-- n-2       : Double-component outage scenarios
-
-How to Extract:
----------------
-Use the following command to extract any archive:
-
-    tar -xzvf <archive_name>.tar.gz -C <destination_folder>
-
-Example:
-
-    tar -xzvf raw.tar.gz -C .
-
-Contents and Format:
---------------------
-All files are in `.json` format.
-
-1. raw.tar.gz
-   - Contains just-feasible samples.
-   - Each file includes:
-     - "network": a PowerModels.jl-compatible network dictionary.
-     - "solution": the result of solving the AC optimal power flow.
-
-2. close2inf_train_nose.tar.gz and close2inf_test_nose.tar.gz
-   - Contains samples at the voltage stability limit (nose point) for the train and test sets, respectively.
-   - Each file includes a single dictionary:
-     - "solved_net": a PowerModels network dictionary that has already been updated with the solution.
-
-3. close2inf_train_around_nose.tar.gz
-   - Contains samples near the nose point.
-   - Each file includes:
-     - "solved_net": the updated network dictionary.
-     - "lambda": the load scaling parameter used to generate this sample.
-
-4. raw_shuffle.json
-   - A shuffled mapping of sample indices, used to consistently split raw samples into training and test sets.
-
-How to Train the Models
------------------------
-
-We've included configuration files in the repository that allow you to reproduce our model results easily.
-
-To retrain a model on **Task 1.3**, simply run the following command:
-
+The Python packages required to use the PFΔ dataset and reproduce the paper's results are listed in `requirements.txt`. Install them with:
 ```bash
-python main.py --config config_<model_name>
+pip install -r requirements.txt
 ```
 
-Replace <model_name> with the specific model you want to train (e.g., CANOS, GNS, PFNet.). If you’d like to train on a different task, open the corresponding config file (located in `core/configs/`) and modify the lines: `task: 1.3`.
+If you want to use the data generation framework or verify power flow solutions, install the Julia packages listed in `data_generation/Project.toml`:
+```bash
+julia --project=data_generation -e 'using Pkg; Pkg.instantiate()'
+```
 
-How to Use PF$\Delta$:
-----------------------
-### Using the Data
+**Note:** Julia dependencies are only required for data generation and validation. They are not needed to load and use the pre-generated dataset.
 
-We provide a PyTorch dataset class to download and preprocess the raw data stored in HuggingFace. This dataset class can be prompted to load the train/val/test set for a given task in the benchmark and it preprocesses the data to enable both supervised and unsupervised methods. Each dataset item is preprocessed as a graph that contains the sufficient network data to run a standard Newton-Raphson algorithm, and to calculate Power Balance Loss, as well as a single solution that can be used as ground truth by supervised losses. An in-depth description of the data structure is located in Appendix A.6 of the PF$\Delta$ paper, and is replicated below:
+### Dataset Class Usage 
+--------------------
+
+We provide several notebooks to serve as a quick start guide to using the `PFDeltaDataset` `InMemoryDataset` and visualizing/analyzing our generated data: 
+
+- [Learn how to download and work with `PFDeltaDataset` for your model](notebooks/dataset_quickstart_guide.ipynb): this notebook includes information on how to automatically download and unzip data from the HuggingFace repository and inherit the parent class for custom model data preprocessing. 
+- [Visualize data diversity compared to other benchmark datasets](notebooks/box_plots.ipynb): This notebook allows you to visualize the spread of various features in our dataset in comparison to existing benchmark datasets. 
+- [???](notebooks/julia_code_results.ipynb): ???
+
+#### HeteroData Structure 
+
+We provide a PyTorch `InMemoryDataset` class called `PFDeltaDataset` to load the raw data described in Appendix A.6. This dataset class is designed to support loading data for a specified task for with a given bus system size. Each raw data instance that we load is stored as a JSON file representing the power flow solution for a specific grid configuration. An example of what a HeteroData instance for this dataset looks like is provided below: 
+
 
     HeteroData(
       bus={
@@ -116,9 +78,80 @@ We provide a PyTorch dataset class to download and preprocess the raw data store
     )
 
 
-The dataset class is located in `core/datasets/pfdelta_dataset.py`, saved under the name PFDeltaDataset. A thorough description of how to use the dataset class is included in the docstrings of the class. In addition to this, we have included a notebook with examples of how to use the dataset class. This includes an example for how to modify the class to adapt the preprocessing to different models’ needs, such as homogeneous GNNs and standard feedforward networks.
+#### Directory Structure 
 
-Notes:
+Once data from the Hugging Face repository is extracted, it will be organized as follows. It includes per-topology subfolders (n, n-1, n-2, etc.), each containing raw JSON samples, near-feasibility subsets (nose and around_nose), and model-specific processed tensors for training and evaluation. A top-level processed/ directory also provides combined, ready-to-use datasets across all topologies/task-relevant feasibilities for convenience. An example of what this directory structure would look like is provided below:
+
+```markdown
+pfdelta_data/
+└── case57/
+    ├── n-1/
+    │   ├── raw/
+    │   │   ├── sample1.json
+    │   │   ├── sample2.json
+    │   │   └── ...
+    │   ├── processed/
+    │   │   ├── task_1.3_feasible_{MODELNAME}/
+    │   │   │   ├── train.pt
+    │   │   │   └── test.pt
+    │   │   ├── task_1.3_nearly_infeasible_{MODELNAME}/
+    │   │   └── ...
+    │   ├── nose/
+    │   │   ├── sample1.json
+    │   │   ├── sample2.json
+    │   │   └── ...
+    │   └── around_nose/
+    │       ├── sample1.json
+    │       ├── sample2.json
+    │       └── ...
+    ├── n/
+    ├── n-2/
+    └── ...
+└── processed/
+    └── combined_task_1.3_{MODELNAME}/
+        ├── train.pt
+        └── test.pt
+```
+
+### Result Replication
+--------------------
+
+To replicate the results presented in the paper, use the configuration files located in `core/configs/`.  Each YAML file corresponds to a specific model–task combination and follows the naming convention:
+
+where  
+- `{modelname}` ∈ [`pfnet`, `canos_pf`, `canos_opf`, ...]  
+- `{tasknumber}` ∈ [`1.1`, `1.2`, `1.3`, ...]  
+
+For example, the following command retrains **PowerFlowNet** on **Task 1.3**:
+
+```bash
+python main.py --config pfnet_task_1_3
+```
+Additionally, a config file verifying the correct re-implementation of CANOS is included. Running any configuration file will automatically create a runs/ directory containing experiment outputs (e.g., runs/canos_pf_task_1_1_<YYMMDD_HHMMSS>). Its structure is as follows:
+
+```bash 
+runs/
+└── modelname_task_#_#_<YYMMDD_HHMMSS>/
+    ├── config.yaml         # Model and training hyperparameters
+    ├── model.pt            # Trained model weights
+    ├── out.txt             # Console log of training
+    ├── summary.json        # Summary of training and validation losses
+    ├── train.json          # Training loss per epoch
+    └── val.json            # Validation loss every 2 epochs
+``` 
+
+The summary.json file can be used to quickly compare performance against the values reported in the paper. Note that the paper’s results are test-set errors averaged over three different random seeds, whereas the results in summary.json reflect validation losses from a single training run. As a result, minor discrepancies between the two are expected. 
+
+In addition, we provide quick-start notebooks for training models and designing custom loss functions: 
+- [Calculating Test Errors and Performing Model Inference](notebooks/julia_code_results.ipynb):
+- [Designing Custom Loss Functions](notebooks/julia_code_results.ipynb): 
+
+### Notes:
 ------
 - All values are in per-unit (p.u.).
 - All JSON files are compatible with PowerModels.jl for loading, solving, or further analysis.
+
+
+### Citation:
+------
+If you use any of our model implementations, data generation code, dataset class, or benchmark, please consider citing us: 
