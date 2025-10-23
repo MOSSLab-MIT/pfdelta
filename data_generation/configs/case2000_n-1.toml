@@ -1,6 +1,6 @@
-data_dir = "/mnt/home/akrivera/pfdelta/data"
+data_dir = "data"
 case_name = "case2000"
-topology_perturb = "n"
+topology_perturb = "n-1"
 
 delete_intermediate = true
 analysis_mode = false
@@ -10,5 +10,6 @@ analysis_mode = false
 # TODO: you need to add info here on which matpower version should be used too.
 # TODO: add note on intel matlab only for mac
 # TODO: add note to leave empty on cluster
-home = "/Applications/MATLAB_R2024b.app"
+home = raw"C:\Program Files\MATLAB\R2023a"
 matpower_path = 
+
