@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 root_to_task = {
@@ -66,88 +67,77 @@ if __name__ == "__main__":
 
     palette = {
         "CANOS": "#D9A6D9",
-        "GNS": "#F27AA4", # "#F2A6B5",
+        "GNS": "#F27AA4",
         "PFNet": "#69D8FF"
     }
+    
     if row == 1:
         tasks = [1.1, 1.2, 1.3, 2.3]
     else:
         tasks = [4.1, 4.2, 4.3]
 
     n = len(tasks)
-    fontsize=20
+    fontsize = 24
     fig, axes = plt.subplots(1, n, figsize=(5 * n, 5), sharey=True)
+    
     for i, task in enumerate(tasks):
         ax = axes[i]
         root_name_canos = root_to_task[("CANOS", task)]
         root_name_gns = root_to_task[("GNS", task)]
         root_name_pfnet = root_to_task[("PFNet", task)]
+        
         results = {
             "CANOS": all_results[root_name_canos]["PBL Mean"],
             "GNS": all_results[root_name_gns]["PBL Mean"],
             "PFNet": all_results[root_name_pfnet]["PBL Mean"]
         }
-        results = pd.concat([
+        
+        # Combine into dataframe
+        results_df = pd.concat([
             dict_to_df(results["CANOS"], "CANOS"),
             dict_to_df(results["GNS"], "GNS"),
             dict_to_df(results["PFNet"], "PFNet"),
         ])
-        sns.boxplot(
-            data=results,
+        
+        # Use seaborn barplot with error bars
+        sns.barplot(
+            data=results_df,
             x="Grid Attribute",
             y="Power Balance Loss (Mean)",
             hue="Model",
             ax=ax,
             palette=palette,
-            boxprops=dict(edgecolor='white')
+            errorbar="sd",  # show standard deviation as error bars
+            capsize=0.1,
+            edgecolor='white',
+            err_kws={'linewidth': 1.6}
         )
-
+        
         ax.set_xlabel("")
         ax.set_xticklabels(
             ["N", "N-1", "N-2", "C2I"],
             fontsize=fontsize
         )
-
-        ax.tick_params(axis="both", labelsize=fontsize,)
-        ax.set_ylabel(
-            "Power Balance Loss (Mean)",
-            fontsize=fontsize,
-            fontweight="bold"
-        )
-
+        ax.tick_params(axis="both", labelsize=fontsize)
+        ax.set_ylabel("Power Balance Loss (Mean)", fontsize=fontsize-4, fontweight="bold")
         ax.yaxis.grid(True)
-        ax.set_yticks([0, 0.5, 1.0, 1.5, 2.0])
-        ax.set_ylim(0, 2.0)
-
+        ax.set_yticks([0, 0.45, 0.9, 1.35, 1.8])
+        ax.set_ylim(0, 1.8)
         ax.get_legend().remove()
-        ax.set_title(
-            f"Task {task}",
-            fontsize=fontsize,
-            fontweight="bold"
-        )
+        # Set title with special case for task 1.3
+        if task == 1.3:
+            title_text = "Task 1.3 / 2.1"
+        else:
+            title_text = f"Task {task}"
+        ax.set_title(title_text, fontsize=fontsize, fontweight="bold")
 
+    # Add legend
     if row == 1:
-        ax.legend(
-            title="Model",
-            loc="upper left",
-            fontsize=fontsize-3,
-            title_fontsize=fontsize-3
-        )
+        axes[0].legend(title="Model", loc="upper left", 
+                       fontsize=fontsize-6, title_fontsize=fontsize-6)
     else:
-        ax.legend(
-            title="Model",
-            loc="lower right",
-            fontsize=fontsize-3,
-            title_fontsize=fontsize-3
-        )
-        # handles, labels = ax.get_legend_handles_labels()
-        # fig.legend(
-        #     handles, labels,
-        #     title="Model",
-        #     fontsize=fontsize-3,
-        #     title_fontsize=fontsize-3,
-        #     loc='center right'  # or 'lower center', 'right', etc.
-        # )
+        axes[0].legend(title="Model", loc="upper left", 
+                       fontsize=fontsize-6, title_fontsize=fontsize-6)
 
     plt.subplots_adjust(wspace=0.05)
     plt.savefig("figures/test.svg")
