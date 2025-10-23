@@ -99,8 +99,6 @@ if __name__ == "__main__":
         config["optim"]["train_params"]["batch_size"] = 2000
         config["optim"]["val_params"]["batch_size"] = 2000
 
-    import ipdb
-    ipdb.set_trace()
     seeds_trainers = [load_trainer(config) for config in seeds_configs]
     seeds_losses = []
     for i, trainer in enumerate(seeds_trainers):
@@ -108,7 +106,7 @@ if __name__ == "__main__":
         print("-"*20)
         losses = {}
         for dataset_type, dataloader in zip(
-            ["n", "n-1", "n-2", "close2inf"],
+            ["n", "n-1", "n-2",  "c2i-n", "c2i-n1", "c2i-n2"],
             trainer.dataloaders
         ):
             print("Calculating", dataset_type)
@@ -117,26 +115,41 @@ if __name__ == "__main__":
                 "PBL Mean": pbl_mean[0],
                 "PBL Max": trainer.val_loss[0].power_balance_max.item()
             }
+
+        losses["close2inf"] = {
+            "PBL Mean": torch.tensor([
+                losses["c2i-n"]["PBL Mean"],
+                losses["c2i-n1"]["PBL Mean"],
+                losses["c2i-n2"]["PBL Mean"],
+            ]).mean().item(),
+            "PBL Max": torch.tensor([
+                losses["c2i-n"]["PBL Max"],
+                losses["c2i-n1"]["PBL Max"],
+                losses["c2i-n2"]["PBL Max"],
+            ]).max().item(),            
+        }
         seeds_losses.append(losses)
 
-    keys = ["n", "n-1", "n-2"]
+    keys = ["n", "n-1", "n-2", "close2inf"]
     pbl_means = {
         "n": [],
         "n-1": [],
         "n-2": [],
+        "close2inf": [],
     }
     pbl_maxs = {
         "n": [],
         "n-1": [],
         "n-2": [],
+        "close2inf": [],
     }
     for losses in seeds_losses:
         for key in keys:
             pbl_means[key].append(losses[key]["PBL Mean"])
             pbl_maxs[key].append(losses[key]["PBL Max"])
 
-    print(f"\nPRINTING AVERAGES FOR {root} +- 1SD")
-    print("-"*50)
+    print(f"\nPRINTING AVGS FOR {root} +- 1SD ON {case_name}")
+    print("-"*60)
     for test_type, losses in pbl_means.items():
         mean = torch.tensor(losses).mean()
         std = torch.tensor(losses).std()
@@ -148,14 +161,18 @@ if __name__ == "__main__":
         print(f"PBL Max {test_type}: {mean.item()} +- {std.item()}")
 
     # Save specific values
-    if os.path.exists("test_errors_p_seeds.json"):
-        with open("test_errors_p_seeds.json", "r") as f:
+    if os.path.exists("test_3.1_errors_p_seeds.json"):
+        with open("test_3.1_errors_p_seeds.json", "r") as f:
             results = json.load(f)
     else:
         results = {}
-    results[root] = {
+
+    if root not in results:
+        results[root] = {}
+
+    results[root][case_name] = {
         "PBL Mean": pbl_means,
         "PBL Max": pbl_maxs
     }
-    with open("test_errors_p_seeds.json", "w") as f:
+    with open("test_3.1_errors_p_seeds.json", "w") as f:
         json.dump(results, f, indent=2)
