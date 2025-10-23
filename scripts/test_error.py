@@ -75,8 +75,15 @@ if __name__ == "__main__":
             },
             {
                 **copy.deepcopy(base_dataset),
-                "split": "test",
-                "task": 4.3
+                "split": split+"near infeasible_n",
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": split+"near infeasible_n-1",
+            },
+            {
+                **copy.deepcopy(base_dataset),
+                "split": split+"near infeasible_n-2",
             },
         ]
         config["dataset"] = {
@@ -92,7 +99,7 @@ if __name__ == "__main__":
         print("-"*20)
         losses = {}
         for dataset_type, dataloader in zip(
-            ["n", "n-1", "n-2", "close2inf"],
+            ["n", "n-1", "n-2", "c2i-n", "c2i-n1", "c2i-n2"],
             trainer.dataloaders
         ):
             print("Calculating", dataset_type)
@@ -101,6 +108,19 @@ if __name__ == "__main__":
                 "PBL Mean": pbl_mean[0],
                 "PBL Max": trainer.val_loss[0].power_balance_max.item()
             }
+
+        losses["close2inf"] = {
+            "PBL Mean": torch.tensor([
+                losses["c2i-n"]["PBL Mean"],
+                losses["c2i-n1"]["PBL Mean"],
+                losses["c2i-n2"]["PBL Mean"],
+            ]).mean().item(),
+            "PBL Max": torch.tensor([
+                losses["c2i-n"]["PBL Max"],
+                losses["c2i-n1"]["PBL Max"],
+                losses["c2i-n2"]["PBL Max"],
+            ]).max().item(),
+        }
         seeds_losses.append(losses)
 
     keys = ["n", "n-1", "n-2", "close2inf"]
@@ -143,5 +163,6 @@ if __name__ == "__main__":
         "PBL Mean": pbl_means,
         "PBL Max": pbl_maxs
     }
+
     with open("test_errors_p_seeds.json", "w") as f:
         json.dump(results, f, indent=2)
