@@ -1,3 +1,10 @@
+# This file is adapted from OPFLearn (https://github.com/NREL/OPFLearn.jl)
+# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
+# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
+#
+# Modifications for PFDelta:
+#   - TODO: Alvaro
+
 # Functions used to give workers tasks for distributed processing
 
 # Imports for distributed processors

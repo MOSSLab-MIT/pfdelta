@@ -1,10 +1,3 @@
-# This file is adapted from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-#
-# Modifications for PFDelta:
-#   - Minor changes in print statements and comments
-
 # Formulations of relaxed AC-OPF based on PowerModels.jl
 
 """
@@ -251,7 +244,11 @@ function find_max_loads(pm; print_level=0, nw=NW_DEFAULT, min_load=0.0,
 		load_bus = loads[load_idx]["load_bus"]
 		pd_max[load_idx] = JuMP.objective_value(model)
 		
-		println("\nLoad Bus: ", load_bus, "\n", JuMP.solution_summary(model))
+		if print_level > 0
+			println("")
+			println("Load Bus: ", load_bus)
+			println(JuMP.solution_summary(model))
+		end
 		
 		# Check if solution was found & no errors occured
 		status = JuMP.termination_status(model)

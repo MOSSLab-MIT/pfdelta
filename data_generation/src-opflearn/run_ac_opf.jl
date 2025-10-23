@@ -1,23 +1,16 @@
-# This file is based on src/run_ac_opf.jl from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Copyright (c) 2021, Alliance for Sustainable Energy, LLC
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-#
-# Modifications for PFDelta:
-#   - Modified JuMP model instantiation to use PFDelta power flow formulation
-#  - Fixed voltage angle calculation to not convert to degrees
 """
 Given a PowerModels data dictionary, following the InfrastructureModels 
 multi-infrastructure conventions, use PowerModels.jl to solve the 
 AC OPF problem and return the primal and dual variable values, and 
 whether the AC OPF solver converged to an Optimal solution.
 """	
-function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false, 
+function run_ac_opf(network_data::Dict; print_level=0, from_py=false, 
 				    solver=JuMP.optimizer_with_attributes(Ipopt.Optimizer, "tol" => TOL))
 	if from_py
 		network_data = fix_network_data_dict(network_data)
 	end
 	
-	pm = PM.instantiate_model(network_data, PM.ACPPowerModel, build_opf_power_flow_delta)
+	pm = PM.instantiate_model(network_data, PM.ACPPowerModel, PM.build_opf)
 	JuMP.set_optimizer(pm.model, solver)
 	if print_level < 2
 		JuMP.set_silent(pm.model)
@@ -50,7 +43,7 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 		vm[bus_num] = res_bus[bus_idx]["vm"]
 		va[bus_num] = res_bus[bus_idx]["va"]
 	end
-	v = vm.*exp.(1im*(va))
+	v = vm.*exp.(1im*deg2rad.(va))
 	vmg = vm[gen_bus_nums]
 	
 	primals["vm_bus"] = Array(vm')
@@ -104,21 +97,19 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 	q = var(pm, :q)
 	
 	#TASK: Determine if I need to sort these voltage values?
-    v_min = [JuMP.has_lower_bound(vm[i]) ? JuMP.dual(JuMP.LowerBoundRef(vm[i])) : 0.0 for i in bus_ids]
-    v_max = [JuMP.has_upper_bound(vm[i]) ? JuMP.dual(JuMP.UpperBoundRef(vm[i])) : 0.0 for i in bus_ids]    
+	v_min = [JuMP.dual(JuMP.LowerBoundRef(vm[i])) for i in bus_ids]
+	v_max = [JuMP.dual(JuMP.UpperBoundRef(vm[i])) for i in bus_ids]
 	
 	pg_min = zeros(num_gens)
 	pg_max = zeros(num_gens)
 	qg_min = zeros(num_gens)
 	qg_max = zeros(num_gens)
-	for gen in values(net_gen) # TODO: fix needs to happen here because generators could be inactive
-		if gen["gen_status"] == 1
+	for gen in values(net_gen)
 		gen_idx = gen["index"]
-			pg_min[gen_idx] = JuMP.has_lower_bound(pg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(pg[gen_idx])) : 0.0
-			pg_max[gen_idx] = JuMP.has_upper_bound(pg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(pg[gen_idx])) : 0.0
-			qg_min[gen_idx] = JuMP.has_lower_bound(qg[gen_idx]) ? JuMP.dual(JuMP.LowerBoundRef(qg[gen_idx])) : 0.0
-			qg_max[gen_idx] = JuMP.has_upper_bound(qg[gen_idx]) ? JuMP.dual(JuMP.UpperBoundRef(qg[gen_idx])) : 0.0
-		end        
+		pg_min[gen_idx] = JuMP.dual(JuMP.LowerBoundRef(pg[gen_idx]))
+		pg_max[gen_idx] = JuMP.dual(JuMP.UpperBoundRef(pg[gen_idx]))
+		qg_min[gen_idx] = JuMP.dual(JuMP.LowerBoundRef(qg[gen_idx]))
+		qg_max[gen_idx] = JuMP.dual(JuMP.UpperBoundRef(qg[gen_idx]))
 	end
 	
 	p_to_max = zeros(num_branches)
@@ -126,24 +117,21 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 	p_fr_max = zeros(num_branches)
 	q_fr_max = zeros(num_branches)
 	if haskey(collect(values(net_branch))[1], "rate_a")
-	for branch in values(net_branch) 
-		if branch["br_status"] == 1
-			idx = branch["index"]
-			fr = branch["f_bus"]
-			to = branch["t_bus"]
-			to_key = (idx, fr, to)
-			fr_key = (idx, to, fr)
-
-			p_to = p[to_key]
-			q_to = q[to_key]
-			p_fr = p[fr_key]
-			q_fr = q[fr_key]
-			
-			p_to_max[idx] = JuMP.has_upper_bound(p_to) ? JuMP.dual(JuMP.UpperBoundRef(p_to)) : 0.0
-			q_to_max[idx] = JuMP.has_upper_bound(q_to) ? JuMP.dual(JuMP.UpperBoundRef(q_to)) : 0.0
-			p_fr_max[idx] = JuMP.has_upper_bound(p_fr) ? JuMP.dual(JuMP.UpperBoundRef(p_fr)) : 0.0
-			q_fr_max[idx] = JuMP.has_upper_bound(q_fr) ? JuMP.dual(JuMP.UpperBoundRef(q_fr)) : 0.0      
-		end  
+	for branch in values(net_branch)
+		idx = branch["index"]
+		fr = branch["f_bus"]
+		to = branch["t_bus"]
+		to_key = (idx, fr, to)
+		fr_key = (idx, to, fr)
+		p_to = p[to_key]
+		q_to = q[to_key]
+		p_fr = p[fr_key]
+		q_fr = q[fr_key]
+		
+		p_to_max[idx] = JuMP.dual(JuMP.UpperBoundRef(p_to))
+		q_to_max[idx] = JuMP.dual(JuMP.UpperBoundRef(q_to))
+		p_fr_max[idx] = JuMP.dual(JuMP.UpperBoundRef(p_fr))
+		q_fr_max[idx] = JuMP.dual(JuMP.UpperBoundRef(q_fr))
 	end
 	end
 	
@@ -159,8 +147,8 @@ function run_ac_opf_pfdelta(network_data::Dict; print_level=0, from_py=false,
 				 "qfr_max" => Array(q_fr_max'),
 				 )
 	
-	results_opflearn = (primals, duals)
-	return results_opflearn, converged, results
+	results = (primals, duals)
+	return results, converged
 end
 
 

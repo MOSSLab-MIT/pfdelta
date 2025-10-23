@@ -1,6 +1,3 @@
-# This file is copied verbatim from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
-
 # Load and save results, statistics and run parameters
 function save_results_csv(results::Dict, file_name; save_order=DEFAULT_SAVE_ORDER, dir="")
 	AC_inputs = results["inputs"]

@@ -1,5 +1,3 @@
-# This file is copied verbatim from OPFLearn (https://github.com/NREL/OPFLearn.jl)
-# Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
 
 export create_samples, dist_create_samples, save_results_csv, save_stats, 
 	   save_polytope, results_to_array

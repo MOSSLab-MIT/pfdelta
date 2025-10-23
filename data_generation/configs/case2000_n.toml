@@ -10,5 +10,4 @@ analysis_mode = false
 # TODO: you need to add info here on which matpower version should be used too.
 # TODO: add note on intel matlab only for mac
 # TODO: add note to leave empty on cluster
-home = "/usr/local/matlab/bin/matlab"
-matpower_path = "/mnt/home/akrivera/third_party/matpower/matpower8_1/"
+home = "/Applications/MATLAB_R2024b.app"

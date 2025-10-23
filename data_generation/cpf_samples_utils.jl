@@ -1,6 +1,6 @@
-const N_SAMPLES_NOSE_TRAIN = 3600 
+const N_SAMPLES_NOSE_TRAIN = 600
 const N_SAMPLES_AROUND_NOSE_TRAIN = 4
-const N_SAMPLES_NOSE_TEST = 200
+const N_SAMPLES_NOSE_TEST = 100
 
 function create_close2infeasible(data_dir, case_name, topology_perturb; delete_int_files=false, run_analysis_mode=false)
 
@@ -34,7 +34,7 @@ end
 # Helper functions
 function parse_shuffle_file(data_dir, topology_perturb; case_2000_flag=false)
     if case_2000_flag
-        raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle_case2000.json")
+        raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle_2000.json")
     else
         raw_shuffle_path = joinpath(data_dir, "shuffle_files", topology_perturb, "raw_shuffle.json") # TODO: this may change as we modify the folder structure
     end
@@ -191,6 +191,9 @@ function create_train_samples(selected_cases_idx_train, train_dirs; delete_int_f
                     rm(sample_cpf_save_path; force=true, recursive=true)
                 end
             end
+        else
+            # Delete the directory associated with this sample
+            rm(sample_cpf_save_path; force=true, recursive=true)
         end
         i += 1 # move on to the next sample
     end
@@ -247,6 +250,9 @@ function create_test_samples(selected_cases_idx_test, test_dirs; delete_int_file
                     rm(sample_cpf_save_path; force=true, recursive=true)
                 end
             end
+        else
+            # Delete the directory associated with this sample
+            rm(sample_cpf_save_path; force=true, recursive=true)
         end
         i += 1 # move on to the next sample
     end
