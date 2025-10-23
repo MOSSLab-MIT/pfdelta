@@ -2,9 +2,10 @@ import os
 import yaml
 import json
 import glob
-
+import sys
 import torch
 
+sys.path.append(os.getcwd())
 from core.utils.main_utils import load_registry
 from core.utils.registry import registry
 
@@ -63,9 +64,12 @@ def load_trainer(config):
     trainer.val_errors = val_errors
 
     # Load model parameters
+    import ipdb; ipdb.set_trace()
     model_location = os.path.join(run_location, "model.pt")
     model_params = torch.load(model_location, map_location="cpu")
     trainer.model.load_state_dict(model_params)
     trainer.model.eval()
 
     return trainer
+
+load_trainer(load_config("/mnt/home/donti-group-shared/bewos/pfdelta/runs/runs/canos_pf_task_1_3/canos_pf_hd128_depth15_lr5e-4_seedseed3_2_250802_143822"))  # for debugging purposes

@@ -100,6 +100,8 @@ class PowerBalanceLoss:
         #proposed solution to canos pbl: remove the zeroes in tensor
         self.power_balance_mean = delta_PQ_magnitude.mean()
 
+        # import ipdb
+        # ipdb.set_trace()
         # Calculate PBL L2
         batch_idx = data["bus"].batch
         batched_power_balance_l2 = torch.sqrt(global_add_pool(delta_PQ_2, batch_idx))

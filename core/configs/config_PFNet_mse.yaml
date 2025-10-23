@@ -4,7 +4,7 @@ job_parameters:
   p: "cpu-gpu-rtx8000"
   gpus: 1
   body: "__launch__"
-batch_name: pfnet_mse_batch_diff_seeds_diff_lr
+batch_name: pfnet_mseComparableParams_batch2_diff_seeds_diff_lr
 dataset:
   datasets:
   - add_bus_type: true
@@ -27,16 +27,16 @@ functional:
   config: powerflownet
   cpu: false
   is_debug: false
-  run_location: runs/pfnet_task_2_3/
-  run_name: pfnet_hd256_lr%lr_layers_4_K_3_seed%seed
-  seed: _manual_list(11, 22, 33 | seed1, seed2, seed3)
+  run_location: runs/pfnet_task_1_3/
+  run_name: pfnetTrainedOnMSE_hd_512_layers_5_seed%seed_lr%lr_bestByPBL
+  seed: _manual_list(11, 22, 33 | 11, 22, 33)
   trainer_name: gnn_trainer
 model:
   K: 3
   dropout_rate: 0.2
   efeature_dim: 7
-  hidden_dim: 256
-  n_gnn_layers: 4
+  hidden_dim: 512
+  n_gnn_layers: 5
   name: powerflownet
   nfeature_dim: 6
   output_dim: 6

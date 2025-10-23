@@ -1,4 +1,11 @@
 config_type: experiment
+# config_type: simple_batch
+# job_parameters:
+#   time: "03:00:00"
+#   p: "cpu-gpu-rtx8000"
+#   gpus: 1
+#   body: "__launch__"
+# batch_name: pfnet_large2_batch_test
 dataset:
   datasets:
   - add_bus_type: true
@@ -22,15 +29,15 @@ functional:
   cpu: false
   is_debug: false
   run_location: runs/pfnet_task_2_3/
-  run_name: pfnet_hd256_lr%lr_layers_4_K_3_seed%seed
+  run_name: pfnet_comparableParams_hd256_lr%lr_layers_17_K_3_seed%seed
   seed: 11
   trainer_name: gnn_trainer
 model:
   K: 3
   dropout_rate: 0.2
   efeature_dim: 7
-  hidden_dim: 256
-  n_gnn_layers: 4
+  hidden_dim: 512
+  n_gnn_layers: 5
   name: powerflownet
   nfeature_dim: 6
   output_dim: 6
@@ -42,11 +49,11 @@ optim:
     batch_size: 64
     epochs: 100
     train_loss:
-    - name: pf_constraint_violation
-      model: PFNet
     - name: GNNTorchLoss
       output_name: bus__y
       torch_nn_name: MSELoss
+    - name: pf_constraint_violation
+      model: PFNet
     - model: PFNet
       name: universal_power_balance
     - name: pfn_masked_mse

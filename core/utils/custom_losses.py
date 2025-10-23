@@ -77,6 +77,7 @@ def PBL_max(predictions, data):
     """
     Returns the maximum power balance loss
     """
+    # import ipdb; ipdb.set_trace()
     per_node_loss = PowerBalanceLoss(predictions, data)[0]
     max_loss = per_node_loss.max()
     return max_loss

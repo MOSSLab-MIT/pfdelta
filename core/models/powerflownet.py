@@ -165,7 +165,8 @@ class PowerFlowNet(nn.Module):
         # self.layers.append(TAGConv(hidden_dim, output_dim, K=K))
         # self.slack_aggr = SlackAggregation(hidden_dim, hidden_dim, 'to_slack')
         # self.slack_propagate = SlackAggregation(hidden_dim, hidden_dim, 'from_slack')
-        self.layers.append(EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, output_dim))
+        if (n_gnn_layers != 1):
+            self.layers.append(EdgeAggregation(hidden_dim, efeature_dim, hidden_dim, output_dim))
 
         self.dropout = nn.Dropout(self.dropout_rate, inplace=False)
 

@@ -19,6 +19,7 @@ class GNNTrainer(BaseTrainer):
         losses = [0.]*len(self.train_loss)
         message = f"Epoch {self.epoch + 1} \U0001F3CB"
 
+        # loop_count = 0
         for data in tqdm(train_dataloader, desc=message):
             # import ipdb
             # ipdb.set_trace()
@@ -55,7 +56,8 @@ class GNNTrainer(BaseTrainer):
             self.update_train_step()
             # import ipdb
             # ipdb.set_trace()
-        
+            # loop_count += 1
+        # import ipdb; ipdb.set_trace()
         return running_loss
 
 

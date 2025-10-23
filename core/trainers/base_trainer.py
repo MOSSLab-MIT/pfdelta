@@ -583,6 +583,8 @@ class BaseTrainer:
         message = f"Epoch {self.epoch + 1} \U0001F3CB"
         running_loss = [0.]*len(self.train_loss)
         losses = [0.]*len(self.train_loss)
+        
+        
         for data, labels in tqdm(train_dataloader, desc=message):
             # Move data to device
             data, labels = data.to(self.device), labels.to(self.device)
@@ -601,7 +603,7 @@ class BaseTrainer:
 
             # Update train step
             self.update_train_step()
-       
+            
         return running_loss
 
 
@@ -650,8 +652,6 @@ class BaseTrainer:
 
             loss_per_dataset.append(losses)
 
-        import ipdb
-        ipdb.set_trace()
         for i, val_loss in enumerate(loss_per_dataset):
             if not last_time:
                 print(f"\nValidation dataset {i+1} errors \U0001F440\n"+"-"*30)
