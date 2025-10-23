@@ -107,6 +107,7 @@ def plot_errors(run_folder, error_key):
 
     plt.legend()
     plt.show()
+    plt.savefig("plot_results.png", dpi=300, bbox_inches="tight")
 
 
 if __name__ == "__main__":

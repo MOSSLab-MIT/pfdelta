@@ -60,6 +60,25 @@ pfnet_pfdata_stats = {
             },
         },
     },
+    "case118": {
+        "casename": "case118",
+        "mean": {
+            "bus": {
+                "y": torch.tensor([1.0294, -0.6576, 0.5330, 0.2933, 0.0000, 0.0075]),
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0274, 0.1068, 0.0720, 0.9978, 0.0000])
+            },
+        },
+        "std": {
+            "bus": {
+                "y": torch.tensor([0.0341, 0.3067, 2.4606, 0.7816, 0.0000, 0.0610]),
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0210, 0.0756, 0.1777, 0.0107, 0.0000])
+            },
+        },
+    },
 }
 
 canos_pfdelta_stats = {
@@ -128,7 +147,7 @@ canos_pfdelta_stats = {
                 "edge_label": torch.tensor([1.5430, 0.5323, 1.5317, 0.5184]),
             },
         },
-    }
+    },
 }
 
 

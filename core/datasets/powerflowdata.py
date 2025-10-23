@@ -1,6 +1,18 @@
-"""
-this file defines the class of PowerFlowData, which is used to load the data of Power Flow
-"""
+# This code is adapted and modified from the PowerFlowNet repository:
+# https://github.com/StavrosOrf/PowerFlowNet/tree/main (GitHub: StavrosOrf). 
+# this file defines the class of PowerFlowData, which is used to load 
+# the data of PFNet
+#
+# Original work is described in the following publication:
+# 
+#   Nan Lin, Stavros Orfanoudakis, Nathan Ordonez Cardenas, Juan S. Giraldo,
+#   and Pedro P. Vergara, "PowerFlowNet: Power flow approximation using
+#   message passing Graph Neural Networks," International Journal of Electrical
+#   Power & Energy Systems, vol. 160, pp. 110112, 2024.
+#   https://doi.org/10.1016/j.ijepes.2024.110112
+#
+# Code was modified by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
+# in April 2025.
 
 from typing import Callable, Optional, List, Tuple
 

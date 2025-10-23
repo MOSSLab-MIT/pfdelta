@@ -297,13 +297,13 @@ class GraphNeuralSolver(nn.Module):
         lamb = torch.zeros(num_graphs, device=pg_setpoints.device)
         lamb[under] = (
             p_global[under] - pg_non_slack_setpoints_sum[under] - pg_max_slack[under]
-        ) / (2 * (pg_setpoint_slack[under] - pg_min_slack[under]))
+        ) / (2 * (pg_setpoint_slack[under] - pg_min_slack[under]) + 1e-8)
         lamb[over] = (
             p_global[over]
             - pg_non_slack_setpoints_sum[over]
             - 2 * pg_setpoint_slack[over]
             - pg_max_slack[over]
-        ) / (2 * (pg_max_slack[over] - pg_setpoint_slack[over]))
+        ) / (2 * (pg_max_slack[over] - pg_setpoint_slack[over]) + 1e-8)
 
         lamb = torch.clamp(lamb, min=0.0)
         pg_slack = torch.zeros_like(lamb)
@@ -470,7 +470,7 @@ class NNUpdate(nn.Module):
         data["bus"].theta = data["bus"].theta + theta_update.squeeze(-1)
 
         # v only gets updated at that non-PV buses
-        gen_idx = (data["bus"].bus_type == 2).nonzero(as_tuple=True)
+        gen_idx = (data["bus"].bus_type != 1).nonzero(as_tuple=True)
         v_update[gen_idx] = 0
         data["bus"].v = data["bus"].v + v_update.squeeze(-1)
 

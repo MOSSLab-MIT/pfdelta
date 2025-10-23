@@ -1,11 +1,23 @@
-python3.10.15
-torch2.1.2+cu118
-torchaudio2.1.2+cu118
-torchvision0.16.2+cu118
-numpy1.26.3
-scipy1.15.1
-torch-geometric2.6.1
-ipdb0.13.13
-pypower5.1.17
-pyrlu0.2.1
-GitPython3.1.44
+# Core environment
+python==3.10.15
+numpy==1.26.4
+scipy==1.15.3
+pandas==2.2.3
+matplotlib==3.10.5
+seaborn==0.13.2
+SciencePlots==2.1.0
+PyYAML==6.0.2
+
+# Deep learning stack (PyTorch)
+torch==2.1.2+cu118
+torchvision==0.16.2+cu118
+torchaudio==2.1.2+cu118
+torch-geometric==2.6.1
+pyrlu==0.2.1
+
+# Power systems & domain-specific
+PYPOWER==5.1.17
+MITRotor==0.1.1  # remove if not used
+
+# Logging / debugging / utilities
+ipdb==0.13.13
