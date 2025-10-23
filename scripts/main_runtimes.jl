@@ -45,8 +45,8 @@ function main()
         get_runtimes(test_networks, case_name, topology_perturb, near_infeasible_flag ? "nose" : "raw")
     end
 
-    # @info "Analyzing runtimes..."
-    # analyze_runtimes(case_name, near_infeasible_flag; topologies=["n", "n-1", "n-2"])
+    @info "Analyzing runtimes..."
+    analyze_runtimes(case_name; topologies=["n", "n-1", "n-2"])
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
