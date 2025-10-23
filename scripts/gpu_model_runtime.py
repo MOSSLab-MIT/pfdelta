@@ -4,6 +4,8 @@ import json
 import statistics
 import argparse
 import copy
+import time
+from tqdm import tqdm
 
 import IPython
 
@@ -96,75 +98,74 @@ if __name__ == "__main__":
         config["dataset"] = {
             "datasets": datasets
         }
-        config["optim"]["train_params"]["batch_size"] = 2000
-        config["optim"]["val_params"]["batch_size"] = 2000
+        config["optim"]["train_params"]["batch_size"] = 100
+        config["optim"]["val_params"]["batch_size"] = 100
 
-    # import ipdb
-    # ipdb.set_trace()
     seeds_trainers = [load_trainer(config) for config in seeds_configs]
-    seeds_losses = []
+    seeds_times = []
     for i, trainer in enumerate(seeds_trainers):
         print("\nWorking on seed", i)
         print("-"*20)
-        losses = {}
+        inference_times = {}
+        device = trainer.device
         for dataset_type, dataloader in zip(
             ["n", "n-1", "n-2",  "c2i-n", "c2i-n1", "c2i-n2"],
             trainer.dataloaders
         ):
             print("Calculating", dataset_type)
-            pbl_mean = trainer.calc_one_val_error(dataloader, i)
-            losses[dataset_type] = {
-                "PBL Mean": pbl_mean[0],
-                "PBL Max": trainer.val_loss[0].power_balance_max.item()
-            }
 
-        losses["close2inf"] = {
-            "PBL Mean": torch.tensor([
-                losses["c2i-n"]["PBL Mean"],
-                losses["c2i-n1"]["PBL Mean"],
-                losses["c2i-n2"]["PBL Mean"],
-            ]).mean().item(),
-            "PBL Max": torch.tensor([
-                losses["c2i-n"]["PBL Max"],
-                losses["c2i-n1"]["PBL Max"],
-                losses["c2i-n2"]["PBL Max"],
-            ]).max().item(),            
-        }
-        seeds_losses.append(losses)
+            # Warming up
+            message = "Warming GPU..."
+            for data in tqdm(dataloader, desc=message):
+                data = data.to(device)
+                _ = trainer.model(data)
+
+            # Calculating inference time
+            message = "Tracking inference time..."
+            times = []
+            for data in tqdm(dataloader, desc=message):
+                data = data.to(device)
+
+                # Calculate output
+                with torch.no_grad():
+                    tic = time.time()
+                    _ = trainer.model(data)
+                    toc = time.time()
+                # Calculate inference time
+                inference_time = (toc - tic) * 100
+                times.append(inference_time)
+
+            dataset_size = len(dataloader.dataset)
+            inference_times[dataset_type] = sum(times) / dataset_size
+
+        inference_times["close2inf"] = (
+            inference_times["c2i-n"] +
+            inference_times["c2i-n1"] +
+            inference_times["c2i-n2"]
+        ) / 3
+        seeds_times.append(inference_times)
 
     keys = ["n", "n-1", "n-2", "close2inf"]
-    pbl_means = {
+    total_times = {
         "n": [],
         "n-1": [],
         "n-2": [],
         "close2inf": [],
     }
-    pbl_maxs = {
-        "n": [],
-        "n-1": [],
-        "n-2": [],
-        "close2inf": [],
-    }
-    for losses in seeds_losses:
+    for times in seeds_times:
         for key in keys:
-            pbl_means[key].append(losses[key]["PBL Mean"])
-            pbl_maxs[key].append(losses[key]["PBL Max"])
+            total_times[key].append(times[key])
 
-    print(f"\nPRINTING AVGS FOR {root} +- 1SD ON {case_name}")
-    print("-"*60)
-    for test_type, losses in pbl_means.items():
-        mean = torch.tensor(losses).mean()
-        std = torch.tensor(losses).std()
-        print(f"PBL Mean {test_type}: {mean.item()} +- {std.item()}")
-
-    for test_type, losses in pbl_maxs.items():
-        mean = torch.tensor(losses).mean()
-        std = torch.tensor(losses).std()
-        print(f"PBL Max {test_type}: {mean.item()} +- {std.item()}")
+    print(f"\nPRINTING TIMES FOR {root} +- 1SD ON {case_name}")
+    print("-"*50)
+    for test_type, times in total_times.items():
+        mean = torch.tensor(times).mean()
+        std = torch.tensor(times).std()
+        print(f"Inference time on {test_type}: {mean.item()} +- {std.item()}")
 
     # Save specific values
-    if os.path.exists("test_3.1_errors_p_seeds.json"):
-        with open("test_3.1_errors_p_seeds.json", "r") as f:
+    if os.path.exists("times_p_seeds.json"):
+        with open("times_p_seeds.json", "r") as f:
             results = json.load(f)
     else:
         results = {}
@@ -172,9 +173,6 @@ if __name__ == "__main__":
     if root not in results:
         results[root] = {}
 
-    results[root][case_name] = {
-        "PBL Mean": pbl_means,
-        "PBL Max": pbl_maxs
-    }
-    with open("test_3.1_errors_p_seeds.json", "w") as f:
+    results[root][case_name] = total_times
+    with open("times_p_seeds.json", "w") as f:
         json.dump(results, f, indent=2)
