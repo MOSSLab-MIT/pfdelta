@@ -18,7 +18,7 @@ For each test case, we include solved power flow instances produced through our 
 
 <p align="center"><b>Figure 1.</b> Data generation pipeline.</p>
 
-The following Tables summarizes the amount of samples provided for each test case: 
+The following Tables summarize the amount of samples provided for each test case: 
 <p align="center" style="background-color:white; padding:10px;">
   <img src="figures/train_samples_table.png" alt="Training Samples Table" width="700"/>
 </p>
@@ -170,7 +170,7 @@ pfdelta_data/
         └── test.pt
 ```
 
-### Result Replication
+### Results Replication
 --------------------
 
 To replicate the results presented in the paper, use the configuration files located in `core/configs/`.  Each YAML file corresponds to a specific model–task combination and follows the naming convention:
