@@ -4,7 +4,8 @@
 #
 # Modifications for PFDelta:
 #   - Added arguments to dist_create_samples for perturbations considered in PFDelta
-#   - TODO: Alvaro
+#   - Modified the code so that now there are two samplers to avoid iddle time by processors
+#   - Changed return statement to return polytope for analysis
 
 using Distributed
 """

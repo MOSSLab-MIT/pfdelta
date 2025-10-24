@@ -66,8 +66,8 @@ if __name__ == "__main__":
         all_results = json.load(f)
 
     palette = {
-        "CANOS": "#D9A6D9",
-        "GNS": "#F27AA4",
+        "CANOS-PF": "#D9A6D9",
+        "GNS-S": "#F27AA4",
         "PFNet": "#69D8FF"
     }
     
@@ -94,8 +94,8 @@ if __name__ == "__main__":
         
         # Combine into dataframe
         results_df = pd.concat([
-            dict_to_df(results["CANOS"], "CANOS"),
-            dict_to_df(results["GNS"], "GNS"),
+            dict_to_df(results["CANOS"], "CANOS-PF"),
+            dict_to_df(results["GNS"], "GNS-S"),
             dict_to_df(results["PFNet"], "PFNet"),
         ])
         

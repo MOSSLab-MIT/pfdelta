@@ -23,6 +23,8 @@ class PowerBalanceLoss:
         self.power_balance_mean = None
         self.power_balance_max = None
         self.power_balance_l2 = None
+        self.delta_P = None
+        self.delta_Q = None
         self.model = model
         self.loss_name = "PBL Mean"
 
@@ -76,6 +78,7 @@ class PowerBalanceLoss:
             src,
             dst,  # line connections
         )
+        self.delta_P, self.delta_Q = delta_P, delta_Q
 
         # 4. Use complex mismatch to calculate PBL losses
 
