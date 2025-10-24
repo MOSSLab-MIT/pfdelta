@@ -123,76 +123,86 @@ function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
     end
 end
 
-function analyze_runtimes(case_name, near_infeasible_flag::Bool;
+function analyze_runtimes(case_name;
                           topologies=["none","n-1","n-2"],
-                          runs=1:3,
-                          data_dir=DATA_DIR)
+                          runs=1:3)
 
-    # Prepare csv output paths
-    results_filename = "runtimes_$(case_name)_$(near_infeasible_flag ? "nose" : "raw").csv"
-    summary_filename = "runtimes_summary_$(case_name)_$(near_infeasible_flag ? "nose" : "raw").csv"
+    # ---- Output paths ----
+    results_filename = "runtimes_$(case_name)_both.csv"
+    summary_filename = "runtimes_summary_$(case_name)_both.csv"
     results_out_csv = joinpath(OUT_DIR, results_filename)
     summary_out_csv = joinpath(OUT_DIR, summary_filename)
 
-    # Initialize DataFrames
-    results_df = DataFrame(run=Int[], sample_idx=Int[], topology_perturb=String[], solve_time=Float64[], converged=Bool[])
+    # ---- DataFrames ----
+    results_df = DataFrame(
+        run=Int[], sample_idx=Int[], topology_perturb=String[],
+        sample_type=String[], solve_time=Float64[], converged=Bool[]
+    )
     summary_df = DataFrame(
-        run = Int[],
-        run_mean = Float64[],
-        pct_converged = Float64[],
+        run=Int[], run_mean=Float64[], pct_converged=Float64[], n_samples=Int[]
     )
 
-    # Create resuls DataFrame
+    sample_types = ["raw", "nose"]
+
+    # ---- Populate results_df ----
     for topology_perturb in topologies
-        sample_type = near_infeasible_flag ? "nose" : "raw"
-
         for run in runs
-            run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, "run_$run")
-            runtime_file = joinpath(run_dir, "runtime_NR_test.json")
+            for sample_type in sample_types
+                run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, "run_$run")
+                runtime_file = joinpath(run_dir, "runtime_NR_test.json")
 
-            if isfile(runtime_file)
-                runtime_data = JSON.parsefile(runtime_file)
-
-                for entry in runtime_data
-                    push!(results_df, (
-                        run,
-                        entry["sample_idx"],
-                        topology_perturb,
-                        entry["solve_time"],
-                        entry["converged"]
-                    ))
+                if isfile(runtime_file)
+                    runtime_data = JSON.parsefile(runtime_file)
+                    for entry in runtime_data
+                        push!(results_df, (
+                            run,
+                            entry["sample_idx"],
+                            topology_perturb,
+                            sample_type,
+                            entry["solve_time"],
+                            entry["converged"]
+                        ))
+                    end
+                else
+                    @warn "Runtime file not found: $runtime_file"
                 end
-            else
-                @warn "Runtime file not found: $runtime_file"
             end
         end
     end
 
-    # Create summary DataFrame (considering all topologies together)
-    for run in runs
-        filtered_df = filter(row -> row.run == run, results_df)
-        run_mean = mean(filter(row -> row.converged, filtered_df).solve_time)
-        pct_converged = 100 * sum(filtered_df.converged) / nrow(filtered_df)
+    # ---- Helper safe functions ----
+    safe_mean(v) = isempty(v) ? NaN : mean(v)
+    safe_pct_true(v) = isempty(v) ? NaN : 100 * count(==(true), v) / length(v)
 
-        push!(summary_df, (
-            run,
-            run_mean,
-            pct_converged
-        ))
+    # ---- Create summary: aggregate across both sample types ----
+    for run in runs
+        filtered = filter(r -> r.run == run, results_df)
+        converged_rows = filter(r -> r.converged, filtered)
+
+        run_mean = safe_mean(converged_rows.solve_time)
+        pct_conv = safe_pct_true(filtered.converged)
+        n_samp = nrow(filtered)
+
+        push!(summary_df, (run, run_mean, pct_conv, n_samp))
     end
 
-    # Print summary of mean of means, std, and overall convergence rate
-    overall_mean = mean(summary_df.run_mean)
-    overall_std = std(summary_df.run_mean)
-    overall_pct_converged = 100 * sum(results_df.converged) / nrow(results_df)
-    @info "Overall Mean Solve Time: $(overall_mean) seconds"
-    @info "Overall Std Dev of Solve Time: $(overall_std) seconds"
-    @info "Overall Percentage of Converged Cases: $(overall_pct_converged)%"
+    # ---- Overall stats ----
+    overall_converged = filter(r -> r.converged, results_df)
+    overall_mean = safe_mean(overall_converged.solve_time)
+    overall_std = isempty(overall_converged) ? NaN : std(overall_converged.solve_time)
+    overall_pct_converged = safe_pct_true(results_df.converged)
 
-    # Save DataFrames to CSV
+    @info "[$(case_name)] Overall Mean Solve Time: $(overall_mean) s"
+    @info "[$(case_name)] Overall Std Dev of Solve Time: $(overall_std) s"
+    @info "[$(case_name)] Overall Percentage of Converged Cases: $(overall_pct_converged)%"
+
+    # ---- Save CSVs ----
+    isdir(OUT_DIR) || mkpath(OUT_DIR)
     CSV.write(results_out_csv, results_df)
     CSV.write(summary_out_csv, summary_df)
     @info "Results saved to $results_out_csv and $summary_out_csv"
+
+    return results_df, summary_df
 end
 
 function change_bus_type!(net)

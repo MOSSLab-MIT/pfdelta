@@ -11,3 +11,4 @@ analysis_mode = false
 # TODO: add note on intel matlab only for mac
 # TODO: add note to leave empty on cluster
 home = "/Applications/MATLAB_R2024b.app"
+matpower_path = 

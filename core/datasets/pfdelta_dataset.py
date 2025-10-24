@@ -18,26 +18,23 @@ from core.utils.registry import registry
 
 @registry.register_dataset("pfdeltadata")
 class PFDeltaDataset(InMemoryDataset):
-    """PFDelta base dataset loader and processor.
+    """
+    PFDeltaDataset: PyTorch Geometric InMemoryDataset for PFDelta benchmark data.
 
-    This class wraps raw power flow JSON cases produced by the pfdelta data
-    generation utilities and converts them to PyTorch Geometric HeteroData
-    objects. It supports multiple tasks and dataset construction modes:
-    - create processed datasets for a specific task
-    - create processed datasets for data analysis, corresponding to a specific case, topological perturbation, and feasibility regime
+    This class automatically downloads, extracts, and preprocesses data from the
+    PFDelta benchmark on HuggingFace 
+    (https://huggingface.co/datasets/pfdelta/pfdelta/tree/main). It converts raw
+    JSON power flow samples into PyTorch Geometric `HeteroData` objects for use
+    with graph-based learning models (e.g., CANOS, GNS, PFNet).
 
-    Args:
-        root_dir (str): root data folder.
-        case_name (str): case folder name (e.g. "case14"). Required for tasks 1.x, and 2.x
-        perturbation (str): grid perturbation type ("n", "n-1", "n-2").
-        feasibility_type (str): "feasible", "near infeasible", or "approaching infeasible".
-        n_samples (int): number of samples to load (<0 means use all data available).
-        split (str): which split to load ("train", "val", "test", "all", or custom).
-        model (str): model shorthand used for naming processed folders.
-        task (float|str): task id (e.g. 1.3) or "analysis".
-        add_bus_type (bool): whether to include bus-type-specific node sets.
-        transform, pre_transform, pre_filter: pytorch_geometric dataset hooks.
-        force_reload (bool): force InMemoryDataset to re-run processing.
+    The dataset supports multiple loading and processing modes:
+        - Task-specific datasets: For supervised learning on benchmark tasks
+          (e.g., 1.x, 2.x, 3.x, 4.x)
+        - Analysis datasets: For per-case data inspection, visualization, and
+          analytical performance studies
+
+    Processed datasets are automatically organized by task, case, perturbation
+    type, and feasibility regime within the downloaded dataset's directory structure.
     """
 
     def __init__(
@@ -56,12 +53,40 @@ class PFDeltaDataset(InMemoryDataset):
         pre_filter: Any = None,
         force_reload: bool = False,
     ):
-        """Initialize PFDeltaDataset and configure processed path.
+        """
+        Initialize the PFDeltaDataset class. 
 
-        The initializer mainly records configuration and computes the
-        custom processed directory used by InMemoryDataset. Actual
-        processing (conversion from raw json -> HeteroData) happens
-        in process() which is invoked by the parent class when needed.
+        Parameters
+        ----------
+        root_dir : str
+            Root data directory.
+        case_name : str
+            Power system case folder name (e.g., "case14").
+        perturbation : str
+            Grid contingency type ("n", "n-1", or "n-2").
+        feasibility_type : str
+            Feasibility regime ("feasible", "near infeasible", or "approaching infeasible").
+        n_samples : int
+            Number of samples to load. If < 0, loads all available samples.
+        split : str
+            Dataset split to load ("train", "val", "test", "all", or 
+            "separate_{casename}_{split}_{feasibility}_{grid_type}").
+        model : str
+            Model shorthand used for processed dataset naming.
+        task : float or str
+            Benchmark task ID (e.g., 1.3, 3.1, 4.2) or "analysis" for analytical mode.
+        add_bus_type : bool
+            Whether to include bus-type-specific node sets in HeteroData graphs.
+        transform, pre_transform, pre_filter : callable, optional
+            PyTorch Geometric dataset hooks for on-the-fly or preprocessing transforms.
+        force_reload : bool
+            If True, forces the dataset to reprocess even if cache exists.
+
+        Notes
+        -----
+        This initializer configures the dataset's directory structure and metadata.
+        The raw-to-graph conversion occurs within the process() method, automatically
+        triggered by the parent InMemoryDataset when required. 
         """
         self.split = split
         self.case_name = case_name
@@ -147,7 +172,10 @@ class PFDeltaDataset(InMemoryDataset):
                 "near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800},
                 "feasible": {"n": 9000, "n-1": 9000, "n-2": 9000},
             },
-            4.3: {"near infeasible": {"n": 1800, "n-1": 1800, "n-2": 1800}},
+            4.3: {"near infeasible": {"n": 3600, "n-1": 3600, "n-2": 3600},
+                  "approaching infeasible": {"n": 14400, "n-1": 14400, "n-2": 14400},
+                  "feasible": {"n": 0, "n-1": 0, "n-2": 0}
+            },
             "analysis": {
                 "feasible": {"n": 56000, "n-1": 29000, "n-2": 20000},
                 "near infeasible": {"n": 2000, "n-1": 2000, "n-2": 2000},
@@ -157,7 +185,7 @@ class PFDeltaDataset(InMemoryDataset):
 
         if case_name == "case2000":
             self.task_config = {
-                1.3: {"feasible": {"n": 10000, "n-1": 10000, "n-2": 10000}}
+                1.3: {"feasible": {"n": 27000, "n-1": 13500, "n-2": 9000}}
             }
 
         self.feasibility_config = {
@@ -246,12 +274,29 @@ class PFDeltaDataset(InMemoryDataset):
         return ["train.pt", "val.pt", "test.pt"]
 
     def download(self) -> None:
-        """Download raw archives and shuffle files from the remote dataset.
+        """
+        Download and extract raw PFDelta dataset archives. This method is automatically
+        triggered when the PFDeltaDataset class is initialized.
 
-        The method downloads per-case tar archives and the shuffle_files
-        directory from the canonical hf dataset URL. It skips downloads
-        when the target directories already exist. Downloaded archives
-        are extracted and the tarball is removed.
+        This method retrieves per-case data archives and the shuffle mapping directory 
+        from the canonical PFDelta Hugging Face repository:
+        https://huggingface.co/datasets/pfdelta/pfdelta/tree/main
+
+        It ensures that all necessary files are available locally under `self.root`
+        for downstream dataset processing and loading. Existing directories or files 
+        are skipped to prevent redundant downloads.
+
+        For each case, the method downloads the corresponding tar file, extracts its 
+        contents into the dataset root directory, and removes the compressed archive. 
+        The global `shuffle_files` directory, containing pre-defined train/val/test 
+        splits, is downloaded once and reused across all cases.
+
+        Notes
+        -----
+        - The method supports both per-case downloads (for tasks 1.x–2.x) and 
+        multi-case downloads (for tasks 3.x and analysis mode).
+        - Downloads are skipped if the corresponding extracted folders already exist.
+        - Each tar file is automatically removed after successful extraction.
         """
         print(f"Downloading files for task {self.task}...")
 
@@ -273,9 +318,9 @@ class PFDeltaDataset(InMemoryDataset):
             print("Shuffle files already exist. Skipping download.")
         else:
             print("Downloading shuffle files...")
-            file_url = f"{base_url}/shuffle_files.tar"
+            file_url = f"{base_url}/shuffle_files.tar.gz"
             shuffle_files_path = download_url(file_url, shuffle_download_path, log=True)
-            extract_tar(shuffle_files_path, shuffle_download_path, mode="r:")
+            extract_tar(shuffle_files_path, shuffle_download_path)
 
         # For each case, download all sub-archives
         for case_name in case_names:
@@ -303,25 +348,50 @@ class PFDeltaDataset(InMemoryDataset):
                 print(f"Failed to download or extract {case_name} data: {e}")
 
     def build_heterodata(
-        self, pm_case: Dict[str, Any], is_cpf_sample: bool = False
-    ) -> HeteroData:
-        """Convert a parsed PowerModels JSON dict into a HeteroData object.
+        self, 
+        pm_case: Dict[str, Any], 
+        is_cpf_sample: bool = False) -> HeteroData:
+        """
+        Convert a parsed PowerModels case dictionary into a HeteroData graph.
 
-        Args:
-            pm_case (dict): PowerModels network data dictionary stored in a JSON case. For samples produced by continuation power flow (CPF) samples the
-                dictionary structure is expected to include "solved_net"
-                with the solved network; for raw PowerModels cases the
-                structure is expected to contain "network" and
-                "solution" keys.
-            is_cpf_sample (bool): if True, treat pm_case as CPF sample
-                (solved_net present) and adapt assertions/checks.
+        This method parses a PowerModels.jl-style case JSON (produced by the PFDelta
+        data generation pipeline) and converts it into a typed heterogeneous graph
+        suitable for PyTorch Geometric. Each case contains detailed electrical
+        network data, including buses, generators, loads, and branches, along with
+        solved power flow variables.
 
-        Returns:
-            torch_geometric.data.HeteroData: heterogenous graph with node
-            sets ("bus", "gen", "load", optionally "PV","PQ","slack") and
-            edge types ("bus","branch","bus"), ("gen","gen_link","bus"),
-            ("load","load_link","bus") plus attributes and labels.
-            The structure is further detailed in the README.
+        The resulting `HeteroData` object includes:
+        - Node sets for buses, generators, and loads (and optionally PV, PQ, slack subsets).
+        - Edge types linking physical entities (e.g., ("bus","branch","bus"), ("gen","gen_link","bus")).
+        - Node- and edge-level attributes for network parameters, limits, and solved quantities.
+        - Labels (.y) for supervised learning tasks (e.g., voltage angles and magnitudes).
+
+        Parameters
+        ----------
+        pm_case : dict
+            PowerModels network dictionary parsed from a JSON file.  
+            - For continuation power flow (CPF) samples, this contains a "solved_net" entry 
+            holding both network and solution data.  
+            - For standard power flow samples, the dictionary includes "network" and 
+            `"solution"` keys.
+
+        is_cpf_sample : bool, optional (default=False)
+            Whether the case is a CPF sample (i.e., derived from a near- or approaching-
+            infeasible regime). Enables alternative handling for "solved_net" format.
+
+        Returns
+        -------
+        torch_geometric.data.HeteroData
+            A heterogeneous graph representation of the power network containing node and edge
+            types with structured features, physical parameters, and solved variables.
+
+        Notes
+        -----
+        - Node features include bus demands, generations, shunts, voltage magnitudes/angles, and limits.
+        - Edge features include branch impedances, admittances, tap ratios, and flow limits.
+        - Supports optional sub-node sets (PV, PQ, slack) and linking edges if 
+        self.add_bus_type=True.
+        - The resulting graphs are standardized for use across multiple PFDelta tasks (1.x–4.x).
         """
         data = HeteroData()
 
@@ -590,9 +660,10 @@ class PFDeltaDataset(InMemoryDataset):
             if link_name == ("bus", "branch", "bus"):
                 data[link_name].edge_attr = torch.stack(edge_attr)
                 data[link_name].edge_label = torch.stack(edge_label)
+                # These correspond to limits in the original pglib case file, limits are not enforced in our dataset
                 data[link_name].edge_limits = torch.stack(
                     edge_limits
-                )  # These correspond to limits in the original pglib case file, these limits are not enforced in our dataset
+                ) 
 
         if self.add_bus_type:
             for link_name, edges in {
@@ -609,13 +680,34 @@ class PFDeltaDataset(InMemoryDataset):
         return data
 
     def get_analysis_data(self, case_root: str) -> list[HeteroData]:
-        """Collect and convert raw JSON files for the 'analysis' task.
+        """
+        Collect and convert raw JSON files for the 'analysis' task.
 
-        Args:
-            case_root (str): path to the case folder containing raw/ nose/ around_nose subfolders.
-        Returns:
-            list[HeteroData]: list of converted HeteroData objects up to the
-            dataset_size determined by self.n_samples.
+        This method gathers solved power flow samples from the appropriate 
+        feasibility regime—feasible, near infeasible (nose), or approaching 
+        infeasible (around_nose)—and converts each JSON case into a 
+        `HeteroData` object suitable for graph-based analysis.
+
+        The number of loaded samples is determined by self.n_samples or 
+        the task configuration limits defined in self.task_config.
+
+        Parameters
+        ----------
+        case_root : str
+            Path to the case directory containing subfolders such as 
+            raw/, nose/, or around_nose/.
+
+        Returns
+        -------
+        list of HeteroData
+            List of converted power flow samples up to the configured dataset size.
+
+        Notes
+        -----
+        - Samples are treated as continuation power flow (CPF) cases when 
+        the feasibility type is not 'feasible'.
+        - File discovery is based on fixed directory naming conventions 
+        within each case folder.
         """
         dataset_size = (
             self.n_samples
@@ -655,10 +747,26 @@ class PFDeltaDataset(InMemoryDataset):
         return data_list
 
     def get_shuffle_file_path(self, grid_type: str, case_root: str) -> str:
-        """Return the appropriate shuffle JSON path for grid_type.
+        """
+        Return the path to the shuffle mapping JSON file for a given grid type.
 
-        Handles special naming for the large case2000 where a different
-        shuffle filename is used.
+        This utility determines which shuffle mapping to use when building 
+        processed train/validation/test splits. For large-scale systems such 
+        as case2000, a dedicated shuffle file is selected to match 
+        dataset naming conventions.
+
+        Parameters
+        ----------
+        grid_type : str
+            Grid size category (e.g., 'small', 'medium', 'large') 
+            used to locate the correct shuffle file.
+        case_root : str
+            Path to the case directory, used to detect special naming rules.
+
+        Returns
+        -------
+        str
+            Absolute path to the corresponding shuffle JSON file.
         """
         if "case2000" in case_root:
             return os.path.join(
@@ -670,12 +778,40 @@ class PFDeltaDataset(InMemoryDataset):
             )
 
     def shuffle_split_and_save_data(self, case_root: str) -> Dict[str, list]:
-        """Create train/val/test processed splits for one case and save them.
+        """Create and save processed train/val/test splits for a given case.
 
-        This routine reads shuffle mappings, iterates over raw JSON files,
-        converts them to HeteroData objects and saves per-grid/per-task
-        processed .pt files. It also returns combined lists for later
-        concatenation when building cross-case datasets.
+        This method constructs processed PyTorch Geometric datasets for one
+        power flow case by reading shuffle mappings, loading raw JSON samples,
+        and converting each case to a `HeteroData` object. It handles both
+        feasible and infeasible regimes and organizes processed data into
+        per-split .pt files under structured folders.
+
+        The function also returns in-memory lists of all processed samples,
+        enabling downstream concatenation across multiple cases (e.g. for
+        cross-case training or evaluation).
+
+        Parameters
+        ----------
+        case_root : str
+            Path to the directory containing all subfolders for a given
+            power flow case (e.g. case14/n/raw/, case14/n-1/nose/train/).
+
+        Returns
+        -------
+        Dict[str, list]
+            Dictionary mapping split names ("train", "val", "test")
+            to lists of processed `HeteroData` objects.
+
+        Notes
+        -----
+        - For feasible data, split boundaries are derived from shuffle maps
+        located in shuffle_files/ and follow a 90/10 train/val partition.
+        The test set uses the last test_size samples.
+        - For infeasible and approaching infeasible regimes, samples are
+        directly loaded from their respective nose and around_nose folders.
+        - Processed datasets are saved under:
+        <case_root>/<grid_type>/processed/task_<task>_<feasibility>_<model>/split.pt.
+        - The returned data lists can be concatenated to build cross-case datasets.
         """
         # when being combined
         task, model = self.task, self.model
@@ -691,6 +827,9 @@ class PFDeltaDataset(InMemoryDataset):
                 train_size = train_cfg_dict[grid_type]
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
+
+                if self.case_name == "case2000": 
+                    test_size = test_size / 2
 
                 if train_size == 0 and test_size == 0:
                     continue
@@ -764,7 +903,7 @@ class PFDeltaDataset(InMemoryDataset):
                             for f in os.listdir(infeasible_train_path)
                             if f.endswith(".json")
                         ]
-                    )
+                    )[:train_size]
                     if infeasibility_type == "nose":
                         test_files = sorted(
                             [
@@ -772,7 +911,7 @@ class PFDeltaDataset(InMemoryDataset):
                                 for f in os.listdir(infeasible_test_path)
                                 if f.endswith(".json")
                             ]
-                        )
+                        )[:test_size]
                     else:
                         test_files = None
 
@@ -815,11 +954,27 @@ class PFDeltaDataset(InMemoryDataset):
         return all_data_lists
 
     def process(self):
-        """High-level processing entry point used by InMemoryDataset.
+        """
+        This method serves as the main processing routine invoked by
+        `InMemoryDataset`. It organizes how raw PowerModels cases are
+        converted into processed `HeteroData` objects, split into
+        train/validation/test partitions, and stored under structured
+        directories.
 
-        For 'analysis' task it builds a single all.pt file. For other
-        tasks it either processes a single case or combines multiple
-        cases (tasks 3.x) into combined processed folders and saves them.
+        For the 'analysis' task, all samples are processed into a single
+        all.pt file. For other tasks, this function either:
+        - Processes one case and generates per-split .pt files, or
+        - Combines multiple cases (tasks 3.x) into consolidated datasets
+        for each split, saving them under combined processed folders.
+
+        Notes
+        -----
+        - For 'analysis' tasks, processed data is stored under:
+        <root>/processed/task_<task>_<case>_<perturbation>_<feasibility>_<n_samples>/all.pt.
+        - For combined multi-case tasks (3.x), split datasets are saved under:
+        <root>/processed/combined_task_<task>_<model>_<casename>/<split>.pt.
+        - Internally uses shuffle_split_and_save_data and get_analysis_data 
+        to build per-case datasets before collation.
         """
         task, model = self.task, self.model
         casename = None
@@ -889,10 +1044,29 @@ class PFDeltaDataset(InMemoryDataset):
                 print(f"Saved combined {split} data with {len(data_list)} samples")
 
     def load(self, split: str):
-        """Loads dataset for the specified split.
+        """
+        Loads dataset for the specified split.
 
-        Args:
-            split (str): The split to load ('train', 'val', 'test', 'separate_{casename}_{split}_{feasibility}_{grid_type}') # specify a different type of string for 3.1
+        Parameters
+        ----------
+        split : str
+            The split to load. Can be one of:
+                - 'train', 'val', 'test'
+                - 'separate_{casename}_{split}_{feasibility}_{grid_type}' 
+                (used for task 3.1 or 4.x separate per-case loading)
+
+        Raises
+        ------
+        ValueError
+            If the split string is malformed.
+        FileNotFoundError
+            If the processed file is not found at the computed path.
+
+        Notes
+        -----
+        For example:
+        split="separate_case57_train_feasible_n-1" loads:
+        root/case57/n-1/processed/task_{task}_{feasibility}_{model}/train.pt.
         """
 
         if "separate" in split:
@@ -906,7 +1080,7 @@ class PFDeltaDataset(InMemoryDataset):
                     f"{casename_str}",
                     f"{grid_type_str}",
                     "processed",
-                    f"task_{4.1}_{feasibility_str}_{self.model}",
+                    f"task_{self.task}_{feasibility_str}_{self.model}",
                     f"{split_str}.pt",
                 )
             else:
@@ -925,15 +1099,51 @@ class PFDeltaDataset(InMemoryDataset):
             print(f"Loading {split} dataset from {processed_path}")
             self.data, self.slices = torch.load(processed_path)
 
+#############################################################################
+#      CUSTOM PFDELTADATASET CLASSES TAILORED TO PER-MODEL PREPROCESSING
+#############################################################################
 
 @registry.register_dataset("pfdeltaGNS")
 class PFDeltaGNS(PFDeltaDataset):
-    """PFDelta dataset variant tailored for the GNS model.
-
-    Adds initial GNS-specific node features (theta, v) at bus-level and
-    exposes convenience fields used by the GNS training code.
     """
+    PFDelta dataset inherited class specialized for GNS (Graph Network Solver) model.
 
+    This class extends the base PFDeltaDataset to include GNS-specific
+    bus-level node features, such as initial voltage magnitude and angle (v, θ),
+    and exposes additional attributes required by the GNS training pipeline.
+
+    Parameters
+    ----------
+    root_dir : str, optional
+        Path to the dataset root directory. Defaults to "data".
+    case_name : str, optional
+        Name of the power grid case (e.g., "case118"). Defaults to an empty string.
+    split : str, optional
+        Dataset split to load ('train', 'val', or 'test'). Defaults to "train".
+    model : str, optional
+        Model name identifier. Defaults to "GNS".
+    task : float or str, optional
+        Task identifier (e.g., 1.1, 3.1). Defaults to 1.3.
+    add_bus_type : bool, optional
+        If True, includes bus type encodings as additional features.
+    transform : callable, optional
+        Optional transform applied on data objects before returning.
+    pre_transform : callable, optional
+        Transform applied before saving the processed dataset.
+    pre_filter : callable, optional
+        Filter function applied to data objects before processing.
+    force_reload : bool, optional
+        If True, forces dataset reprocessing. Defaults to False.
+
+    Notes
+    -----
+    This variant initializes per-bus features for GNS training, including:
+        - theta : initial voltage angle
+        - v : initial voltage magnitude
+        - pd, qd : active/reactive demand
+        - pg, qg : active/reactive generation
+        - x_gns : stacked tensor of [theta, v] per bus
+    """
     def __init__(
         self,
         root_dir="data",
@@ -961,6 +1171,21 @@ class PFDeltaGNS(PFDeltaDataset):
         )
 
     def build_heterodata(self, pm_case: dict, is_cpf_sample: bool = False):
+        """
+        Build a `HeteroData` graph with additional GNS-specific fields.
+
+        Parameters
+        ----------
+        pm_case : dict
+            PowerModels.jl-style case dictionary with bus, branch, gen, and load data.
+        is_cpf_sample : bool, optional
+            If True, marks data as a continuation power flow (CPF) sample.
+
+        Returns
+        -------
+        data : torch_geometric.data.HeteroData
+            The constructed heterogeneous graph with added GNS-specific features.
+        """
         # call base version
         data = super().build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
         num_buses = data["bus"].x.size(0)
@@ -1036,10 +1261,47 @@ class PFDeltaGNS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaCANOS")
 class PFDeltaCANOS(PFDeltaDataset):
-    """PFDelta dataset variant for the CANOS model.
+    """
+    PFDelta dataset variant specialized for the CANOS  model.
 
-    Optionally applies CANOS-specific pre_transform/transform functions
-    and prunes node/edge types to only those used by CANOS (bus, PV, PQ, slack).
+    This subclass of PFDeltaDataset applies optional CANOS-specific
+    preprocessing and normalization transforms, and prunes the heterogeneous
+    graph to include only the node and edge types required by CANOS
+    (bus, PV, PQ, and slack).
+
+    Parameters
+    ----------
+    root_dir : str, optional
+        Path to the dataset root directory. Defaults to "data".
+    case_name : str, optional
+        Name of the power grid case (e.g., "case118"). Defaults to an empty string.
+    split : str, optional
+        Dataset split to load ('train', 'val', or 'test'). Defaults to "train".
+    model : str, optional
+        Model name identifier. Defaults to "CANOS".
+    task : float or str, optional
+        Task identifier (e.g., 1.1, 3.1). Defaults to 1.3.
+    add_bus_type : bool, optional
+        Whether to include bus type encodings as part of node features.
+    transform : callable or str, optional
+        Transform applied to data objects after loading.
+        If set to "canos_pf_slack_mean0_var1", applies CANOS normalization
+        using case-specific statistics.
+    pre_transform : callable or str, optional
+        Transform applied before saving the processed dataset.
+        If set to "canos_pf_data_mean0_var1", applies CANOS normalization
+        using case-specific statistics.
+    pre_filter : callable, optional
+        Optional filter applied to data objects before processing.
+    force_reload : bool, optional
+        If True, forces dataset reprocessing. Defaults to False.
+
+    Notes
+    -----
+    - Normalization statistics are retrieved from :data:`canos_pfdelta_stats`
+      based on the provided case name.
+    - The resulting `HeteroData` graph only includes the node types
+      relevant to CANOS: bus, PV, PQ, and slack.
     """
 
     def __init__(
@@ -1079,6 +1341,28 @@ class PFDeltaCANOS(PFDeltaDataset):
         )
 
     def build_heterodata(self, pm_case: dict, is_cpf_sample: bool = False):
+        """
+        Build a CANOS-compatible `HeteroData` object.
+
+        This method constructs the base heterogeneous graph via
+        \PFDeltaDataset.build_heterodata`, then prunes it to
+        retain only the node and edge types used by CANOS 
+        (bus, PV, PQ, slack).
+
+        Parameters
+        ----------
+        pm_case : dict
+            PowerModels.jl-style case dictionary containing bus, branch,
+            generator, and load data.
+        is_cpf_sample : bool, optional
+            If True, marks the data as a continuation power flow (CPF) sample.
+
+        Returns
+        -------
+        data : torch_geometric.data.HeteroData
+            The processed heterogeneous graph with CANOS-specific node
+            and edge types only.
+        """
         # call base version
         data = super().build_heterodata(pm_case, is_cpf_sample=is_cpf_sample)
 
@@ -1102,11 +1386,52 @@ class PFDeltaCANOS(PFDeltaDataset):
 
 @registry.register_dataset("pfdeltaPFNet")
 class PFDeltaPFNet(PFDeltaDataset):
-    """PFDelta dataset variant for the PFNet model.
+    """
+    PFDelta dataset variant specialized for the PFNet model.
 
-    Converts base heterodata into PFNet input format:
-      - constructs per-bus feature vectors and labels
-      - adapts edge attributes for PFNet expectations
+    This subclass of PFDeltaDataset converts the base
+    heterogeneous graph representation into the input format expected
+    by PFNet. Specifically, it constructs per-bus feature vectors and
+    labels, encodes bus types via one-hot representations, applies
+    prediction/input masks, and adapts edge attributes for PFNet’s
+    parameterization.
+
+    Parameters
+    ----------
+    root_dir : str, optional
+        Path to the dataset root directory. Defaults to "data".
+    case_name : str, optional
+        Name of the power grid case (e.g., "case118"). Defaults to an empty string.
+    split : str, optional
+        Dataset split to load ('train', 'val', or 'test'). Defaults to "train".
+    model : str, optional
+        Model name identifier. Defaults to "PFNet".
+    task : float or str, optional
+        Task identifier (e.g., 1.1, 3.1). Defaults to 1.3.
+    add_bus_type : bool, optional
+        Whether to include bus type encodings in the base dataset before
+        PFNet-specific processing.
+    transform : callable or str, optional
+        Transform applied to data objects after loading.
+        If set to "pfnet_data_mean0_var1", applies PFNet normalization
+        using case-specific statistics from pfnet_pfdata_stats.
+    pre_transform : callable or str, optional
+        Transform applied before saving the processed dataset.
+        If set to "pfnet_data_mean0_var1", applies PFNet normalization
+        using case-specific statistics.
+    pre_filter : callable, optional
+        Optional filter applied to data objects before processing.
+    force_reload : bool, optional
+        If True, forces dataset reprocessing. Defaults to False.
+
+    Notes
+    -----
+    - Each bus feature vector concatenates one-hot bus type encoding,
+      masked input features, and the prediction mask, resulting in
+      a vector of length 16.
+    - Edge attributes are reformatted to contain resistance, reactance,
+      total susceptance, transformer tap ratio, and phase shift angle
+      for each branch.
     """
 
     def __init__(
@@ -1121,7 +1446,10 @@ class PFDeltaPFNet(PFDeltaDataset):
         pre_transform=None,
         pre_filter=None,
         force_reload=False,
+        normalized_case_name=None,
     ):
+        self.normalized_case_name = normalized_case_name
+
         if pre_transform:
             if pre_transform == "pfnet_data_mean0_var1":
                 stats = pfnet_pfdata_stats[case_name]
@@ -1129,7 +1457,10 @@ class PFDeltaPFNet(PFDeltaDataset):
 
         if transform is not None:
             if transform == "pfnet_data_mean0_var1":
-                stats = pfnet_pfdata_stats[case_name]
+                if task in [3.1, 3.2, 3.3]:
+                    stats = pfnet_pfdata_stats[self.normalized_case_name]
+                else:
+                    stats = pfnet_pfdata_stats[case_name]
                 transform = partial(pfnet_data_mean0_var1, stats)
 
         super().__init__(

@@ -47,7 +47,7 @@ We provide a set of standardized evaluation tasks to evaluate in- and out-of-dis
   <b>Table 3.</b> Standardized evaluation tasks included for PFΔ.
 </p>
 
-Each task defines a specific evaluation setting, but any of the provided datasets can be used with these tasks to benchmark model performance under different conditions.  The only exception is the GOC 2000-bus syste due to the limited number of available samples.
+Each task defines a specific evaluation setting, but any of the provided datasets can be used with these tasks to benchmark model performance under different conditions.  The only exception is the GOC 2000-bus system due to the limited number of available samples.
 
 
 # PFΔ Usage Guide 

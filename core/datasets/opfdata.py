@@ -1,3 +1,15 @@
+# This code contains the data used to train CANOS-OPF, originally proposed here: 
+# 
+#   Piloto, L., Liguori, S., Madjiheurem, S., Zgubic, M., Lovett, S., 
+#   Tomlinson, H., … Witherspoon, S. (2024). CANOS: A Fast and Scalable 
+#   Neural AC-OPF Solver Robust To N-1 Perturbations. arXiv [Cs.LG]. 
+#   Retrieved from http://arxiv.org/abs/2403.17660
+#
+# It uses the OPFDataset class (available on from torch_geometric.datasets). 
+# 
+# Code was implemented by Anvita Bhagavathula, Alvaro Carbonero, and Ana K. Rivera 
+# in April 2025.
+
 import os
 from functools import partial
 
