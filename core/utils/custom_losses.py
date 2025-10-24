@@ -23,6 +23,10 @@ def loss_loader(class_name, class_inputs, class_type):
 
 @registry.register_loss("GNNTorchLoss")
 class GNNTorchLoss:
+    """
+    Wrapper for PyTorch loss functions to be used in GNN models.
+    """
+
     def __init__(self, torch_nn_name, output_name, loss_inputs={}):
         loss_class = getattr(torch.nn, torch_nn_name, None)
         assert loss_class is not None, f"Loss {torch_nn_name} not found in torch.nn!"
@@ -84,6 +88,10 @@ def PBL_max(predictions, data):
 
 @registry.register_loss("combined_loss")
 class CombinedLoss:
+    """
+    Combines two loss functions with a weighting factor.
+    """
+
     def __init__(self, loss1, loss2, lamb=1, inp1={}, inp2={}):
         self.loss1_name = loss1
         self.loss2_name = loss2
@@ -100,7 +108,7 @@ class CombinedLoss:
         # This is for pytorch losses
         if getattr(nn, loss_name, None) is not None:
             loss_class = getattr(nn, loss_name)
-            return loss_class(**inputs)
+            return loss_class(**loss_inputs)
 
         # This is for custom loss
         loss_class = registry.get_loss_class(loss_name)
@@ -123,6 +131,10 @@ class CombinedLoss:
 
 @registry.register_loss("Objective_n_Penalty")
 class Objective_n_Penalty:
+    """
+    Combines an objective function with equality and inequality penalty functions.
+    """
+
     def __init__(
         self,
         obj_name=None,

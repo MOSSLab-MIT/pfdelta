@@ -26,7 +26,6 @@ class PowerBalanceLoss:
         self.model = model
         self.loss_name = "PBL Mean"
 
-
     def __call__(self, outputs, data):
         """
         Parameters
@@ -63,10 +62,19 @@ class PowerBalanceLoss:
         # 3. Calculate complex mismatch power per bus
 
         delta_P, delta_Q = PowerBalanceLoss.calculate_PBL(
-            V_pred, theta_pred, Pnet, Qnet,     # predictions
-            r, x, bs, tau, theta_shift,         # line attributes
-            shunt_g, shunt_b,                   # shunt values
-            src, dst,                           # line connections 
+            V_pred,
+            theta_pred,
+            Pnet,
+            Qnet,  # predictions
+            r,
+            x,
+            bs,
+            tau,
+            theta_shift,  # line attributes
+            shunt_g,
+            shunt_b,  # shunt values
+            src,
+            dst,  # line connections
         )
 
         # 4. Use complex mismatch to calculate PBL losses
@@ -87,13 +95,21 @@ class PowerBalanceLoss:
 
         return self.power_balance_mean
 
-
     @staticmethod
     def calculate_PBL(
-        V_pred, theta_pred, Pnet, Qnet,     # predictions
-        r, x, bs, tau, theta_shift,         # line attributes
-        shunt_g, shunt_b,                   # shunt values
-        src, dst,                           # line connections
+        V_pred,
+        theta_pred,
+        Pnet,
+        Qnet,  # predictions
+        r,
+        x,
+        bs,
+        tau,
+        theta_shift,  # line attributes
+        shunt_g,
+        shunt_b,  # shunt values
+        src,
+        dst,  # line connections
     ):
         """
         Calculate the complex real and reactive power mismatch (delta_P and
@@ -126,7 +142,7 @@ class PowerBalanceLoss:
             Shunt susceptance at each bus (shape: [n_buses]).
         src : torch.tensor
             Indices of source buses for each line (shape: [n_lines]).
-        dst : torch.tensor  
+        dst : torch.tensor
             Indices of destination buses for each line (shape: [n_lines]).
 
         Returns
@@ -205,7 +221,39 @@ class PowerBalanceLoss:
         return delta_P, delta_Q
 
     def collect_model_predictions(self, model_name, data, output=None):
-        """ """
+        """
+        Assemble standardized prediction tuples required by the power-balance
+        routines from model-specific outputs.
+
+        This helper reorganizes model outputs so the downstream PBL code can
+        operate on a consistent set of values:
+        (V_pred, theta_pred, Pnet, Qnet) and the corresponding per-branch
+        attributes (r, x, bs, tau, theta_shift).
+
+        Parameters
+        ----------
+        model_name : str
+            Model identifier. Supported values: "CANOS", "PFNet", "GNS".
+            The function interprets `output` and `data` differently depending
+            on this value.
+        data : torch_geometric.data.HeteroData or batch
+            Ground-truth HeteroData providing node/edge metadata, shunts,
+            bus-type indices and stored (possibly normalized) labels.
+        output : dict or torch.Tensor, optional
+            Model predictions in the raw format emitted by each model:
+
+        Returns
+        -------
+        dict
+            Dictionary with two keys:
+              - "predictions": tuple(V_pred, theta_pred, Pnet, Qnet)
+                  V_pred (torch.Tensor): per-bus voltage magnitudes
+                  theta_pred (torch.Tensor): per-bus voltage angles (radians)
+                  Pnet (torch.Tensor): net active injections (gen - load)
+                  Qnet (torch.Tensor): net reactive injections (gen - load)
+              - "edge_attr": tuple(r, x, bs, tau, theta_shift)
+                  per-branch scalar attributes used by the PBL calculation
+        """
         power_balance_model_preds = {}
         if model_name == "CANOS":
             device = data["bus"].x.device
@@ -344,13 +392,55 @@ def GNS_last_loss(out_dict, data):
 @registry.register_loss("GNSPowerBalanceLoss")
 class GNSPowerBalanceLoss:
     """
-    Compute the power balance loss.
+    Compute the power balance loss for GNS-style outputs.
+
+    This class implements a utility used by the GNS model pipeline to either:
+      - compute per-bus active/reactive power mismatches and report a mean
+        squared mismatch when called with layer_loss=True (optionally storing
+        the value when `training=True`), or
+      - compute and return reactive generation qg values inferred from the
+        model's predicted voltages and the branch flow predictions.
+
+    Attributes
+    ----------
+    power_balance_loss : torch.Tensor or None
+        Last computed scalar power-balance loss (set when layer_loss=True and training=True).
+
+    Methods
+    -------
+    __call__(data, layer_loss=False, training=False)
+        Compute either layer-wise mismatch terms (delta_p, delta_q, delta_s) or
+        return the computed qg vector depending on the `layer_loss` flag.
     """
 
     def __init__(self):
+        """Create a GNSPowerBalanceLoss instance."""
         self.power_balance_loss = None
 
     def __call__(self, data, layer_loss=False, training=False):
+        """
+        Evaluate power balance quantities for a GNS-style HeteroData.
+
+        Parameters
+        ----------
+        data : torch_geometric.data.HeteroData
+            Heterogeneous graph containing bus and branch attributes expected by the
+            GNS loss implementation (v, theta, pg, pd, qg, qd, shunt, branch edge_attr, ...).
+        layer_loss : bool, optional
+            If True, compute and return the mismatch tensors (delta_p, delta_q)
+            and their mean squared magnitude delta_s. If False, return the
+            reactive generation vector qg computed from reactive balance.
+        training : bool, optional
+            If True and layer_loss=True, store the computed scalar power_balance_loss
+            in the instance for later inspection.
+
+        Returns
+        -------
+        tuple(torch.Tensor, torch.Tensor, torch.Tensor) or torch.Tensor
+            When layer_loss=True: (delta_p, delta_q, delta_s) where delta_s is a scalar mean.
+            When layer_loss=False: qg vector inferred from reactive balance.
+        """
+
         edge_index = data[("bus", "branch", "bus")].edge_index
         edge_attr = data[("bus", "branch", "bus")].edge_attr
         src, dst = edge_index
@@ -425,14 +515,56 @@ class GNSPowerBalanceLoss:
 
 @registry.register_loss("pf_constraint_violation")
 class constraint_violations_loss_pf:
+    """
+    Constraint-violation metrics for PF-model outputs.
+
+    This class computes several auxiliary constraint-violation metrics used to
+    monitor or regularize models that predict bus and branch flows (e.g., CANOS).
+    It aggregates per-bus real/reactive mismatches and per-branch flow mismatches
+    into a single scalar loss while preserving the individual metrics for
+    inspection.
+
+    Attributes
+    ----------
+    constraint_loss : torch.Tensor or None
+        Last computed aggregated scalar constraint loss.
+    bus_real_mismatch : torch.Tensor or None
+        Mean absolute real power mismatch per bus (last call).
+    bus_reactive_mismatch : torch.Tensor or None
+        Mean absolute reactive power mismatch per bus (last call).
+    """
+
     def __init__(
         self,
     ):
+        """Create a constraint_violations_loss_pf instance."""
         self.constraint_loss = None
         self.bus_real_mismatch = None
         self.bus_reactive_mismatch = None
 
     def __call__(self, output_dict, data):
+        """
+        Compute the constraint-violation loss and store component metrics.
+
+        Parameters
+        ----------
+        output_dict : dict
+            Model outputs containing predicted tensors for "bus", "PV", "slack",
+            and "edge_preds" as produced by the model forward pass.
+        data : torch_geometric.data.HeteroData or batch
+            Ground-truth hetero data containing targets and structural metadata
+            (edge_index, edge_label, shunts, bus-level aggregation tensors, etc.).
+
+        Returns
+        -------
+        torch.Tensor
+            Aggregated scalar loss equal to the sum of:
+              mean(|real bus mismatch|) +
+              mean(|reactive bus mismatch|) +
+              mean(|real branch flow mismatch|) +
+              mean(|reactive branch flow mismatch|)
+
+        """
         device = data["bus"].x.device
         casename = output_dict["casename"]
         # Get the predictions and edge features
@@ -522,12 +654,47 @@ class constraint_violations_loss_pf:
 
 @registry.register_loss("canos_pf_mse")
 class CANOS_PF_MSE:
+    """
+    Mean-squared error loss for CANOS power-flow outputs.
+
+    Computes the sum of mean-squared errors across the CANOS prediction
+    components:
+      - PV node outputs,
+      - PQ node outputs,
+      - Slack node outputs,
+      - Branch/edge predictions.
+
+    The last computed scalar loss is stored in `self.loss`.
+    """
+
     def __init__(
         self,
     ):
+        """Initialize storage for the last computed loss."""
+
         self.loss = None
 
     def __call__(self, output_dict, data):
+        """
+        Compute the CANOS MSE loss as the sum of per-component MSEs.
+
+        Parameters
+        ----------
+        output_dict : dict
+            Model outputs containing tensors for "PV", "PQ", "slack", and
+            "edge_preds".
+        data : torch_geometric.data.HeteroData or batched HeteroData
+            Ground-truth hetero data containing the target tensors:
+            data["PV"].y, data["PQ"].y, data["slack"].y and the branch
+            targets at data["bus", "branch", "bus"].edge_label.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar tensor equal to MSE(PV_pred, PV_target) +
+            MSE(PQ_pred, PQ_target) + MSE(slack_pred, slack_target) +
+            MSE(edge_preds, branch_target).
+        """
         PV_pred, PQ_pred, slack_pred = (
             output_dict["PV"],
             output_dict["PQ"],

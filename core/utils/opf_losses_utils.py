@@ -5,6 +5,14 @@ from core.utils.registry import registry
 
 
 def setup_single_branch_features(ac_line_attr, trafo_attr):
+    """
+    Build a unified per-branch attribute matrix combining AC lines and transformers.
+
+    This helper constructs a single edge_attr matrix used by downstream OPF
+    constraint and flow computations by adapting AC-line attributes to the same
+    column layout used for transformers and then concatenating the two sets.
+    """
+
     device = ac_line_attr.device
     # Edge attributes matrix
     mask = torch.ones(9, dtype=torch.bool)
@@ -28,6 +36,8 @@ def setup_single_branch_features(ac_line_attr, trafo_attr):
 
 @registry.register_loss("opf_constraint_violation")
 class constraint_violations_loss:
+    """Calculates the OPF constraint violation loss."""
+
     def __init__(
         self,
     ):
@@ -41,6 +51,14 @@ class constraint_violations_loss:
         self.generator_qg_violations = None
 
     def __call__(self, output_dict, data):
+        """
+        Calculate the OPF constraint violation loss.
+        Args:
+            output_dict (dict): Model output containing predictions for buses, generators, and edges.
+            data (Data): Input data containing ground truth values and network structure.
+        Returns:
+            torch.Tensor: Computed constraint violation loss.
+        """
         device = data["x"].device
         # Get the predictions
         bus_pred = output_dict["bus"]
@@ -203,6 +221,7 @@ class RecycleLoss:
 
 @registry.register_loss("canos_mse")
 class CANOSMSE:
+    """Calculates the MSE loss for CANOS model outputs."""
     def __init__(
         self,
     ):
@@ -256,6 +275,14 @@ class CANOSMSE:
         return line_error
 
     def __call__(self, output_dict, data):
+        """
+        Calculate the CANOS MSE loss.
+        Args:
+            output_dict (dict): Model output containing predictions for buses, generators, and edges.
+            data (Data): Input data containing ground truth values and network structure.
+        Returns:
+            torch.Tensor: Computed CANOS MSE loss.
+        """
         # Gather targets
         bus_target, gen_target = data["bus"].y, data["generator"].y
         ac_line_target = data["bus", "ac_line", "bus"].edge_label
