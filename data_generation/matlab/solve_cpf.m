@@ -23,7 +23,7 @@ function cpf_success = solve_cpf(current_net_path, save_path, save_path_non_conv
     elseif step_error
         non_converging_reason = 'step size too small';
     elseif ~isfield(results.cpf, 'events') || isempty(results.cpf.events)
-        non_converging_reason = 'something happened';
+        non_converging_reason = 'error during continuation power flow';
     elseif ~(results.cpf.events.name == 'NOSE') 
         non_converging_reason = 'nose event not triggered';
     end

@@ -1,21 +1,54 @@
 
 # PFΔ Dataset
-PFΔ is a benchmark dataset for power flow that captures diverse variations in load, generation, and topology. It contains 850,500 solved power flow instances spanning six different bus system sizes, capturing three types of contingency scenarios (N, N-1, and N-2), and including close-to-infeasible cases near steady-state voltage stability limits. Our dataset is available at: https://huggingface.co/datasets/pfdelta/pfdelta/tree/main. Our paper is available at: INSERT LINK HERE. 
+PFΔ is a benchmark dataset for power flow that captures diverse variations in load, generation, and topology. It contains 859,800 solved power flow instances spanning six different bus system sizes, capturing three types of contingency scenarios (N, N-1, and N-2), and including close-to-infeasible cases near steady-state voltage stability limits. Our dataset is available at: https://huggingface.co/datasets/pfdelta/pfdelta/tree/main. Our paper is available at: INSERT LINK HERE. 
 
-The dataset includes the following IEEE test cases: 14-bus, 30-bus, 57-bus, 118-bus, 500-bus, and 2000-bus systems (with a reduced dataset size for the 2000-bus case).
-For each test case, we provide multiple topological configurations:
+# Dataset Overview
 
+The dataset includes solved power flow instance for the following power systems tests cases: IEEE 14-bus, IEEE 30-bus, IEEE 57-bus, IEEE 118-bus, GOC 500-bus, and GOC 2000-bus. For test case we provide multiple topological configurations:
 - N: original (unperturbed) topology
 - N-1: single-component outage scenarios
 - N-2: double-component outage scenarios
 
----
+
+For each test case, we include solved power flow instances produced through our data generation workflow (see **Figure 1**), as well as approaching infeasible and close-to-infeasible samples produced through continuation power flow.
 
 <p align="center" style="background-color:white; padding:10px;">
   <img src="figures/data_generation.png" alt="Data Generation Pipeline" width="700"/>
 </p>
 
----
+<p align="center"><b>Figure 1.</b> Data generation pipeline.</p>
+
+The following Tables summarize the amount of samples provided for each test case: 
+<p align="center" style="background-color:white; padding:10px;">
+  <img src="figures/train_samples_table.png" alt="Training Samples Table" width="700"/>
+</p>
+
+<p align="center">
+  <b>Table 1.</b> Number of training samples generated for each network topology and system size.
+</p>
+
+<p align="center" style="background-color:white; padding:10px;">
+  <img src="figures/test_samples_table.png" alt="Test Samples Table" width="700"/>
+</p>
+
+<p align="center">
+  <b>Table 2.</b> Number of test samples generated for each network topology and system size.
+</p>
+
+# Standardized Evaluation Tasks
+
+We provide a set of standardized evaluation tasks to evaluate in- and out-of-distribution performance, data efficiency, and performance on close-to-infeasible cases. The summary of all evaluation tasks is shown in the following table:
+
+<p align="center" style="background-color:white; padding:10px;">
+  <img src="figures/tasks_table.png" alt="Test Samples Table" width="700"/>
+</p>
+
+<p align="center">
+  <b>Table 3.</b> Standardized evaluation tasks included for PFΔ.
+</p>
+
+Each task defines a specific evaluation setting, but any of the provided datasets can be used with these tasks to benchmark model performance under different conditions.  The only exception is the GOC 2000-bus system due to the limited number of available samples.
+
 
 # PFΔ Usage Guide 
 
@@ -37,11 +70,29 @@ julia --project=data_generation -e 'using Pkg; Pkg.instantiate()'
 ### Dataset Class Usage 
 --------------------
 
+The `PFDeltaDataset` class can be instantiated to automatically download and load the dataset from Hugging Face.  
+It handles fetching the data, verifying its integrity, and organizing samples for direct use in training or evaluation.  
+
+For example, the dataset for **Task 1.3** using the **IEEE 118-bus system** can be created with the following Python script:
+
+```python
+from core.datasets.pfdelta_dataset import PFDeltaDataset
+
+dataset = PFDeltaDataset(
+    case_name="case118",
+    task=1.3,
+    root_dir="data"
+)
+```
 We provide several notebooks to serve as a quick start guide to using the `PFDeltaDataset` `InMemoryDataset` and visualizing/analyzing our generated data: 
 
 - [Learn how to download and work with `PFDeltaDataset` for your model](notebooks/dataset_quickstart_guide.ipynb): this notebook includes information on how to automatically download and unzip data from the HuggingFace repository and inherit the parent class for custom model data preprocessing. 
-- [Visualize data diversity compared to other benchmark datasets](notebooks/box_plots.ipynb): This notebook allows you to visualize the spread of various features in our dataset in comparison to existing benchmark datasets. 
-- [???](notebooks/julia_code_results.ipynb): ???
+- [Visualize data diversity compared to other benchmark datasets](notebooks/violin_plots.ipynb): This notebook allows you to visualize the spread of various features in our dataset in comparison to existing benchmark datasets. 
+- [Visualize continuation power flow samples](notebooks/plots_julia.ipynb): This notebook allows you to visualize the condition number and the voltage at a given bus as a function of the continuation parameters. 
+- [Validate the N-1 and N-2 contingencies and power balance satisfaction of our dataset](dataset_report.py): This marimo notebook allows you to run comprehensive tests on our dataset to validate its characteristics. To launch the notebook, **run the following command from the repository root**:
+
+  ```bash
+  marimo edit notebooks/dataset_report.py
 
 #### HeteroData Structure 
 
@@ -97,13 +148,19 @@ pfdelta_data/
     │   │   ├── task_1.3_nearly_infeasible_{MODELNAME}/
     │   │   └── ...
     │   ├── nose/
-    │   │   ├── sample1.json
-    │   │   ├── sample2.json
-    │   │   └── ...
+    │   │   ├── train/
+    │   │   │   ├── sample_1_nose.json
+    │   │   │   ├── sample_2_nose.json
+    │   │   │   └── ...
+    │   │   └── test/
+    │   │       ├── sample_1_nose.json
+    │   │       ├── sample_2_nose.json
+    │   │       └── ...
     │   └── around_nose/
-    │       ├── sample1.json
-    │       ├── sample2.json
-    │       └── ...
+    │       └── train/
+    │           ├── sample_1_lam_0p1.json
+    │           ├── sample_2_lam_0p2.json
+    │           └── ...
     ├── n/
     ├── n-2/
     └── ...
@@ -113,7 +170,7 @@ pfdelta_data/
         └── test.pt
 ```
 
-### Result Replication
+### Results Replication
 --------------------
 
 To replicate the results presented in the paper, use the configuration files located in `core/configs/`.  Each YAML file corresponds to a specific model–task combination and follows the naming convention:
@@ -121,6 +178,8 @@ To replicate the results presented in the paper, use the configuration files loc
 where  
 - `{modelname}` ∈ [`pfnet`, `canos_pf`, `canos_opf`, ...]  
 - `{tasknumber}` ∈ [`1.1`, `1.2`, `1.3`, ...]  
+
+The models can be located in `core/models`.
 
 For example, the following command retrains **PowerFlowNet** on **Task 1.3**:
 
@@ -143,8 +202,8 @@ runs/
 The summary.json file can be used to quickly compare performance against the values reported in the paper. Note that the paper’s results are test-set errors averaged over three different random seeds, whereas the results in summary.json reflect validation losses from a single training run. As a result, minor discrepancies between the two are expected. 
 
 In addition, we provide quick-start notebooks for training models and designing custom loss functions: 
-- [Calculating Test Errors and Performing Model Inference](notebooks/julia_code_results.ipynb):
-- [Designing Custom Loss Functions](notebooks/julia_code_results.ipynb): 
+- [Calculating Test Errors and Performing Model Inference](notebooks/julia_code_results.ipynb): COMING SOON
+- [Designing Custom Loss Functions](notebooks/julia_code_results.ipynb): COMING SOON
 
 ### Notes:
 ------
