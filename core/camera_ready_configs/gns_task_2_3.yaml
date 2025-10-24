@@ -1,0 +1,58 @@
+config_type: simple_batch # TODO: change this to "experiment" and comment out job_parameters to run locally
+job_parameters: # TODO: update as needed
+  time: "1-00:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate pfdelta\n__launch__" # TODO: update conda env name
+batch_name: gns_task_2_3
+dataset:
+  datasets:
+  - add_bus_type: false
+    case_name: case118
+    model: GNS
+    name: pfdeltaGNS
+    root_dir: data/pfdelta_data # TODO: update root_dir if needed
+    split: train
+    task: 2.3
+  - add_bus_type: false
+    case_name: case118
+    model: GNS
+    name: pfdeltaGNS
+    root_dir: data/pfdelta_data # TODO: update root_dir if needed
+    split: val
+    task: 2.3
+functional:
+  run_location: gns_task_2_3
+  run_name: gns_task_2_3_K10_hd20_gamma0.01_lr3e-4
+  seed: 11
+  trainer_name: gnn_trainer
+model:
+  K: 10
+  gamma: 0.01
+  hidden_dim: 20
+  name: graph_neural_solver
+optim:
+  optimizer:
+    lr: 0.0003
+    name: Adam
+  train_params:
+    batch_size: 64
+    epochs: 25
+    train_loss:
+    - name: gns_layer_loss
+    - name: gns_last_loss
+    - model: GNS
+      name: universal_power_balance
+  val_params:
+    batch_size: 64
+    early_stop:
+      decrease_by: 0.01
+      decrease_for: 10
+      needs_best_every: 15
+    report_every: 2
+    val_loss:
+    - name: gns_layer_loss
+    - name: gns_last_loss
+    - model: GNS
+      name: universal_power_balance
+

@@ -1,0 +1,77 @@
+config_type: simple_batch # TODO: change this to "experiment" and comment out job_parameters to run locally
+job_parameters: # TODO: update as needed
+  time: "1-00:00:00"
+  p: "cpu-gpu-v100"
+  gpus: 1
+  body: "source ~/.bashrc\nconda activate pfdelta\n__launch__" # TODO: update conda env name
+batch_name: canos_task_4_1
+dataset:
+  datasets:
+  - add_bus_type: true
+    case_name: case118
+    model: CANOS
+    name: pfdeltaCANOS
+    root_dir: data/pfdelta_data # TODO: update root_dir if needed
+    split: train
+    task: 4.1
+  - add_bus_type: true
+    case_name: case118
+    model: CANOS
+    name: pfdeltaCANOS
+    root_dir: data/pfdelta_data # TODO: update root_dir if needed
+    split: val
+    task: 4.1
+functional:
+  run_location: canos_task_4_1
+  run_name: canos_k_steps15_hd128_lr5e-4_task_4_1
+  is_debug: false
+  seed: 11
+  cpu: false
+  trainer_name: gnn_trainer
+model:
+  dataset: _include_
+  hidden_dim: 128
+  include_sent_messages: true
+  k_steps: 15
+  name: canos_pf
+optim:
+  lr_scheduler:
+    milestones:
+    - 5
+    name: SequentialLR
+    schedulers:
+    - end_factor: 1
+      name: LinearLR
+      start_factor: 0.01
+    - gamma: 0.9
+      name: StepLR
+      step_size: 4
+  optimizer:
+    lr: 0.0005
+    name: Adam
+    weight_decay: 0.0
+  train_params:
+    batch_size: 64
+    epochs: 50
+    train_loss:
+    - lamb: 0.1
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+    - model: CANOS
+      name: universal_power_balance
+  val_params:
+    batch_size: 64
+    early_stop:
+      decrease_by: 0.01
+      decrease_for: 10
+      needs_best_every: 15
+    report_every: 2
+    val_loss:
+    - lamb: 0.1
+      loss1: canos_pf_mse
+      loss2: pf_constraint_violation
+      name: combined_loss
+    - model: CANOS
+      name: universal_power_balance
+
