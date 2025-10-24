@@ -87,8 +87,8 @@ dataset = PFDeltaDataset(
 We provide several notebooks to serve as a quick start guide to using the `PFDeltaDataset` `InMemoryDataset` and visualizing/analyzing our generated data: 
 
 - [Learn how to download and work with `PFDeltaDataset` for your model](notebooks/dataset_quickstart_guide.ipynb): this notebook includes information on how to automatically download and unzip data from the HuggingFace repository and inherit the parent class for custom model data preprocessing. 
-- [Visualize data diversity compared to other benchmark datasets](notebooks/box_plots.ipynb): This notebook allows you to visualize the spread of various features in our dataset in comparison to existing benchmark datasets. 
-- [???](notebooks/julia_code_results.ipynb): ???
+- [Visualize data diversity compared to other benchmark datasets](notebooks/violin_plots.ipynb): This notebook allows you to visualize the spread of various features in our dataset in comparison to existing benchmark datasets. 
+- [Visualize continuation power flow samples](notebooks/plots_julia.ipynb): This notebook allows you to visualize the condition number and the voltage at a given bus as a function of the continuation parameters. 
 
 #### HeteroData Structure 
 
