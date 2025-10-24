@@ -3,7 +3,9 @@
 # Licensed under the BSD 3-Clause License (see LICENSE-OPFLearn)
 #
 # Modifications for PFDelta:
-#   - TODO: Alvaro
+#   - Implemented a new function that allows for two processors doing sampling
+#   - Added a cap on the sizes of the polytope
+#   - Added PFDelta's network perturbations to cost and topology
 
 # Functions used to give workers tasks for distributed processing
 
