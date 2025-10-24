@@ -1,6 +1,6 @@
 data_dir = "data"
 case_name = "case2000"
-topology_perturb = "n"
+topology_perturb = "n-2"
 
 delete_intermediate = true
 analysis_mode = false
