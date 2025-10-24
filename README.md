@@ -202,8 +202,8 @@ runs/
 The summary.json file can be used to quickly compare performance against the values reported in the paper. Note that the paper’s results are test-set errors averaged over three different random seeds, whereas the results in summary.json reflect validation losses from a single training run. As a result, minor discrepancies between the two are expected. 
 
 In addition, we provide quick-start notebooks for training models and designing custom loss functions: 
-- [Calculating Test Errors and Performing Model Inference](notebooks/julia_code_results.ipynb):
-- [Designing Custom Loss Functions](notebooks/julia_code_results.ipynb): 
+- [Calculating Test Errors and Performing Model Inference](notebooks/julia_code_results.ipynb): COMING SOON
+- [Designing Custom Loss Functions](notebooks/julia_code_results.ipynb): COMING SOON
 
 ### Notes:
 ------
