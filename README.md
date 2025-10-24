@@ -144,13 +144,19 @@ pfdelta_data/
     │   │   ├── task_1.3_nearly_infeasible_{MODELNAME}/
     │   │   └── ...
     │   ├── nose/
-    │   │   ├── sample1.json
-    │   │   ├── sample2.json
-    │   │   └── ...
+    │   │   ├── train/
+    │   │   │   ├── sample_1_nose.json
+    │   │   │   ├── sample_2_nose.json
+    │   │   │   └── ...
+    │   │   └── test/
+    │   │       ├── sample_1_nose.json
+    │   │       ├── sample_2_nose.json
+    │   │       └── ...
     │   └── around_nose/
-    │       ├── sample1.json
-    │       ├── sample2.json
-    │       └── ...
+    │       └── train/
+    │           ├── sample_1_lam_0p1.json
+    │           ├── sample_2_lam_0p2.json
+    │           └── ...
     ├── n/
     ├── n-2/
     └── ...
