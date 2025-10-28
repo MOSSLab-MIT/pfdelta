@@ -214,3 +214,13 @@ In addition, we provide quick-start notebooks for training models and designing 
 ### Citation:
 ------
 If you use any of our model implementations, data generation code, dataset class, or benchmark, please consider citing us: 
+```
+@inproceedings{
+rivera2025pf,
+title={{PF}\ensuremath{\Delta}: A Benchmark Dataset for Power Flow under Load, Generation, and Topology Variations},
+author={Ana K. Rivera and Anvita Bhagavathula and Alvaro Carbonero and Priya L. Donti},
+booktitle={The Thirty-ninth Annual Conference on Neural Information Processing Systems Datasets and Benchmarks Track},
+year={2025},
+url={https://openreview.net/forum?id=Gi1HtsTAkv}
+}
+```
