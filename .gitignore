@@ -8,6 +8,7 @@
 *.pkl
 *.tar.gz
 *.svg
+*.DS_Store
 
 .ipynb_checkpoints
 tutorial.ipynb
