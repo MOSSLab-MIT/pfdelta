@@ -1,10 +1,4 @@
-config_type: simple_batch # TODO: change this to "experiment" and comment out job_parameters to run locally
-job_parameters: # TODO: update as needed
-  time: "1-00:00:00"
-  p: "cpu-gpu-v100"
-  gpus: 1
-  body: "source ~/.bashrc\nconda activate pfdelta\n__launch__" # TODO: update conda env name
-batch_name: gns_task_1_2
+config_type: experiment
 dataset:
   datasets:
   - add_bus_type: false
