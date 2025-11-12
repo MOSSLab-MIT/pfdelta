@@ -1,1 +1,253 @@
-# COMING SOON
+config_type: experiment
+dataset:
+  name: opfdata
+  case_name: pglib_opf_case500_goc
+  pre_transform: mean_zero_variance_one
+  topological_perturbations: true
+  num_groups: 20
+  root: /mnt/home/alvarocg/old_repositories/pfdelta/data/opfdata
+  datasets:
+  - split: train
+  - split: val
+functional:
+  run_name: original_canos
+  seed: 0
+  trainer_name: gnn_trainer
+model:
+  dataset: _include_
+  hidden_dim: 256
+  include_sent_messages: true
+  k_steps: 16
+  name: canos_opf
+optim:
+  lr_scheduler:
+    milestones:
+    - 5000
+    name: SequentialLR
+    schedulers:
+    - end_factor: 1
+      name: LinearLR
+      start_factor: 0.01
+    - gamma: 0.9
+      name: StepLR
+      step_size: 4000
+  optimizer:
+    lr: 0.001
+    name: Adam
+    weight_decay: 0.0
+  train_params:
+    batch_size: 64
+    train_loss:
+    - lamb: 0.1
+      loss1: canos_mse
+      loss2: opf_constraint_violation
+      name: combined_loss
+    - keyword: constraint_violation
+      loss_name: Total Constraint Violation
+      name: recycle_loss
+      recycled_parameter: constraint_loss
+    - keyword: constraint_violation
+      loss_name: Bus Real Mismatch
+      name: recycle_loss
+      recycled_parameter: bus_real_mismatch
+    - keyword: constraint_violation
+      loss_name: Bus Reactive Mismatch
+      name: recycle_loss
+      recycled_parameter: bus_reactive_mismatch
+    - keyword: constraint_violation
+      loss_name: Angle Diff. Violation
+      name: recycle_loss
+      recycled_parameter: angle_difference_violations
+    - keyword: constraint_violation
+      loss_name: Voltage Violation
+      name: recycle_loss
+      recycled_parameter: voltage_violations
+    - keyword: constraint_violation
+      loss_name: Real Flow Mismatch
+      name: recycle_loss
+      recycled_parameter: real_flow_mismatch_violation
+    - keyword: constraint_violation
+      loss_name: Reactive Flow Mismatch
+      name: recycle_loss
+      recycled_parameter: imag_flow_mismatch_violation
+    - keyword: constraint_violation
+      loss_name: Pg Violation
+      name: recycle_loss
+      recycled_parameter: generator_pg_violations
+    - keyword: constraint_violation
+      loss_name: Qg Violation
+      name: recycle_loss
+      recycled_parameter: generator_qg_violations
+    - keyword: constraint_violation
+      loss_name: Branch Flow Fwd Violation
+      name: recycle_loss
+      recycled_parameter: branch_flow_violation_f
+    - keyword: constraint_violation
+      loss_name: Branch Flow Rev Violation
+      name: recycle_loss
+      recycled_parameter: branch_flow_violation_r
+    - keyword: canos_mse
+      loss_name: Total Weighted MSE
+      name: recycle_loss
+      recycled_parameter: total_weighted_mse
+    - keyword: canos_mse
+      loss_name: Total MSE
+      name: recycle_loss
+      recycled_parameter: total_mse
+    - keyword: canos_mse
+      loss_name: VA MSE
+      name: recycle_loss
+      recycled_parameter: va
+    - keyword: canos_mse
+      loss_name: VM MSE
+      name: recycle_loss
+      recycled_parameter: vm
+    - keyword: canos_mse
+      loss_name: PQ MSE
+      name: recycle_loss
+      recycled_parameter: pg
+    - keyword: canos_mse
+      loss_name: QG MSE
+      name: recycle_loss
+      recycled_parameter: qg
+    - keyword: canos_mse
+      loss_name: PT AC MSE
+      name: recycle_loss
+      recycled_parameter: pt_ac
+    - keyword: canos_mse
+      loss_name: QT AC MSE
+      name: recycle_loss
+      recycled_parameter: qt_ac
+    - keyword: canos_mse
+      loss_name: PF AC MSE
+      name: recycle_loss
+      recycled_parameter: pf_ac
+    - keyword: canos_mse
+      loss_name: QF AC MSE
+      name: recycle_loss
+      recycled_parameter: qf_ac
+    - keyword: canos_mse
+      loss_name: PT Tr. MSE
+      name: recycle_loss
+      recycled_parameter: pt_transformer
+    - keyword: canos_mse
+      loss_name: QT Tr. MSE
+      name: recycle_loss
+      recycled_parameter: qt_transformer
+    - keyword: canos_mse
+      loss_name: PF Tr. MSE
+      name: recycle_loss
+      recycled_parameter: pf_transformer
+    - keyword: canos_mse
+      loss_name: QF Tr. MSE
+      name: recycle_loss
+      recycled_parameter: qf_transformer
+    train_steps: 150000
+  val_params:
+    batch_size: 64
+    report_every: 8438
+    val_loss:
+    - lamb: 0.1
+      loss1: canos_mse
+      loss2: opf_constraint_violation
+      name: combined_loss
+    - keyword: constraint_violation
+      loss_name: Total Constraint Violation
+      name: recycle_loss
+      recycled_parameter: constraint_loss
+    - keyword: constraint_violation
+      loss_name: Bus Real Mismatch
+      name: recycle_loss
+      recycled_parameter: bus_real_mismatch
+    - keyword: constraint_violation
+      loss_name: Bus Reactive Mismatch
+      name: recycle_loss
+      recycled_parameter: bus_reactive_mismatch
+    - keyword: constraint_violation
+      loss_name: Angle Diff. Violation
+      name: recycle_loss
+      recycled_parameter: angle_difference_violations
+    - keyword: constraint_violation
+      loss_name: Voltage Violation
+      name: recycle_loss
+      recycled_parameter: voltage_violations
+    - keyword: constraint_violation
+      loss_name: Real Flow Mismatch
+      name: recycle_loss
+      recycled_parameter: real_flow_mismatch_violation
+    - keyword: constraint_violation
+      loss_name: Reactive Flow Mismatch
+      name: recycle_loss
+      recycled_parameter: imag_flow_mismatch_violation
+    - keyword: constraint_violation
+      loss_name: Pg Violation
+      name: recycle_loss
+      recycled_parameter: generator_pg_violations
+    - keyword: constraint_violation
+      loss_name: Qg Violation
+      name: recycle_loss
+      recycled_parameter: generator_qg_violations
+    - keyword: constraint_violation
+      loss_name: Branch Flow Fwd Violation
+      name: recycle_loss
+      recycled_parameter: branch_flow_violation_f
+    - keyword: constraint_violation
+      loss_name: Branch Flow Rev Violation
+      name: recycle_loss
+      recycled_parameter: branch_flow_violation_r
+    - keyword: canos_mse
+      loss_name: Total Weighted MSE
+      name: recycle_loss
+      recycled_parameter: total_weighted_mse
+    - keyword: canos_mse
+      loss_name: Total MSE
+      name: recycle_loss
+      recycled_parameter: total_mse
+    - keyword: canos_mse
+      loss_name: VA MSE
+      name: recycle_loss
+      recycled_parameter: va
+    - keyword: canos_mse
+      loss_name: VM MSE
+      name: recycle_loss
+      recycled_parameter: vm
+    - keyword: canos_mse
+      loss_name: PQ MSE
+      name: recycle_loss
+      recycled_parameter: pg
+    - keyword: canos_mse
+      loss_name: QG MSE
+      name: recycle_loss
+      recycled_parameter: qg
+    - keyword: canos_mse
+      loss_name: PT AC MSE
+      name: recycle_loss
+      recycled_parameter: pt_ac
+    - keyword: canos_mse
+      loss_name: QT AC MSE
+      name: recycle_loss
+      recycled_parameter: qt_ac
+    - keyword: canos_mse
+      loss_name: PF AC MSE
+      name: recycle_loss
+      recycled_parameter: pf_ac
+    - keyword: canos_mse
+      loss_name: QF AC MSE
+      name: recycle_loss
+      recycled_parameter: qf_ac
+    - keyword: canos_mse
+      loss_name: PT Tr. MSE
+      name: recycle_loss
+      recycled_parameter: pt_transformer
+    - keyword: canos_mse
+      loss_name: QT Tr. MSE
+      name: recycle_loss
+      recycled_parameter: qt_transformer
+    - keyword: canos_mse
+      loss_name: PF Tr. MSE
+      name: recycle_loss
+      recycled_parameter: pf_transformer
+    - keyword: canos_mse
+      loss_name: QF Tr. MSE
+      name: recycle_loss
+      recycled_parameter: qf_transformer

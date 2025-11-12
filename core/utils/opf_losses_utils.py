@@ -237,7 +237,8 @@ class CANOSMSE:
         self.qf_transformer = None
         self.pf_transformer = None
         self.qt_transformer = None
-        self.total_loss = None
+        self.total_weighted_mse = None
+        self.total_mse = None
 
     def bus_error(self, pred, target):
         first = mse_loss(pred[:, 0], target[:, 0])
@@ -306,8 +307,28 @@ class CANOSMSE:
         # Normalize to average
         n_bus, n_gen = bus_pred.size(0), gen_pred.size(0)
         n_ac, n_transformer = ac_line_pred.size(0), transformer_line_pred.size(0)
-        total_loss = bus_loss + gen_loss + ac_loss + transformer_loss
+        total_weighted_mse = bus_loss + gen_loss + ac_loss + transformer_loss
 
-        self.total_loss = total_loss
+        # This is what's used in the training loss. It sums over each type
+        # of prediction type. This is done to avoid lines (which are more
+        # numerous) from dominating the loss. Now each prediction type is
+        # equally important.
+        self.total_weighted_mse = total_weighted_mse
 
-        return total_loss
+        # This is simply the sum of all MSEs, as reported in the paper.
+        self.total_mse = sum([
+            self.va,
+            self.vm,
+            self.pg,
+            self.qg,
+            self.pt_ac,
+            self.qt_ac,
+            self.pf_ac,
+            self.qf_ac,
+            self.pt_transformer,
+            self.qt_transformer,
+            self.pf_transformer,
+            self.qf_transformer
+        ])
+
+        return total_weighted_mse

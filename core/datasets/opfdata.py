@@ -83,8 +83,9 @@ class OPFData(OPFDataset):
         pre_transform=None,
         pre_filter=None,
         force_reload=False,
+        root=os.path.join("data", "opfdata")
     ):
-        self.root = os.path.join("data", "opfdata")
+        self.root = root
 
         if pre_transform is not None:
             if pre_transform == "mean_zero_variance_one":
