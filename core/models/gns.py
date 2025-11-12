@@ -36,9 +36,10 @@ class GraphNeuralSolver(nn.Module):
     The architecture couples a learned component (neural updates) with
     physically motivated updates (power balance and slack bus adjustments).
     """
-    def __init__(self, K, hidden_dim, gamma):
+    def __init__(self, K, hidden_dim, gamma, lamb_eps=1e-8):
         """ 
-        Initialize the GNS model. 
+        Initialize the GNS model. Note: to replicate test error performance on
+        case 57, use lamb_eps=1e-4.
 
         Parameters
         ----------
@@ -48,11 +49,14 @@ class GraphNeuralSolver(nn.Module):
             Dimension of node and message embeddings.
         gamma: float
             Discount factor for weighting layer-wise imbalance losses.
+        lambda_eps: float
+            Value used to avoid division by zero when calculating lambda.
         """
         super().__init__()
         self.K = K
-        self.gamma = gamma
         self.hidden_dim = hidden_dim
+        self.gamma = gamma
+        self.lamb_eps = lamb_eps
         self.phi_input_dim = hidden_dim + 5
         self.L_input_dim = 2 * hidden_dim + 4
         self.phi = nn.Sequential(
@@ -297,13 +301,13 @@ class GraphNeuralSolver(nn.Module):
         lamb = torch.zeros(num_graphs, device=pg_setpoints.device)
         lamb[under] = (
             p_global[under] - pg_non_slack_setpoints_sum[under] - pg_max_slack[under]
-        ) / (2 * (pg_setpoint_slack[under] - pg_min_slack[under]) + 1e-8)
+        ) / (2 * (pg_setpoint_slack[under] - pg_min_slack[under]) + self.lamb_eps)
         lamb[over] = (
             p_global[over]
             - pg_non_slack_setpoints_sum[over]
             - 2 * pg_setpoint_slack[over]
             - pg_max_slack[over]
-        ) / (2 * (pg_max_slack[over] - pg_setpoint_slack[over]) + 1e-8)
+        ) / (2 * (pg_max_slack[over] - pg_setpoint_slack[over]) + self.lamb_eps)
 
         lamb = torch.clamp(lamb, min=0.0)
         pg_slack = torch.zeros_like(lamb)
