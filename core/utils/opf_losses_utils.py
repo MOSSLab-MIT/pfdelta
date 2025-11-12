@@ -206,19 +206,6 @@ class constraint_violations_loss:
         return loss_c
 
 
-@registry.register_loss("recycle_loss")
-class RecycleLoss:
-    def __init__(self, recycled_parameter, loss_name, keyword):
-        self.recycled_parameter = recycled_parameter
-        self.loss_name = loss_name
-        self.source = None
-        self.keyword = keyword
-
-    def __call__(self, output_dict, data):
-        recycled_value = getattr(self.source, self.recycled_parameter)
-        return recycled_value
-
-
 @registry.register_loss("canos_mse")
 class CANOSMSE:
     """Calculates the MSE loss for CANOS model outputs."""

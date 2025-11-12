@@ -45,45 +45,17 @@ class GNNTorchLoss:
         return self.loss(outputs, truth)
 
 
-@registry.register_loss("PBL_mean")
-def PBL_mean(predictions, data):
-    """
-    Custom loss function for the PowerFlowTypedGNN to enforce power
-    balance at each node. The loss minimizes the mismatch in active power
-    (ΔP) and reactive power (ΔQ) at each node.
+@registry.register_loss("recycle_loss")
+class RecycleLoss:
+    def __init__(self, recycled_parameter, loss_name, keyword):
+        self.recycled_parameter = recycled_parameter
+        self.loss_name = loss_name
+        self.source = None
+        self.keyword = keyword
 
-    The power balance equations are:
-        ΔP(t) = Pg - Pd - Pbus(V(t), θ(t))
-        ΔQ(t) = Qg - Qd - Qbus(V(t), θ(t))
-
-    The goal is to minimize the sum of squared ΔP and ΔQ across all nodes.
-    """
-    per_node_loss = PowerBalanceLoss(predictions, data)[0]
-    return per_node_loss.mean()
-
-
-@registry.register_loss("PBL_l2norm")
-def PBL_l2norm(predictions, data):
-    """
-    Same as PBL_mean, but this time we calculate the L2 norm
-    """
-    batch = data["bus"].batch
-    batch_size = batch.max().item() + 1
-    per_node_loss = PowerBalanceLoss(predictions, data)[0]
-    l2_normed = torch.zeros(batch_size, device=predictions.device)
-    l2_normed = l2_normed.scatter_add_(dim=0, index=batch, src=per_node_loss**2)
-    l2_normed = torch.sqrt(l2_normed)
-    return l2_normed.mean()
-
-
-@registry.register_loss("PBL_max")
-def PBL_max(predictions, data):
-    """
-    Returns the maximum power balance loss
-    """
-    per_node_loss = PowerBalanceLoss(predictions, data)[0]
-    max_loss = per_node_loss.max()
-    return max_loss
+    def __call__(self, output_dict, data):
+        recycled_value = getattr(self.source, self.recycled_parameter)
+        return recycled_value
 
 
 @registry.register_loss("combined_loss")

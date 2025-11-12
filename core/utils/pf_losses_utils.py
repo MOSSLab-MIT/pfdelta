@@ -298,8 +298,6 @@ class PowerBalanceLoss:
             power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
             power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
 
-            return power_balance_model_preds
-
         elif model_name == "PFNet":
             device = data["bus"].x.device
             # Unnormalize predictions
@@ -356,8 +354,6 @@ class PowerBalanceLoss:
             power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
             power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
 
-            return power_balance_model_preds
-
         elif model_name == "GNS":
             V_pred = data["bus"].v
             theta_pred = data["bus"].theta
@@ -379,7 +375,7 @@ class PowerBalanceLoss:
             power_balance_model_preds["predictions"] = (V_pred, theta_pred, Pnet, Qnet)
             power_balance_model_preds["edge_attr"] = (r, x, bs, tau, theta_shift)
 
-            return power_balance_model_preds
+        return power_balance_model_preds
 
 
 @registry.register_loss("gns_layer_loss")
