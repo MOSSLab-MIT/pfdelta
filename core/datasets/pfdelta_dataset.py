@@ -12,7 +12,7 @@ from core.datasets.dataset_utils import (
     canos_pf_slack_mean0_var1,
     pfnet_data_mean0_var1,
 )
-from core.datasets.data_stats import canos_pfdelta_stats, pfnet_pfdata_stats
+from core.datasets.data_stats import pfnet_pfdata_stats
 from core.utils.registry import registry
 
 
@@ -184,9 +184,10 @@ class PFDeltaDataset(InMemoryDataset):
         }
 
         if case_name == "case2000":
-            self.task_config = {
-                1.3: {"feasible": {"n": 27000, "n-1": 13500, "n-2": 9000}}
-            }
+            for task_values in self.task_config.values():
+                for feas_values in task_values.values():
+                    for feas_type, feas_num in feas_values.items():
+                        feas_values[feas_type] = feas_num // 2
 
         self.feasibility_config = {
             "feasible": {
@@ -861,7 +862,7 @@ class PFDeltaDataset(InMemoryDataset):
                     for split, files in split_dict.items():
                         data_list = []
                         print(
-                            f"Processing split: {model} {task} {grid_type} {split} ({len(files)} files)"
+                            f"Processing split: {model} {task} {self.case_name} {grid_type} {split} ({len(files)} files)"
                         )
                         for fname in tqdm(files, desc=f"Building {split} data"):
                             with open(fname, "r") as f:
