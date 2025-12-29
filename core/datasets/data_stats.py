@@ -2,61 +2,60 @@ import torch
 
 
 pfnet_pfdata_stats = {
-    "case14_seeds": {
-        "casename": "case14_seeds",
+    "case14": {
+        "casename": "case14",
         "mean": {
             "bus": {
-                "y": torch.tensor([0.9929, -0.3463, 0.3324, 0.1616, 0.0000, 0.0136])
+                "y": torch.tensor([0.9890, -0.3531, 0.3332, 0.1638, 0.0000, 0.0136]),
             },
             ("bus", "branch", "bus"): {
-                "edge_attr": torch.tensor([0.0615, 0.2012, 0.0114, 0.9939, 0.0000])
+                "edge_attr": torch.tensor([0.0615, 0.2012, 0.0114, 0.9940, 0.0000])
             },
         },
         "std": {
             "bus": {
-                "y": torch.tensor([0.0394, 0.1720, 0.8527, 0.3247, 0.0000, 0.0489])
+                "y": torch.tensor([0.0430, 0.1772, 0.8586, 0.3212, 0.0000, 0.0489]),
             },
             ("bus", "branch", "bus"): {
                 "edge_attr": torch.tensor([0.0597, 0.1081, 0.0188, 0.0163, 0.0000])
             },
         },
     },
-    "case118_seeds": {
-        "casename": "case118_seeds",
+    "case30": {
+        "casename": "case30",
         "mean": {
             "bus": {
-                "x": torch.tensor(
-                    [
-                        4.7212e-01,
-                        6.6688e-27,
-                        2.8586e-01,
-                        9.0312e-02,
-                        0.0000e00,
-                        7.4576e-03,
-                    ]
-                ),
-                "y": torch.tensor([1.0280, -0.5947, 0.4654, 0.2504, 0.0000, 0.0075]),
+                "y": torch.tensor([0.9678, -0.3932, 0.1893, 0.0974, 0.0000, 0.0078]),
             },
             ("bus", "branch", "bus"): {
-                "edge_attr": torch.tensor([0.0274, 0.1068, 0.0720, 0.9978, 0.0000])
+                "edge_attr": torch.tensor([0.0757, 0.2000, 0.0080, 0.9963, 0.0000])
             },
         },
         "std": {
             "bus": {
-                "x": torch.tensor(
-                    [
-                        5.1877e-01,
-                        1.1657e-23,
-                        1.6960e00,
-                        1.3489e-01,
-                        0.0000e00,
-                        6.1039e-02,
-                    ]
-                ),
-                "y": torch.tensor([0.0328, 0.3659, 2.6608, 0.8317, 0.0000, 0.0610]),
+                "y": torch.tensor([0.0451, 0.1488, 0.5893, 0.2596, 0.0000, 0.0347]),
             },
             ("bus", "branch", "bus"): {
-                "edge_attr": torch.tensor([0.0210, 0.0756, 0.1777, 0.0107, 0.0000])
+                "edge_attr": torch.tensor([0.0794, 0.1344, 0.0150, 0.0126, 0.0000])
+            },
+        },
+    },
+    "case57": {
+        "casename": "case57",
+        "mean": {
+            "bus": {
+                "y": torch.tensor([0.9945, -0.3734, 0.3465, 0.1747, 0.0000, 0.0039]),
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0695, 0.2430, 0.0144, 0.9931, 0.0000])
+            },
+        },
+        "std": {
+            "bus": {
+                "y": torch.tensor([0.0626, 0.3506, 1.6059, 0.5894, 0.0000, 0.0171]),
+            },
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.1095, 0.3016, 0.0255, 0.0225, 0.0000])
             },
         },
     },
@@ -79,72 +78,22 @@ pfnet_pfdata_stats = {
             },
         },
     },
-}
-
-canos_pfdelta_stats = {
-    "case118_seeds": {
+    "case500": {
+        "casename": "case500",
         "mean": {
             "bus": {
-                "x": torch.tensor([0.3307, 0.5845]),
-                "y": torch.tensor([0.0151, 0.2691]),
-                "bus_gen": torch.tensor([0.5525, 0.3173]),
-                "bus_demand": torch.tensor([0.5162, 0.2398]),
-                "bus_voltages": torch.tensor([-0.6396, 1.0290]),
-                "shunt": torch.tensor([0.0, 0.0075]),
+                "y": torch.tensor([1.0776, -0.4102, 0.7608, 0.3084, 0.0000, 0.0323]),
             },
-            "PQ": {
-                "x": torch.tensor([0.4347, 0.2022]),
-                "y": torch.tensor([-0.6596, 1.0152]),
-            },
-            "PV": {
-                "x": torch.tensor([0.2091, 1.0454]),
-                "y": torch.tensor([0.4380, -0.6271]),
-                "generation": torch.tensor([0.8353, 0.7286]),
-                "demand": torch.tensor([0.6262, 0.2907]),
-            },
-            "slack": {
-                "x": torch.tensor([3.4637e-18, 1.0583e00]),
-                "y": torch.tensor([21.3432, -0.8125]),
-                "generation": torch.tensor([21.3432, -0.8125]),
-                "demand": torch.tensor([0.0, 0.0]),
-            },
-            ("bus", "ac_line", "bus"): {
-                "edge_attr": torch.tensor(
-                    [0.0274, 0.1068, 0.0000, 0.0360, 0.0000, 0.0360, 0.9978, 0.0000]
-                ),
-                "edge_label": torch.tensor([0.0920, 0.0767, -0.0690, -0.0228]),
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0055, 0.0587, 0.0414, 1.0050, 0.0000])
             },
         },
         "std": {
             "bus": {
-                "x": torch.tensor([1.4630, 0.4419]),
-                "y": torch.tensor([2.2695, 0.85781]),
-                "bus_gen": torch.tensor([2.3803, 1.0612]),
-                "bus_demand": torch.tensor([0.9875, 0.5016]),
-                "bus_voltages": torch.tensor([0.3231, 0.0352]),
-                "shunt": torch.tensor([0.0, 0.0610]),
+                "y": torch.tensor([0.0330, 0.4644, 1.8176, 0.8199, 0.0000, 0.2271]),
             },
-            "PQ": {
-                "x": torch.tensor([0.3378, 0.1852]),
-                "y": torch.tensor([0.3126, 0.0378]),
-            },
-            "PV": {
-                "x": torch.tensor([2.1543, 0.0224]),
-                "y": torch.tensor([1.1555, 0.3258]),
-                "generation": torch.tensor([1.8244, 1.4756]),
-                "demand": torch.tensor([1.4236, 0.7197]),
-            },
-            "slack": {
-                "x": torch.tensor([7.6358e-16, 9.7875e-03]),
-                "y": torch.tensor([6.1415, 1.3867]),
-                "generation": torch.tensor([6.1415, 1.3867]),
-                "demand": torch.tensor([0.0, 0.0]),
-            },
-            ("bus", "ac_line", "bus"): {
-                "edge_attr": torch.tensor(
-                    [0.0210, 0.0756, 0.0000, 0.0888, 0.0000, 0.0888, 0.0107, 0.0000]
-                ),
-                "edge_label": torch.tensor([1.5430, 0.5323, 1.5317, 0.5184]),
+            ("bus", "branch", "bus"): {
+                "edge_attr": torch.tensor([0.0143, 0.4335, 0.1109, 0.0167, 0.0000])
             },
         },
     },
