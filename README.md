@@ -1,5 +1,7 @@
+**Note on case2000:** Recently, several bugs with case2000 were fixed. Task 1 is now functional. Task 2 and 4 need further testing, and Task 3 is still broken. We are working to fix these problems.
 
 # PFΔ Dataset
+
 PFΔ is a benchmark dataset for power flow that captures diverse variations in load, generation, and topology. It contains 859,800 solved power flow instances spanning six different bus system sizes, capturing three types of contingency scenarios (N, N-1, and N-2), and including close-to-infeasible cases near steady-state voltage stability limits. Our dataset is available at: https://huggingface.co/datasets/pfdelta/pfdelta/tree/main. Our paper is available at: https://arxiv.org/abs/2510.22048. 
 
 # Dataset Overview

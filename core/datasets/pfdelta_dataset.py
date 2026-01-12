@@ -183,12 +183,6 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
-        if case_name == "case2000":
-            for task_values in self.task_config.values():
-                for feas_values in task_values.values():
-                    for feas_type, feas_num in feas_values.items():
-                        feas_values[feas_type] = feas_num // 2
-
         self.feasibility_config = {
             "feasible": {
                 "n": 56000,
@@ -209,6 +203,20 @@ class PFDeltaDataset(InMemoryDataset):
                 "test": {"n": 200, "n-1": 200, "n-2": 200},
             },
         }
+
+        # Modify value sizes according to case2000
+        if case_name == "case2000":
+            for task_values in self.task_config.values():
+                for feas_values in task_values.values():
+                    for feas_type, feas_num in feas_values.items():
+                        feas_values[feas_type] = feas_num // 2
+
+            for feas_config in self.feasibility_config.values():
+                test_sizes = feas_config["test"]
+                if test_sizes is None:
+                    continue
+                for type_name, type_num in test_sizes.items():
+                    test_sizes[type_name] = type_num // 2
 
         self.task_split_config = {
             3.1: {
@@ -829,8 +837,8 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
-                if self.case_name == "case2000": 
-                    test_size = test_size / 2
+                # if self.case_name == "case2000":
+                #     test_size = test_size / 2
 
                 if train_size == 0 and test_size == 0:
                     continue
@@ -850,12 +858,16 @@ class PFDeltaDataset(InMemoryDataset):
                         raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()
                     ]
 
+                    entire_size = len(fnames_shuffled)
+                    assert (train_size + test_size) <= entire_size, \
+                        "Test samples overlap with train samples!"
+
                     # extend the lists instead of overwriting
                     split_dict = {
                         "train": fnames_shuffled[: int(0.9 * train_size)],
                         "val": fnames_shuffled[
                             int(0.9 * train_size) : int(train_size)
-                        ],  # this is optional!
+                        ],
                         "test": fnames_shuffled[-int(test_size) :],
                     }  # always takes the last test_size samples for test set
 
