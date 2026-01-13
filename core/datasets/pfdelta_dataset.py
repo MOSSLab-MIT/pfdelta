@@ -1,5 +1,6 @@
 import json
 import os
+import copy
 from tqdm import tqdm
 from functools import partial
 import glob
@@ -204,20 +205,6 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
-        # Modify value sizes according to case2000
-        if case_name == "case2000":
-            for task_values in self.task_config.values():
-                for feas_values in task_values.values():
-                    for feas_type, feas_num in feas_values.items():
-                        feas_values[feas_type] = feas_num // 2
-
-            for feas_config in self.feasibility_config.values():
-                test_sizes = feas_config["test"]
-                if test_sizes is None:
-                    continue
-                for type_name, type_num in test_sizes.items():
-                    test_sizes[type_name] = type_num // 2
-
         self.task_split_config = {
             3.1: {
                 "train": [self.case_name],
@@ -226,11 +213,11 @@ class PFDeltaDataset(InMemoryDataset):
             },
             3.2: {
                 "train": ["case14", "case30", "case57"],
-                "val": ["case118", "case500"],
-                "test": ["case118", "case500"],
+                "val": ["case118", "case500", "case2000"],
+                "test": ["case118", "case500", "case2000"],
             },
             3.3: {
-                "train": ["case118", "case500"],
+                "train": ["case118", "case500", "case2000"],
                 "val": ["case14", "case30", "case57"],
                 "test": ["case14", "case30", "case57"],
             },
@@ -786,7 +773,7 @@ class PFDeltaDataset(InMemoryDataset):
                 self.root, "shuffle_files", grid_type, "raw_shuffle.json"
             )
 
-    def shuffle_split_and_save_data(self, case_root: str) -> Dict[str, list]:
+    def shuffle_split_and_save_data(self, case_root: str, split: str) -> Dict[str, list]:
         """Create and save processed train/val/test splits for a given case.
 
         This method constructs processed PyTorch Geometric datasets for one
@@ -826,8 +813,13 @@ class PFDeltaDataset(InMemoryDataset):
         task, model = self.task, self.model
         task_config = self.task_config[task]
 
-        # create dicts to store all data lists per task for later concatenation
-        all_data_lists = {"train": [], "val": [], "test": []}
+        # Identify case name of specific case root ()
+        current_case_name = os.path.basename(case_root)
+        if current_case_name == "case2000":
+            task_config = copy.deepcopy(task_config)
+            for feas_values in task_config.values():
+                for feas_type, feas_num in feas_values.items():
+                    feas_values[feas_type] = feas_num // 2
 
         for feasibility, train_cfg_dict in task_config.items():
             feasibility_config = self.feasibility_config[feasibility]
@@ -837,18 +829,20 @@ class PFDeltaDataset(InMemoryDataset):
                 test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
-                # if self.case_name == "case2000":
-                #     test_size = test_size / 2
+                if current_case_name == "case2000":
+                    test_size = test_size // 2
 
                 if train_size == 0 and test_size == 0:
                     continue
 
                 if feasibility == "feasible":
+                    # Gather shuffle files
                     shuffle_path = self.get_shuffle_file_path(grid_type, case_root)
                     with open(shuffle_path, "r") as f:
                         shuffle_dict = json.load(f)
                     shuffle_map = {int(k): int(v) for k, v in shuffle_dict.items()}
 
+                    # Parse shuffle file
                     raw_path = os.path.join(case_root, grid_type, "raw")
                     raw_fnames = [
                         os.path.join(raw_path, f"sample_{i + 1}.json")
@@ -858,44 +852,49 @@ class PFDeltaDataset(InMemoryDataset):
                         raw_fnames[shuffle_map[i]] for i in shuffle_map.keys()
                     ]
 
+                    # Verify train and test won't have overlap
                     entire_size = len(fnames_shuffled)
                     assert (train_size + test_size) <= entire_size, \
                         "Test samples overlap with train samples!"
 
-                    # extend the lists instead of overwriting
+                    # Split files by train, val, test
                     split_dict = {
-                        "train": fnames_shuffled[: int(0.9 * train_size)],
+                        "train": fnames_shuffled[:int(0.9 * train_size)],
                         "val": fnames_shuffled[
-                            int(0.9 * train_size) : int(train_size)
+                            int(0.9 * train_size):int(train_size)
                         ],
-                        "test": fnames_shuffled[-int(test_size) :],
+                        "test": fnames_shuffled[-int(test_size):],
                     }  # always takes the last test_size samples for test set
 
-                    for split, files in split_dict.items():
-                        data_list = []
-                        print(
-                            f"Processing split: {model} {task} {self.case_name} {grid_type} {split} ({len(files)} files)"
-                        )
-                        for fname in tqdm(files, desc=f"Building {split} data"):
-                            with open(fname, "r") as f:
-                                pm_case = json.load(f)
-                            data = self.build_heterodata(pm_case)
-                            data_list.append(data)
+                    # for split, files in split_dict.items():
+                    data_list = []
+                    files = split_dict[split]
+                    print(
+                        f"Processing split: {model} {task} " + \
+                        f"{current_case_name} {grid_type} {feasibility} " + \
+                        f"{split} ({len(files)} files)"
+                    )
+                    print("skipping for now")
+                    continue
+                    for fname in tqdm(files, desc=f"Building {split} data"):
+                        with open(fname, "r") as f:
+                            pm_case = json.load(f)
+                        data = self.build_heterodata(pm_case)
+                        data_list.append(data)
 
-                        # For tasks that don't load from every folder
-                        if len(data_list) == 0:
-                            continue
-                        data, slices = self.collate(data_list)
-                        processed_path = os.path.join(
-                            case_root,
-                            f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
-                        )
-                        os.makedirs(processed_path, exist_ok=True)
+                    # For tasks that don't load from every folder
+                    if len(data_list) == 0:
+                        continue
+                    data, slices = self.collate(data_list)
+                    processed_path = os.path.join(
+                        case_root,
+                        f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
+                    )
+                    os.makedirs(processed_path, exist_ok=True)
 
-                        torch.save(
-                            (data, slices), os.path.join(processed_path, f"{split}.pt")
-                        )
-                        all_data_lists[split].extend(data_list)
+                    torch.save(
+                        (data, slices), os.path.join(processed_path, f"{split}.pt")
+                    )
                 else:
                     infeasibility_type = (
                         "around_nose"
@@ -936,35 +935,38 @@ class PFDeltaDataset(InMemoryDataset):
                         "test": test_files,
                     }
 
-                    for split, files in split_dict.items():
-                        data_list = []
-                        if not files:
-                            continue
-                        print(
-                            f"Processing split: {model} {task} {grid_type} {feasibility} {split} ({len(files)} files)"
-                        )
-                        for fname in tqdm(files, desc=f"Building {split} data"):
-                            with open(fname, "r") as f:
-                                pm_case = json.load(f)
-                            data = self.build_heterodata(pm_case, is_cpf_sample=True)
-                            data_list.append(data)
+                    data_list = []
+                    files = split_dict[split]
+                    if not files:
+                        continue
+                    print(
+                        f"Processing split: {model} {task} " + \
+                        f"{current_case_name} {grid_type} {feasibility} " + \
+                        f"{split} ({len(files)} files)"
+                    )
+                    print("skipping for now")
+                    continue
+                    for fname in tqdm(files, desc=f"Building {split} data"):
+                        with open(fname, "r") as f:
+                            pm_case = json.load(f)
+                        data = self.build_heterodata(pm_case, is_cpf_sample=True)
+                        data_list.append(data)
 
-                        if len(data_list) == 0:
-                            continue
+                    if len(data_list) == 0:
+                        continue
 
-                        data, slices = self.collate(data_list)
-                        processed_path = os.path.join(
-                            case_root,
-                            f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
-                        )
-                        os.makedirs(processed_path, exist_ok=True)
+                    data, slices = self.collate(data_list)
+                    processed_path = os.path.join(
+                        case_root,
+                        f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
+                    )
+                    os.makedirs(processed_path, exist_ok=True)
 
-                        torch.save(
-                            (data, slices), os.path.join(processed_path, f"{split}.pt")
-                        )
-                        all_data_lists[split].extend(data_list)
+                    torch.save(
+                        (data, slices), os.path.join(processed_path, f"{split}.pt")
+                    )
 
-        return all_data_lists
+        return data_list
 
     def process(self):
         """
@@ -997,7 +999,7 @@ class PFDeltaDataset(InMemoryDataset):
         if task in [3.1, 3.2, 3.3]:
             case_roots = [
                 os.path.join(self.root, case_name)
-                for case_name in self.all_case_names[:-1]
+                for case_name in self.all_case_names
             ]
             casename = self.case_name if task == 3.1 else ""
         else:
@@ -1025,7 +1027,6 @@ class PFDeltaDataset(InMemoryDataset):
         # First, process each root and collect all data
         for case_root in case_roots:  # loops over cases
             print(f"Processing combined data for task {task}")
-            task_data_lists = self.shuffle_split_and_save_data(case_root)
 
             # Add data from this root to the combined lists
             for split in combined_data_lists.keys():
@@ -1033,8 +1034,10 @@ class PFDeltaDataset(InMemoryDataset):
                     # extract case name from case_root
                     case_name = os.path.basename(case_root)
                     if case_name in self.task_split_config[task][split]:
-                        combined_data_lists[split].extend(task_data_lists[split])
+                        data_list = self.shuffle_split_and_save_data(case_root, split)
+                        combined_data_lists[split].extend(data_list)
                 else:
+                    data_list = self.shuffle_split_and_save_data(case_root, split)
                     combined_data_lists[split].extend(task_data_lists[split])
 
         for split, data_list in combined_data_lists.items():
