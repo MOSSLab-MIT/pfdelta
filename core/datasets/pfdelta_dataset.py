@@ -835,6 +835,7 @@ class PFDeltaDataset(InMemoryDataset):
                 if train_size == 0 and test_size == 0:
                     continue
 
+                # Create split dict with files corresponding to each feas type
                 if feasibility == "feasible":
                     # Gather shuffle files
                     shuffle_path = self.get_shuffle_file_path(grid_type, case_root)
@@ -865,36 +866,6 @@ class PFDeltaDataset(InMemoryDataset):
                         ],
                         "test": fnames_shuffled[-int(test_size):],
                     }  # always takes the last test_size samples for test set
-
-                    # for split, files in split_dict.items():
-                    data_list = []
-                    files = split_dict[split]
-                    print(
-                        f"Processing split: {model} {task} " + \
-                        f"{current_case_name} {grid_type} {feasibility} " + \
-                        f"{split} ({len(files)} files)"
-                    )
-                    print("skipping for now")
-                    continue
-                    for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(fname, "r") as f:
-                            pm_case = json.load(f)
-                        data = self.build_heterodata(pm_case)
-                        data_list.append(data)
-
-                    # For tasks that don't load from every folder
-                    if len(data_list) == 0:
-                        continue
-                    data, slices = self.collate(data_list)
-                    processed_path = os.path.join(
-                        case_root,
-                        f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
-                    )
-                    os.makedirs(processed_path, exist_ok=True)
-
-                    torch.save(
-                        (data, slices), os.path.join(processed_path, f"{split}.pt")
-                    )
                 else:
                     infeasibility_type = (
                         "around_nose"
@@ -935,36 +906,37 @@ class PFDeltaDataset(InMemoryDataset):
                         "test": test_files,
                     }
 
-                    data_list = []
-                    files = split_dict[split]
-                    if not files:
-                        continue
-                    print(
-                        f"Processing split: {model} {task} " + \
-                        f"{current_case_name} {grid_type} {feasibility} " + \
-                        f"{split} ({len(files)} files)"
-                    )
-                    print("skipping for now")
+                # Gather files from split dict
+                files = split_dict[split]
+
+                # For tasks that don't load from every folder
+                if not files:
                     continue
-                    for fname in tqdm(files, desc=f"Building {split} data"):
-                        with open(fname, "r") as f:
-                            pm_case = json.load(f)
-                        data = self.build_heterodata(pm_case, is_cpf_sample=True)
-                        data_list.append(data)
 
-                    if len(data_list) == 0:
-                        continue
+                # Proces files
+                print(
+                    f"Processing split: {model} {task} " + \
+                    f"{current_case_name} {grid_type} {feasibility} " + \
+                    f"{split} ({len(files)} files)"
+                )
+                data_list = []
+                for fname in tqdm(files, desc=f"Building {split} data"):
+                    with open(fname, "r") as f:
+                        pm_case = json.load(f)
+                    data = self.build_heterodata(pm_case, is_cpf_sample=True)
+                    data_list.append(data)
 
-                    data, slices = self.collate(data_list)
-                    processed_path = os.path.join(
-                        case_root,
-                        f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
-                    )
-                    os.makedirs(processed_path, exist_ok=True)
+                # Collate and save
+                data, slices = self.collate(data_list)
+                processed_path = os.path.join(
+                    case_root,
+                    f"{grid_type}/processed/task_{task}_{feasibility}_{model}",
+                )
+                os.makedirs(processed_path, exist_ok=True)
 
-                    torch.save(
-                        (data, slices), os.path.join(processed_path, f"{split}.pt")
-                    )
+                torch.save(
+                    (data, slices), os.path.join(processed_path, f"{split}.pt")
+                )
 
         return data_list
 
@@ -1033,12 +1005,10 @@ class PFDeltaDataset(InMemoryDataset):
                 if task in [3.1, 3.2, 3.3]:
                     # extract case name from case_root
                     case_name = os.path.basename(case_root)
-                    if case_name in self.task_split_config[task][split]:
-                        data_list = self.shuffle_split_and_save_data(case_root, split)
-                        combined_data_lists[split].extend(data_list)
-                else:
-                    data_list = self.shuffle_split_and_save_data(case_root, split)
-                    combined_data_lists[split].extend(task_data_lists[split])
+                    if case_name not in self.task_split_config[task][split]:
+                        continue
+                data_list = self.shuffle_split_and_save_data(case_root, split)
+                combined_data_lists[split].extend(data_list)
 
         for split, data_list in combined_data_lists.items():
             if data_list:  # Only process if we have data
