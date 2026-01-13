@@ -161,7 +161,7 @@ class PFDeltaDataset(InMemoryDataset):
                 "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
             },
             3.3: {
-                "feasible": {"n": 9000, "n-1": 9000, "n-2": 9000},
+                "feasible": {"n": 6000, "n-1": 6000, "n-2": 6000},
                 "near infeasible": {"n": 0, "n-1": 0, "n-2": 0},
             },
             4.1: {
@@ -184,25 +184,10 @@ class PFDeltaDataset(InMemoryDataset):
             },
         }
 
-        self.feasibility_config = {
-            "feasible": {
-                "n": 56000,
-                "n-1": 29000,
-                "n-2": 20000,
-                "test": {"n": 2000, "n-1": 2000, "n-2": 2000},
-            },
-            "approaching infeasible": {
-                "n": 7200,
-                "n-1": 7200,
-                "n-2": 7200,
-                "test": None,  # no test set for this regime
-            },
-            "near infeasible": {
-                "n": 2000,
-                "n-1": 2000,
-                "n-2": 2000,
-                "test": {"n": 200, "n-1": 200, "n-2": 200},
-            },
+        self.test_config = {
+            "feasible": {"n": 2000, "n-1": 2000, "n-2": 2000,},
+            "approaching infeasible": None,  # no test set for this regime
+            "near infeasible": {"n": 200, "n-1": 200, "n-2": 200},},
         }
 
         self.task_split_config = {
@@ -822,11 +807,10 @@ class PFDeltaDataset(InMemoryDataset):
                     feas_values[feas_type] = feas_num // 2
 
         for feasibility, train_cfg_dict in task_config.items():
-            feasibility_config = self.feasibility_config[feasibility]
+            test_cfg = self.test_config[feasibility]
 
             for grid_type in ["n", "n-1", "n-2"]:
                 train_size = train_cfg_dict[grid_type]
-                test_cfg = feasibility_config.get("test", {})
                 test_size = test_cfg.get(grid_type) if test_cfg else 0
 
                 if current_case_name == "case2000":
