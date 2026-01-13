@@ -329,12 +329,14 @@ def batch_config(config, args, override_args):
     job_constants = {
         "args": args,
         "override_args": override_args,
-        "job_parameters": job_parameters,
+        # "job_parameters": job_parameters,
         "batch_folder": batch_folder,
     }
     # Let's process the configs
     i = 0
     for raw_job in jobs:
+        # Add job parameters to allow for expansion using them
+        raw_job["job_parameters"] = job_parameters
         # Override with default values here to allow them to expand
         raw_w_default = merge_dicts(default_values, raw_job)
         # Expand jobs according to expanding operations
@@ -546,8 +548,10 @@ def process_one_job(
     # Gather job constants
     args = job_constants["args"]
     override_args = job_constants["override_args"]
-    job_parameters = job_constants["job_parameters"]
     batch_folder = job_constants["batch_folder"]
+    # Gather job parameters
+    job_parameters = job["job_parameters"]
+    del job["job_parameters"]
     # Deal with other config
     this_job_other_config = job.get("config", None)
     if this_job_other_config is not None:
