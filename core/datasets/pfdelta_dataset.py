@@ -66,7 +66,7 @@ class PFDeltaDataset(InMemoryDataset):
         perturbation : str
             Grid contingency type ("n", "n-1", or "n-2").
         feasibility_type : str
-            Feasibility regime ("feasible", "near infeasible", or "approaching infeasible").
+            Feasibility regime for analytical mode ("feasible", "near infeasible", or "approaching infeasible").
         n_samples : int
             Number of samples to load. If < 0, loads all available samples.
         split : str
@@ -87,7 +87,8 @@ class PFDeltaDataset(InMemoryDataset):
         -----
         This initializer configures the dataset's directory structure and metadata.
         The raw-to-graph conversion occurs within the process() method, automatically
-        triggered by the parent InMemoryDataset when required. 
+        triggered by the parent InMemoryDataset when required. Also, the input for
+        feasibility_type is only applicable when the task is on analysis mode.
         """
         self.split = split
         self.case_name = case_name
