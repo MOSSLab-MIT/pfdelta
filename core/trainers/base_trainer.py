@@ -228,7 +228,7 @@ class BaseTrainer:
         # Initialize optimizer
         optim_inputs = copy.deepcopy(optimizer)
         del optim_inputs["name"]
-        self.optimizer = optim_class(self.model.parameters(), **optim_inputs)
+        self.optimizer = self.initialize_optimizer(optim_class, optim_inputs)
         # Save name for book keeping
         optim_inputs["name"] = optim_name
 
@@ -268,6 +268,11 @@ class BaseTrainer:
             self.lr_scheduler = scheduler
 
         self.modify_optimizer()
+
+    def initialize_optimizer(self, optim_class, optim_inputs):
+        optimizer = optim_class(self.model.parameters(), **optim_inputs)
+
+        return optimizer
 
     def modify_optimizer(
         self,
