@@ -319,6 +319,7 @@ class BaseTrainer:
             self.val_loss.append(loss)
             name = getattr(loss, "loss_name", name)
             self.val_loss_names.append(name)
+        self.val_loss_names.append("Inference speed (per batch)")
 
         self.modify_loss()
 
@@ -695,15 +696,20 @@ class BaseTrainer:
         running_losses = [0.0] * len(self.val_loss)
         num_val_datasets = len(self.datasets[1:])
         message = f"Processing validation set {val_num + 1}/{num_val_datasets}"
+        inference_speed_cum = 0
         for data, labels in tqdm(val_dataloader, desc=message):
             # Move data to device
             data, labels = data.to(self.device), labels.to(self.device)
 
             # Calculate output and loss
+            t0 = time.perf_counter()
             outputs = self.model(data)
+            inference_speed_cum += time.perf_counter() - t0
             for i, loss_func in enumerate(self.val_loss):
                 loss = loss_func(outputs, labels)
                 running_losses[i] += loss.item()
+
+        running_losses.append(inference_speed_cum)
 
         return running_losses
 
