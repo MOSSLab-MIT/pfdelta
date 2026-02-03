@@ -194,17 +194,17 @@ class PFDeltaDataset(InMemoryDataset):
         self.task_split_config = {
             3.1: {
                 "train": [self.case_name],
-                "val": self.all_case_names,
+                "val": [self.case_name],
                 "test": self.all_case_names,
             },
             3.2: {
                 "train": ["case14", "case30", "case57"],
-                "val": ["case118", "case500", "case2000"],
+                "val": ["case14", "case30", "case57"],
                 "test": ["case118", "case500", "case2000"],
             },
             3.3: {
                 "train": ["case118", "case500", "case2000"],
-                "val": ["case14", "case30", "case57"],
+                "val": ["case118", "case500", "case2000"],
                 "test": ["case14", "case30", "case57"],
             },
         }
