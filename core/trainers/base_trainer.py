@@ -768,7 +768,7 @@ class BaseTrainer:
         and average it over all validation datasets.
         """
         val_params = self.config["optim"]["val_params"]
-        use_first_only = val_params.get("use_first_only", False)
+        use_first_only = val_params.get("use_first_only", True)
 
         # if this, then we only consider the first validation set
         if use_first_only:
