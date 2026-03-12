@@ -300,6 +300,8 @@ def place_override(arg, config):
 def parse_value(value):
     if value.isdigit():
         return int(value)
+    elif value.lower() in ["true", "false"]:
+        return bool(value)
     else:
         try:
             return float(value)
@@ -320,8 +322,10 @@ def batch_config(config, args, override_args):
     if default_config is not None:
         default_values = load_other_configs(default_values, default_config)
 
+    # After this step, we delete config name to let it be overwritten
     job_config_name = args.config
     batch_folder = create_job_folder(config, job_config_name)
+    del(args.config)
 
     processed_configs = []
     sbatch_locations = []
@@ -465,6 +469,7 @@ def connected_list_expansion(inputs, current_dict):
             # Check if it is intended to be a string
             if parse_value(value) == value:
                 value = '"' + value + '"'
+            value = parse_for_json(value)
             # Construct new dictionary
             start_of_dict = new_dict[: start - 1]
             end_of_dict = new_dict[end + 2 :]
@@ -522,6 +527,8 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
         # Check if it is intended to be a string
         if parse_value(instance) == instance:
             instance = '"' + instance + '"'
+        # Handle cases that JSON doesn't parse correctly
+        instance = parse_for_json(instance)
         # Construct new dictionary
         new_dict = start_of_dict + instance + end_of_dict
         # We modify run name if necessary
@@ -539,6 +546,16 @@ def manual_list_expansion(inputs, key, current_dict, search_result, end):
         new_dicts.append(new_dict)
 
     return new_dicts
+
+
+def parse_for_json(value):
+    if value == "0.":       # YAML can handle, JSON can't
+        return "0.0"
+    if value.lower() == "true":   # bool cast for convenience
+        return "true"
+    if value.lower() == "false":
+        return "false"
+    return value
 
 
 # This method assumes that all forms of grid search have been used already

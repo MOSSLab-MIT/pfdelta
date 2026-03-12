@@ -3,6 +3,7 @@ import copy
 import yaml
 import json
 import sys
+import signal
 import types
 import time
 import random
@@ -15,7 +16,7 @@ from torch.utils.data import DataLoader
 from torch.nn.utils import clip_grad_norm_
 
 from core.utils.registry import registry
-from core.utils.trainer_utils import MultiPrinter
+from core.utils.trainer_utils import MultiPrinter, _SkippedDataloader
 
 
 @registry.register_trainer("base_trainer")
@@ -42,27 +43,53 @@ class BaseTrainer:
         self.epoch = 0
         self.max_epoch = None
         self.postprocess = None
+        self.deterministic = False
+        self.checkpoint = None
+        self._checkpoint_used = False
+        self._dataloader_steps_completed = 0
 
-        self.is_debug = self.config["functional"]["is_debug"]
         self.postprocess = self.config["functional"].get("postprocess", None)
+        self.is_debug = self.config["functional"]["is_debug"]
+        self.deterministic = self.config["functional"]["deterministic"]
+        self.checkpoint = self.config["functional"].get("checkpoint", False)
+        if self.checkpoint:
+            assert not self.is_debug, \
+                "We cannot have checkpoints with is_debug on!"
+            self._checkpoint_used = \
+                self.config["functional"].get("_checkpoint_used", False)
 
         # Add unique identifier to run
         now = datetime.now()
         run_time = now.strftime("%y%m%d_%H%M%S")
-        self.config["functional"]["run_name"] += "_" + run_time
+        if not self._checkpoint_used:
+            self.config["functional"]["run_name"] += "_" + run_time
 
         # Add prefix to run location
         run_location = self.config["functional"].get("run_location", "")
-        run_location = os.path.join("runs", run_location)
-        self.config["functional"]["run_location"] = run_location
+        if not self._checkpoint_used:
+            run_location = os.path.join("runs", run_location)
+            self.config["functional"]["run_location"] = run_location
 
-        if not self.is_debug:
+        # Add prefix to run location
+        if not self.is_debug and not self._checkpoint_used:
             self.create_run_location()
 
         # Save job id, if any
         jobid = os.environ.get("SLURM_JOBID", None)
         if jobid is not None:
-            self.config["functional"]["slurm_jobid"] = jobid
+            jobids = self.config["functional"].get("slurm_jobid", [])
+            jobids.append(jobid)
+            self.config["functional"]["slurm_jobid"] = jobids
+
+        # Set multiprinter
+        run_location = self.config["functional"]["run_location"]
+        out_location = os.path.join(run_location, "out.txt")
+        if not self.is_debug:
+            multiprinter = MultiPrinter(out_location)
+            sys.stdout = multiprinter
+            print("\U0001f4d1 Console output is now being recorded!")
+        else:
+            print("\U0001f4d1 is_debug flag passed, NO RESULTS WILL BE RECORDED!")
 
         # Save git commit hash, if possible
         try:
@@ -70,10 +97,13 @@ class BaseTrainer:
 
             repo = git.Repo(".")
             commit_hash = repo.head.commit.hexsha
-            config["functional"]["git_commit_hash"] = commit_hash
+            commit_hashes = config["functional"].get("git_commit_hash", [])
+            commit_hashes.append(commit_hash)
+            config["functional"]["git_commit_hash"] = commit_hashes
         except ModuleNotFoundError:
             print(
-                "Consider installing GitPython to be able to save" + "git commit hash!"
+                "\U0001f4d1 Consider installing GitPython to be able to save" \
+                + "git commit hash!"
             )
 
         # Save config file
@@ -83,24 +113,21 @@ class BaseTrainer:
             with open(config_location, "w") as f:
                 yaml.dump(self.config, f, indent=2)
 
-        # Set multiprinter
-        out_location = os.path.join(run_location, "out.txt")
-        if not self.is_debug:
-            multiprinter = MultiPrinter(out_location)
-            sys.stdout = multiprinter
-            print("\U0001f4d1 Console output is now being recorded!")
-        else:
-            print("\U0001f4d1 is_debug flag passed, NO RESULTS WILL BE RECORDED!")
-
         # Report device being used
         cpu = self.config["functional"]["cpu"]
         if cpu or not torch.cuda.is_available():
             self.device = torch.device("cpu")
+            if self.deterministic:
+                torch.use_deterministic_algorithms(True)
         else:
+            assert not self.deterministic, \
+                "Deterministic with CUDA not implemented!"
             self.device = torch.device("cuda")
         print("\U0001f4d1 Device being used:", self.device)
 
         self.setup_training()
+        if self._checkpoint_used:
+            self.load_checkpoint()
 
         # Report number of trainable parameters
         num_parameters = self.num_model_parameters()
@@ -129,6 +156,7 @@ class BaseTrainer:
     def setup_training(
         self,
     ):
+        self.load_seeds()
         self.load_dataset()
         self.load_dataloaders()
         print("\nDatasets loaded! \U00002705")
@@ -138,7 +166,6 @@ class BaseTrainer:
         print("Optimizer loaded! \U00002705")
         self.load_loss_funcs()
         print("Loss function loaded! \U00002705")
-        self.load_seeds()
 
     def load_dataset(
         self,
@@ -393,6 +420,33 @@ class BaseTrainer:
     def train(
         self,
     ):
+        signal.signal(signal.SIGTERM, self._handle_signal)
+        signal.signal(signal.SIGUSR1, self._handle_signal)
+
+        try:
+            self._train()
+        except KeyboardInterrupt:
+            if self.checkpoint:
+                print(f"\nKeyboard interrupt with checkpoint on.")
+                print(f"\nSaving checkpoint...")
+                self.save_checkpoint()
+
+    def _handle_signal(
+        self,
+        signum,
+        frame
+    ):
+        print(f"\nSignal {signum} received. Saving checkpoint...")
+        self.save_checkpoint()
+        print("Checkpoint saved. Exiting.")
+        job_id = os.environ.get("SLURM_JOB_ID", "")
+        if job_id:
+            os.system(f"scontrol requeue {job_id}")
+        sys.exit(0)
+
+    def _train(
+        self,
+    ):
         start = time.time()
         train_params = self.config["optim"]["train_params"]
 
@@ -414,9 +468,12 @@ class BaseTrainer:
             )
 
         # Start training
-        train_dataloader = self.dataloaders[0]
         while True:
             print()
+
+            # Wrap dataloader just in case we're using checkpoint
+            train_dataloader = self._skip_dataloader(self.dataloaders[0])
+
             # Do any preliminary setup before each epoch
             self.setup_pre_epoch()
             self.model.train()
@@ -525,6 +582,20 @@ class BaseTrainer:
                 )
 
         return time_to_stop
+
+    def _skip_dataloader(self, dataloader):
+        """
+        This method is used to go to the right place in dataloaders. This
+        is only ever used after loading a checkpoint. In every other case, the
+        value of _dataloader_steps_completed is 0.
+        """
+        if self._dataloader_steps_completed == 0:
+            return dataloader
+
+        skip = self._dataloader_steps_completed
+        self._dataloader_steps_completed = 0
+
+        return _SkippedDataloader(dataloader, skip)
 
     def postprocess_method(
         self,
@@ -695,6 +766,8 @@ class BaseTrainer:
         self.save_summary(last_time)
         if last_time:
             self.print_summary()
+        elif self.checkpoint:
+            self.save_checkpoint()
 
     @torch.no_grad()
     def calc_one_val_error(self, val_dataloader, val_num):
@@ -856,3 +929,94 @@ class BaseTrainer:
         else:
             point = "epoch"
         print(f"\nBest {point}: {int(self.best_point) + 1}")
+
+    def save_checkpoint(
+        self,
+    ):
+        # Create checkpoint
+        checkpoint = {
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "lr_scheduler_state_dict": (
+                self.lr_scheduler.state_dict()
+                if self.lr_scheduler
+                is not None
+                else None
+            ),
+            "train_step": self.train_step,
+            "epoch": self.epoch,
+            "train_dataloader_sampler_state": (
+                self.dataloaders[0].sampler.generator.get_state()
+                if hasattr(self.dataloaders[0].sampler, "generator")
+                and self.dataloaders[0].sampler.generator is not None
+                else None
+            ),
+            "dataloader_steps_completed": (
+                self.train_step % len(self.dataloaders[0])
+            ),
+            "rng_torch": torch.get_rng_state(),
+            "rng_numpy": np.random.get_state(),
+            "rng_python": random.getstate()
+        }
+        # Save checkpoint
+        run_location = self.config["functional"]["run_location"]
+        checkpoint_path = os.path.join(run_location, "checkpoint.pt")
+        torch.save(checkpoint, checkpoint_path)
+
+        # Resave config with the functional warning
+        self.config["functional"]["_checkpoint_used"] = True
+        original_config = self.config["functional"]["config"]
+        if original_config[-5:] != ".yaml":
+            original_config += ".yaml"
+        original_config_path = os.path.join("core", "configs", original_config)
+
+        with open(original_config_path, "w") as f:
+            yaml.dump(self.config, f, indent=2)
+
+    def load_checkpoint(
+        self,
+    ):
+        run_location = self.config["functional"]["run_location"]
+        checkpoint_path = os.path.join(run_location, "checkpoint.pt")
+
+        checkpoint = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False,
+        )
+
+        # Model and optimizer
+        self.model.load_state_dict(checkpoint["model_state_dict"])
+        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        # Deal with learning rate scheduler
+        if self.lr_scheduler is not None:
+            lr_scheduler_state = checkpoint["lr_scheduler_state_dict"]
+            self.lr_scheduler.load_state_dict(lr_scheduler_state)
+
+        # Training position
+        self.train_step = checkpoint["train_step"]
+        self.epoch = checkpoint["epoch"]
+        self._dataloader_steps_completed = checkpoint["dataloader_steps_completed"]
+
+        # Sampler generator state
+        if checkpoint["train_dataloader_sampler_state"] is not None:
+            self.dataloaders[0].sampler.generator.set_state(
+                checkpoint["train_dataloader_sampler_state"]
+            )
+
+        # RNG states
+        torch.set_rng_state(checkpoint["rng_torch"])
+        np.random.set_state(checkpoint["rng_numpy"])
+        random.setstate(checkpoint["rng_python"])
+
+        # Load previous errors
+        run_location = self.config["functional"]["run_location"]
+        train_location = os.path.join(run_location, "train.json")
+        val_location = os.path.join(run_location, "val.json")
+        if os.path.exists(train_location):
+            with open(train_location, "r") as f:
+                self.train_errors = json.load(f)
+        if os.path.exists(val_location):
+            with open(val_location, "r") as f:
+                self.val_errors = json.load(f)
