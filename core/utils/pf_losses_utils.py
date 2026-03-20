@@ -178,8 +178,8 @@ class PowerBalanceLoss:
             * V_pred[src]
             / tau
             * (
-                -Y_real * torch.cos(delta_theta2 - theta_shift)
-                - Y_imag * torch.sin(delta_theta2 - theta_shift)
+                -Y_real * torch.cos(delta_theta2 + theta_shift)
+                - Y_imag * torch.sin(delta_theta2 + theta_shift)
             )
             + Y_real * V_pred[dst] ** 2
         )
@@ -201,8 +201,8 @@ class PowerBalanceLoss:
             * V_pred[src]
             / tau
             * (
-                -Y_real * torch.sin(delta_theta2 - theta_shift)
-                + Y_imag * torch.cos(delta_theta2 - theta_shift)
+                -Y_real * torch.sin(delta_theta2 + theta_shift)
+                + Y_imag * torch.cos(delta_theta2 + theta_shift)
             )
             - (Y_imag + suscept / 2) * V_pred[dst] ** 2
         )
