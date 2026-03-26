@@ -1,4 +1,4 @@
-__Note (March 26, 2026):__ We were notified of a bug in the training loss function of CANOS PF (in particular, the method `constraint_violations_loss_pf` locatted in  `core/utils/pf_losses_utils.py`. The bug incorrectly calculates reactive power mismatch and line branch flow mismatch. The bug has been fixed.
+__Note (March 26, 2026):__ We were notified of a bug in the training loss function of CANOS PF (in particular, the method `constraint_violations_loss_pf` located in  `core/utils/pf_losses_utils.py`. The bug incorrectly calculates reactive power mismatch and line branch flow mismatch. The bug has been fixed.
 
 # PFΔ Dataset
 
