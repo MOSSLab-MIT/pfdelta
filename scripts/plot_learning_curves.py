@@ -9,13 +9,29 @@ parser = argparse.ArgumentParser(
     description="Plot error values for a specific run and error key."
 )
 parser.add_argument(
-    "--run_name", type=str, required=True, help="Name of the run to plot errors for."
+    "--run_name",
+    type=str,
+    required=True,
+    help="Name of the run to plot errors for."
 )
 parser.add_argument(
-    "--error", type=str, default="_first_one", help="Error being plotted."
+    "--error",
+    type=str,
+    default="_first_one",
+    help="Error being plotted."
 )
 parser.add_argument(
-    "--log", action="store_true", default=False, help="Change scale to log."
+    "--log",
+    action="store_true",
+    default=False,
+    help="Change scale to log."
+)
+parser.add_argument(
+    "--curve",
+    type=str,
+    nargs="+",
+    default=["all"],
+    help="Specifies which learning curve to plot."
 )
 args = parser.parse_args()
 
@@ -40,7 +56,7 @@ def find_run_folder(run_name):
         return matching_folders[0]  # Return the unique matching folder
 
 
-def plot_errors(run_folder, error_key):
+def plot_errors(run_folder, error_key, curve=["all"]):
     """Loads the train.json file and plots the errors for the given run and
     error key."""
     max_ticks = 15
@@ -68,6 +84,16 @@ def plot_errors(run_folder, error_key):
     plt.ylabel(f"{error_key}")
     plt.title(f"{run_name} - {error_key}")
 
+    # Highlight the best epoch
+    best_point = summary["best_point"]
+    plt.axvline(
+        x=int(best_point),
+        color='red',
+        linestyle='--',
+        linewidth=1,
+        label="Best point"
+    )
+
     ## Train values
     # Extract errors for each epoch
     epochs = sorted(train_data.keys(), key=int)  # Sort epochs numerically
@@ -81,7 +107,15 @@ def plot_errors(run_folder, error_key):
     errors = [train_data[epoch].get(error_key, None) for epoch in epochs]
     print(epochs)
     print_epochs = list(map(int, epochs))
-    plt.plot(print_epochs, errors, marker="o", linestyle="-", color="b", label="Train")
+    if "all" in curve or "train" in curve:
+        plt.plot(
+            print_epochs,
+            errors,
+            marker="o",
+            linestyle="-",
+            color="b",
+            label="Train"
+        )
 
     ## Val values
     epochs = sorted(val_data.keys(), key=int)  # Sort epochs numerically
@@ -96,7 +130,14 @@ def plot_errors(run_folder, error_key):
     for i in range(num_vals):
         errors = [val_data[epoch][i].get(error_key, None) for epoch in epochs]
         print_epochs = list(map(int, epochs))
-        plt.plot(print_epochs, errors, marker="o", linestyle="-", label=f"Val {i}")
+        if "all" in curve or f"val_{i}" in curve:
+            plt.plot(
+                print_epochs,
+                errors,
+                marker="o",
+                linestyle="-",
+                label=f"Val {i}"
+            )
 
     # Change to logscale if needed
     if args.log:
@@ -114,6 +155,7 @@ if __name__ == "__main__":
     # Gather arguments
     run_name = args.run_name
     error_name = args.error
+    curve = args.curve
 
     # Find path to run
     run_path = find_run_folder(run_name)
@@ -121,4 +163,4 @@ if __name__ == "__main__":
     print(f"Run name found in path: {run_path}")
 
     # Plot the errors for the given run and error key
-    plot_errors(run_path, error_name)
+    plot_errors(run_path, error_name, curve)
