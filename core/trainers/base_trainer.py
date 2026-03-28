@@ -956,7 +956,8 @@ class BaseTrainer:
             ),
             "rng_torch": torch.get_rng_state(),
             "rng_numpy": np.random.get_state(),
-            "rng_python": random.getstate()
+            "rng_python": random.getstate(),
+            "best_point": self.best_point
         }
         # Save checkpoint
         run_location = self.config["functional"]["run_location"]
@@ -998,6 +999,7 @@ class BaseTrainer:
         self.train_step = checkpoint["train_step"]
         self.epoch = checkpoint["epoch"]
         self._dataloader_steps_completed = checkpoint["dataloader_steps_completed"]
+        self.best_point = checkpoint["best_point"]
 
         # Sampler generator state
         if checkpoint["train_dataloader_sampler_state"] is not None:
