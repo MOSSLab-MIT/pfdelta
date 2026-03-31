@@ -267,8 +267,8 @@ class CANOS_PF(nn.Module):
         va, vm = bus_pred.T
 
         shunt_flows = (torch.abs(vm) ** 2) * (
-            bus_shunts[:, 1] + 1j * bus_shunts[:, 0]
-        )  # (b_shunt + j*g_shunt)
+            bus_shunts[:, 0] - 1j * bus_shunts[:, 1]
+        )  # (g_shunt - j*b_shunt)
         slack_net_generation = sum_branch_flows[slack_idx] + shunt_flows[slack_idx]
         p_slack_net = torch.real(slack_net_generation)
         q_slack_net = torch.imag(slack_net_generation)
