@@ -9,6 +9,7 @@
 *.tar.gz
 *.svg
 *.DS_Store
+*.vscode
 
 .ipynb_checkpoints
 tutorial.ipynb
