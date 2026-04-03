@@ -695,11 +695,18 @@ class PFDeltaDataset(InMemoryDataset):
         - File discovery is based on fixed directory naming conventions 
         within each case folder.
         """
-        dataset_size = (
-            self.n_samples
-            if self.n_samples > 0
-            else self.task_config[self.task][self.feasibility_type][self.perturbation]
+        total_dataset_size = self.task_config[self.task][self.feasibility_type][
+            self.perturbation
+        ]
+        dataset_size = self.n_samples if self.n_samples > 0 else total_dataset_size
+
+        assert (
+            dataset_size
+            <= self.task_config[self.task][self.feasibility_type][self.perturbation]
+        ), (
+            f"Requested n_samples {self.n_samples} exceeds available {total_dataset_size} samples, "
         )
+        
         data_list = []
 
         if self.feasibility_type == "feasible":
