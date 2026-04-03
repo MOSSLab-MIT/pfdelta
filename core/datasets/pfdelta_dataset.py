@@ -1072,7 +1072,7 @@ class PFDeltaDataset(InMemoryDataset):
                     f"{split_str}.pt",
                 )
             print(f"Loading {split} dataset from {processed_path}")
-            self.data, self.slices = torch.load(processed_path)
+            self.data, self.slices = torch.load(processed_path, weights_only=False)
         else:
             processed_path = os.path.join(self.processed_dir, f"{split}.pt")
             print(f"Loading {split} dataset from {processed_path}")
