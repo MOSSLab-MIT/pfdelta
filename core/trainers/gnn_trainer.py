@@ -1,5 +1,6 @@
 # Trainer for GNNs
 import copy
+import time
 from tqdm import tqdm
 
 import torch
@@ -49,15 +50,20 @@ class GNNTrainer(BaseTrainer):
         running_losses = [0.0] * len(self.val_loss)
         num_val_datasets = len(self.datasets[1:])
         message = f"Processing validation set {val_num + 1}/{num_val_datasets}"
+        inference_speed_cum = 0
         for data in tqdm(val_dataloader, desc=message):
             # Move data to device
             data = data.to(self.device)
 
             # Calculate output and loss
+            t0 = time.perf_counter()
             outputs = self.model(data)
+            inference_speed_cum += time.perf_counter() - t0
             for i, loss_func in enumerate(self.val_loss):
                 loss = loss_func(outputs, data)
                 running_losses[i] += loss.item()
+
+        running_losses.append(inference_speed_cum)
 
         return running_losses
 

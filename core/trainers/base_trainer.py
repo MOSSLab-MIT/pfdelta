@@ -920,6 +920,8 @@ class BaseTrainer:
 
         for i, one_val_errors in enumerate(val_errors):
             val_string = f"Val set {i + 1}\t"
+            if "Inference speed (per batch)" not in one_val_errors:
+                one_val_errors["Inference speed (per batch)"] = -1.0
             for loss_name in self.val_loss_names:
                 val_string += f"{one_val_errors[loss_name]:.5}" + "\t\t"
             print(val_string)
