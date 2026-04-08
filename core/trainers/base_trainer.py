@@ -539,8 +539,12 @@ class BaseTrainer:
         report_every = val_params["report_every"]
         decrease_for = val_params["early_stop"]["decrease_for"]
         decrease_by = val_params["early_stop"]["decrease_by"]
+        needs_best_every = val_params["early_stop"]["needs_best_every"]
         assert report_every % decrease_for, (
             "report_every needs to divide decrease_for evenly!"
+        )
+        assert report_every % needs_best_every, (
+            "report_every needs to divide needs_best_every evenly!"
         )
 
         # Cannot do early stop too early
@@ -568,7 +572,6 @@ class BaseTrainer:
                 else:
                     too_small = False
             # Verify best epoch happened recently
-            needs_best_every = val_params["early_stop"]["needs_best_every"]
             recent_improvement = False
             if abs(int(self.best_point) - curr_point) <= needs_best_every:
                 recent_improvement = True
