@@ -91,6 +91,9 @@ class BaseTrainer:
         else:
             print("\U0001f4d1 is_debug flag passed, NO RESULTS WILL BE RECORDED!")
 
+        config_name = self.config["functional"].get("config", "UNKNOWN")
+        print(f"\n\U0001F4D1 Config being used: {config_name}")
+
         # Save git commit hash, if possible
         try:
             import git
