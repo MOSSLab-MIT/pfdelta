@@ -423,8 +423,10 @@ class BaseTrainer:
     def train(
         self,
     ):
-        signal.signal(signal.SIGTERM, self._handle_signal)
-        signal.signal(signal.SIGUSR1, self._handle_signal)
+        if hasattr(signal, "SIGTERM"):
+            signal.signal(signal.SIGTERM, self._handle_signal)
+        if hasattr(signal, "SIGUSR1"):
+            signal.signal(signal.SIGUSR1, self._handle_signal)
 
         try:
             self._train()
