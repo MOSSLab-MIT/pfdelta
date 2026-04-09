@@ -548,7 +548,8 @@ class BaseTrainer:
         )
 
         # Cannot do early stop too early
-        if curr_point < decrease_for:
+        earliest_comparison = needs_best_every + report_every
+        if curr_point < decrease_for or curr_point < earliest_comparison:
             return time_to_stop
 
         # Should only check if this is a val error epoch/train step
@@ -558,9 +559,14 @@ class BaseTrainer:
             for i in range(
                 curr_point - decrease_for, curr_point - report_every + 1, report_every
             ):
+                use_first_only = val_params.get("use_first_only", True)
                 # Gather step info
                 prev = self.val_errors[str(i)]
                 curr = self.val_errors[str(i + report_every)]
+                # Filter if necessary
+                if use_first_only:
+                    prev = [prev[0]]
+                    curr = [curr[0]]
                 # Gather leading error
                 lead_err = list(prev[0].keys())[0]
                 # Average lead error over all val errors
