@@ -46,7 +46,7 @@ optim:
     weight_decay: 0.0
   train_params:
     batch_size: 64
-    epochs: 50
+    epochs: 200
     train_loss:
     - lamb: 0.1
       loss1: canos_pf_mse
