@@ -17,7 +17,7 @@ dataset:
     task: 4.2
 functional:
   run_location: canos_task_4_2
-  run_name: canos_k_steps15_hd128_lr5e-4_task_4_2
+  run_name: canos_k_steps20_hd128_lr7e-4_task_4_2
   is_debug: false
   seed: 11
   cpu: false
@@ -26,7 +26,7 @@ model:
   dataset: _include_
   hidden_dim: 128
   include_sent_messages: true
-  k_steps: 15
+  k_steps: 20
   name: canos_pf
 optim:
   lr_scheduler:
@@ -41,7 +41,7 @@ optim:
       name: StepLR
       step_size: 4
   optimizer:
-    lr: 0.0005
+    lr: 0.0007
     name: Adam
     weight_decay: 0.0
   train_params:
@@ -58,8 +58,8 @@ optim:
     batch_size: 64
     early_stop:
       decrease_by: 0.01
-      decrease_for: 10
-      needs_best_every: 15
+      decrease_for: 20
+      needs_best_every: 30
     report_every: 2
     val_loss:
     - lamb: 0.1
