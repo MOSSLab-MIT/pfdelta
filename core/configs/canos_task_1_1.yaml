@@ -26,7 +26,7 @@ model:
   dataset: _include_
   hidden_dim: 128
   include_sent_messages: true
-  k_steps: 15
+  k_steps: 20
   name: canos_pf
 optim:
   lr_scheduler:
