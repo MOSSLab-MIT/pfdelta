@@ -1,10 +1,9 @@
 import torch
-
 from torch.nn.functional import mse_loss
 from torch_geometric.nn import global_add_pool, global_mean_pool
 
-from core.utils.registry import registry
 from core.datasets.data_stats import pfnet_pfdata_stats
+from core.utils.registry import registry
 
 
 @registry.register_loss("universal_power_balance")
@@ -508,7 +507,7 @@ class GNSPowerBalanceLoss:
                 self.power_balance_loss = delta_s
             return delta_p, delta_q, delta_s
         else:
-            qg = qd - b_s * v**2 - Qbus_pred
+            qg = qd - b_s * v**2 + Qbus_pred
             return qg
 
 
