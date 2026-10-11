@@ -14,18 +14,18 @@ function parse_shuffle_file(data_dir, topology_perturb; case_2000_flag=false)
     end
 end
 
-function run_warm_up(test_networks, warm_up_runs)
+function run_warm_up(test_networks, warm_up_runs; flat_start=true)
     for sample_idx in Iterators.take(sort(collect(keys(test_networks))), warm_up_runs)
         network = test_networks[sample_idx]
         try
-            PM.compute_ac_pf(network; flat_start=false)
+            PM.compute_ac_pf(network; flat_start=flat_start)
         catch e
             @warn "Warm-up failed on sample $sample_idx: $e"
         end
     end
 end
 
-function create_test_networks(test_samples_idx, case_name, topological_perturb; near_infeasible_flag=false)
+function create_test_networks(test_samples_idx, case_name, topological_perturb; near_infeasible_flag=false, flat_start=true)
     test_networks = Dict{Int, Any}()
 
     if !near_infeasible_flag
@@ -35,11 +35,13 @@ function create_test_networks(test_samples_idx, case_name, topological_perturb; 
             if isfile(fpath)
                 sample_data = JSON.parsefile(fpath)
 
-                # Fix vg and branch flows (unclear if needed but it can't hurt). Note how this is only needed for feasible samples.
+                # Fix vg and branch flows (unclear if needed but it can't hurt). Note how this is only needed for feasible samples. Fallback in PM is a flat start.
                 update_vg!(sample_data["network"], sample_data["solution"]["solution"])
                 fix_branch_flows!(sample_data["network"])
 
-                set_warm_start!(sample_data["network"], sample_data["solution"]["solution"])
+                if !flat_start
+                    set_warm_start!(sample_data["network"], sample_data["solution"]["solution"])
+                end
 
                 # Update test networks dictionary
                 test_networks[idx] = sample_data["network"]
@@ -47,7 +49,7 @@ function create_test_networks(test_samples_idx, case_name, topological_perturb; 
                 @warn "File not found: $fpath"
             end
         end
-    elseif near_infeasible_flag
+    elseif near_infeasible_flag # Right now always flat-started, since the "start" fields do not exist in the dict.
         nose_cases_path = joinpath(DATA_DIR, case_name, topological_perturb, "nose", "test")
         for fname in readdir(nose_cases_path)
             if endswith(fname, ".json")
@@ -64,9 +66,10 @@ function create_test_networks(test_samples_idx, case_name, topological_perturb; 
     return test_networks
 end
 
-function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
+function get_runtimes(test_networks, case_name, topology_perturb, sample_type; flat_start=true)
+    start_mode = flat_start ? "flat" : "warm_start"
     for run in 1:3
-        run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, "run_$run")
+        run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, start_mode, "run_$run")
         mkpath(run_dir)
         current_run_data = Vector{Tuple{Int, Float64, Bool}}() # (sample_idx, solve_time, converged)
 
@@ -75,7 +78,7 @@ function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
             network = test_networks[sample_idx]
 
             try
-                pf_solution = PM.compute_ac_pf(network; flat_start=false)
+                pf_solution = PM.compute_ac_pf(network; flat_start=flat_start)
                 converged = pf_solution["termination_status"] == true
                 push!(current_run_data, (Int(sample_idx), pf_solution["solve_time"], converged))
 
@@ -96,7 +99,7 @@ function get_runtimes(test_networks, case_name, topology_perturb, sample_type)
                 change_bus_type!(network_retry)
 
                 try
-                    pf_solution = PM.compute_ac_pf(network_retry; flat_start=false)
+                    pf_solution = PM.compute_ac_pf(network_retry; flat_start=flat_start)
                     converged = pf_solution["termination_status"] == true
 
                     # Save power flow solution if converged
@@ -125,11 +128,13 @@ end
 
 function analyze_runtimes(case_name;
                           topologies=["none","n-1","n-2"],
-                          runs=1:3)
+                          runs=1:3,
+                          flat_start=true)
 
     # ---- Output paths ----
-    results_filename = "runtimes_$(case_name)_both.csv"
-    summary_filename = "runtimes_summary_$(case_name)_both.csv"
+    start_mode = flat_start ? "flat" : "warm_start"
+    results_filename = "runtimes_$(case_name)_$(start_mode)_both.csv"
+    summary_filename = "runtimes_summary_$(case_name)_$(start_mode)_both.csv"
     results_out_csv = joinpath(OUT_DIR, results_filename)
     summary_out_csv = joinpath(OUT_DIR, summary_filename)
 
@@ -148,7 +153,7 @@ function analyze_runtimes(case_name;
     for topology_perturb in topologies
         for run in runs
             for sample_type in sample_types
-                run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, "run_$run")
+                run_dir = joinpath(OUT_DIR, case_name, topology_perturb, sample_type, start_mode, "run_$run")
                 runtime_file = joinpath(run_dir, "runtime_NR_test.json")
 
                 if isfile(runtime_file)
